@@ -1,0 +1,34 @@
+{
+  "name": "forleads",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The living-map agentic CRM for real-estate agents. Every address is a lead; a swarm of grounded AI scouts does the homework, the outreach, and the follow-up — grounded, never guessed.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "maplibre-gl": "4.7.1",
+    "next": "14.2.15",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zustand": "4.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.10",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "eslint": "8.57.0",
+    "eslint-config-next": "14.2.15",
+    "typescript": "5.5.3",
+    "vitest": "2.1.8"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}

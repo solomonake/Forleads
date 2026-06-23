@@ -1,0 +1,47 @@
+// POST /api/notes — record a note, classify the situation, return suggested
+// next-best-actions. Emits note.created so matching loops can fire.
+import { NextRequest, NextResponse } from "next/server";
+import { DEMO_AGENT_ID } from "@/lib/core/config";
+import { nowISO, uuid } from "@/lib/core/ids";
+import { classifyNote } from "@/lib/agents/notes";
+import { getRepo } from "@/lib/db";
+import { emit } from "@/lib/pipeline";
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = (await req.json()) as {
+      leadId: string;
+      body: string;
+      modality?: "text" | "voice";
+      agentId?: string;
+    };
+    if (!body.leadId || !body.body?.trim()) {
+      return NextResponse.json({ error: "leadId and body required" }, { status: 400 });
+    }
+    const agentId = body.agentId ?? DEMO_AGENT_ID;
+    const repo = await getRepo();
+    const classification = classifyNote(body.body);
+
+    const note = await repo.addNote({
+      id: uuid(),
+      lead_surface_id: body.leadId,
+      agent_id: agentId,
+      body: body.body,
+      modality: body.modality ?? "text",
+      situation: classification.situation,
+      created_at: nowISO(),
+    });
+
+    await emit(
+      agentId,
+      "note.created",
+      { noteId: note.id, situation: classification.situation, confidence: classification.confidence },
+      "notes",
+      body.leadId
+    );
+
+    return NextResponse.json({ note, classification });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "unknown" }, { status: 500 });
+  }
+}

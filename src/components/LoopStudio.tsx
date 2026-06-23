@@ -1,0 +1,130 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import type { LeadSurface, LoopDefinition, LoopRun } from "@/lib/core/types";
+import { apiGet, apiPost } from "./ui";
+
+export function LoopStudio() {
+  const [defs, setDefs] = useState<LoopDefinition[]>([]);
+  const [runs, setRuns] = useState<LoopRun[]>([]);
+  const [leads, setLeads] = useState<LeadSurface[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const [d, l] = await Promise.all([
+      apiGet<{ definitions: LoopDefinition[]; runs: LoopRun[] }>("/api/loops"),
+      apiGet<{ leads: LeadSurface[] }>("/api/leads"),
+    ]);
+    setDefs(d.definitions);
+    setRuns(d.runs);
+    setLeads(l.leads);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const runNow = async (loopId: string) => {
+    const lead = leads[0];
+    if (!lead) {
+      setMsg("Open the Map and ground a lead first, then loops have something to act on.");
+      setTimeout(() => setMsg(null), 3500);
+      return;
+    }
+    try {
+      const d = await apiPost<{ run: LoopRun }>("/api/loops", { loopId, leadId: lead.id });
+      setMsg(`Ran "${loopId}" → status: ${d.run.status} (${d.run.artifact_ids.length} artifact(s)). See Action Inbox.`);
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    }
+    setTimeout(() => setMsg(null), 4000);
+  };
+
+  return (
+    <div className="panel">
+      <h1>Loop Studio</h1>
+      <div className="sub">
+        Zapier-like power, shaped for real-estate work: WHEN something happens · IF the context
+        matches · LET the agent prepare something · REQUIRE approval for risky actions · THEN write
+        back · REPORT on a schedule. Every run is logged.
+      </div>
+      {msg && <div className="row" style={{ marginBottom: 14 }}>{msg}</div>}
+
+      <div className="panel-grid">
+        {defs.map((d) => {
+          const open = selected === d.id;
+          const s = d.stats ?? { runs: 0, approved: 0, replies: 0, blocked: 0 };
+          return (
+            <div className="row" key={d.id}>
+              <div className="rtitle">
+                <span>● {d.name}</span>
+                <span className="pill-status pill-live">{d.active ? "active" : "paused"}</span>
+              </div>
+              <div className="rmeta">
+                {d.description}
+                <br />
+                {s.runs} runs · {s.approved} approved · {s.replies} replies · {s.blocked} blocked
+              </div>
+              {open && (
+                <div className="rmeta" style={{ marginTop: 10, borderTop: "1px dashed var(--hairline)", paddingTop: 10 }}>
+                  <b style={{ color: "var(--text-2)" }}>WHEN</b> {d.trigger.event}
+                  {d.trigger.match ? ` matches ${JSON.stringify(d.trigger.match)}` : ""}
+                  <br />
+                  <b style={{ color: "var(--text-2)" }}>IF</b>{" "}
+                  {d.conditions.map((c) => c.kind + (c.value != null ? `=${JSON.stringify(c.value)}` : "")).join(" · ")}
+                  <br />
+                  <b style={{ color: "var(--text-2)" }}>DO</b>{" "}
+                  {d.actions.map((a) => `${a.type}${a.requiresApproval ? " (needs approval)" : " (auto)"}`).join(" · ")}
+                  <br />
+                  <b style={{ color: "var(--text-2)" }}>REPORT</b> {d.cadence?.reportDay ?? "—"}
+                  {d.cadence?.everyDays ? ` · every ${d.cadence.everyDays}d` : ""}
+                </div>
+              )}
+              <div className="ractions">
+                <button className="minibtn" onClick={() => setSelected(open ? null : d.id)}>
+                  {open ? "Hide builder" : "View builder"}
+                </button>
+                <button className="minibtn primary" onClick={() => runNow(d.id)}>
+                  Run now
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <h1 style={{ marginTop: 30, fontSize: 18 }}>Recent runs</h1>
+      <div className="sub">Every loop run is inspectable, with its planner trace.</div>
+      <div className="panel-grid">
+        {runs.length === 0 && (
+          <div className="row">
+            <div className="rmeta">No runs yet. Hit “Run now” on a loop above.</div>
+          </div>
+        )}
+        {runs.slice(0, 12).map((r) => (
+          <div className="row" key={r.id}>
+            <div className="rtitle">
+              <span>{r.loop_definition_id}</span>
+              <span className={`pill-status ${r.status === "produced_artifact" ? "pill-live" : r.status === "blocked_compliance" ? "pill-blocked" : "pill-mock"}`}>
+                {r.status}
+              </span>
+            </div>
+            <div className="rmeta">
+              {new Date(r.started_at).toLocaleString()} · {r.artifact_ids.length} artifact(s)
+              {r.planner_trace.map((step, i) => (
+                <div key={i} style={{ marginTop: 4 }}>
+                  <span style={{ color: step.outcome === "fail" ? "var(--danger)" : step.outcome === "pass" ? "var(--ok)" : "var(--text-muted)" }}>
+                    ▸ {step.stage}
+                  </span>{" "}
+                  — {step.detail}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
