@@ -37,7 +37,7 @@ export const config = {
     clientSecret: env("GOOGLE_CLIENT_SECRET"),
     redirectUri:
       env("GOOGLE_REDIRECT_URI") ??
-      "http://localhost:3000/api/connectors/google/callback",
+      "http://localhost:3000/api/auth/google/callback",
     scopes: (
       env("GOOGLE_SCOPES") ??
       "https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/calendar.events"

@@ -8,6 +8,7 @@ import { ConnectorHub } from "@/components/ConnectorHub";
 import { WeeklyReport } from "@/components/WeeklyReport";
 import { Pipeline } from "@/components/Pipeline";
 import { AgentTraceDrawer } from "@/components/AgentTraceDrawer";
+import { AccountBar } from "@/components/AccountBar";
 
 type View = "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline";
 
@@ -48,6 +49,7 @@ export default function Page() {
       <div id="stage">
         {/* The map mounts once and stays alive; panels overlay it. The map is the home screen. */}
         <MapWorkspace onOpenTrace={setTraceRef} />
+        <AccountBar />
         {view === "inbox" && <ActionInbox onOpenTrace={setTraceRef} />}
         {view === "loops" && <LoopStudio />}
         {view === "pipeline" && <Pipeline />}

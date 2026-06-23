@@ -16,10 +16,15 @@ import { TwilioConnector } from "./twilio";
 import { ZapierWebhookConnector } from "./zapier";
 import type { Connector } from "./types";
 
-// In a real deployment these tokens come from the vaulted connector_account
-// row (OAuth). Here they're env-provided or absent (→ mock). Never client-side.
-function googleToken(): string | undefined {
-  return process.env.GOOGLE_ACCESS_TOKEN;
+// Google tokens come from the signed-in user's encrypted session (preferred),
+// or an env token for server-to-server testing, or absent (→ mock).
+// Never client-side.
+function googleToken(override?: string): string | undefined {
+  return override ?? process.env.GOOGLE_ACCESS_TOKEN;
+}
+
+export interface ConnectorRouteOpts {
+  googleAccessToken?: string;
 }
 
 export function getConnector(provider: ConnectorProvider): Connector {
@@ -51,12 +56,12 @@ export function getConnector(provider: ConnectorProvider): Connector {
 }
 
 /** Route an action type to the best available connector. */
-export function connectorForAction(type: ActionType): Connector {
+export function connectorForAction(type: ActionType, opts?: ConnectorRouteOpts): Connector {
   switch (type) {
     case "email":
-      return getConnector("google"); // Gmail drafts — the hero path
+      return new GmailDraftConnector(googleToken(opts?.googleAccessToken)); // Gmail drafts — the hero path
     case "calendar":
-      return new GoogleCalendarConnector(googleToken());
+      return new GoogleCalendarConnector(googleToken(opts?.googleAccessToken));
     case "sms":
       return getConnector("twilio");
     case "crm_note":

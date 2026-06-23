@@ -207,7 +207,10 @@ export interface ApproveResult {
   connector: { provider: string; externalId?: string; url?: string; deduped: boolean; mode: string; ok: boolean; error?: string };
 }
 
-export async function approveArtifact(artifactId: string): Promise<ApproveResult | null> {
+export async function approveArtifact(
+  artifactId: string,
+  opts?: { googleAccessToken?: string }
+): Promise<ApproveResult | null> {
   const repo = await getRepo();
   const artifact = await repo.getArtifact(artifactId);
   if (!artifact) return null;
@@ -217,7 +220,7 @@ export async function approveArtifact(artifactId: string): Promise<ApproveResult
     throw new Error("Cannot approve: compliance linter blocked this artifact.");
   }
 
-  const connector = connectorForAction(artifact.type);
+  const connector = connectorForAction(artifact.type, opts);
   const key = idempotencyKey([artifact.id, artifact.type, connector.provider]);
   const meta = { idempotencyKey: key, agentId: artifact.agent_id, leadSurfaceId: artifact.lead_surface_id };
 

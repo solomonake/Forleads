@@ -24,12 +24,18 @@ const LABELS: Record<string, string> = {
 export function ConnectorHub() {
   const [health, setHealth] = useState<Health[]>([]);
   const [accounts, setAccounts] = useState<ConnectorAccount[]>([]);
+  const [gmailUser, setGmailUser] = useState<{ email: string } | null>(null);
 
   useEffect(() => {
     apiGet<{ health: Health[]; accounts: ConnectorAccount[] }>("/api/connectors").then((d) => {
       setHealth(d.health);
       setAccounts(d.accounts);
     });
+    apiGet<{ user: { email: string; gmailConnected: boolean } | null }>("/api/auth/session").then(
+      (d) => {
+        if (d.user?.gmailConnected) setGmailUser({ email: d.user.email });
+      }
+    );
   }, []);
 
   const accountFor = (p: string) => accounts.find((a) => a.provider === p);
@@ -44,16 +50,19 @@ export function ConnectorHub() {
       <div className="panel-grid">
         {health.map((h) => {
           const acct = accountFor(h.provider);
+          const live = h.mode === "live" || (h.provider === "google" && Boolean(gmailUser));
           return (
             <div className="row" key={h.provider + (acct?.id ?? "")}>
               <div className="rtitle">
                 <span>{LABELS[h.provider] ?? h.provider}</span>
-                <span className={`pill-status ${h.mode === "live" ? "pill-live" : "pill-mock"}`}>
-                  {h.mode === "live" ? "connected · live" : "mock mode"}
+                <span className={`pill-status ${live ? "pill-live" : "pill-mock"}`}>
+                  {live ? "connected · live" : "mock mode"}
                 </span>
               </div>
               <div className="rmeta">
-                {h.detail}
+                {h.provider === "google" && gmailUser
+                  ? `Connected as ${gmailUser.email} — real Gmail drafts on approve.`
+                  : h.detail}
                 <br />
                 Capabilities: {h.capabilities.join(" · ")}
                 {acct && acct.scopes.length > 0 && (
@@ -64,11 +73,22 @@ export function ConnectorHub() {
                 )}
               </div>
               <div className="ractions">
-                {h.mode === "mock" ? (
-                  <button className="minibtn">Add credentials in .env to go live</button>
-                ) : (
-                  <button className="minibtn">Manage permissions</button>
+                {h.provider === "google" && !gmailUser && (
+                  <a className="minibtn primary" href="/api/auth/google/login">
+                    Connect Google (Gmail drafts)
+                  </a>
                 )}
+                {h.provider === "google" && gmailUser && (
+                  <span className="minibtn" style={{ cursor: "default" }}>
+                    Scopes: gmail.compose · calendar.events
+                  </span>
+                )}
+                {h.provider !== "google" &&
+                  (h.mode === "mock" ? (
+                    <button className="minibtn">Add credentials in .env to go live</button>
+                  ) : (
+                    <button className="minibtn">Manage permissions</button>
+                  ))}
                 {h.provider === "zapier" && <button className="minibtn">Copy inbound endpoint</button>}
               </div>
             </div>
