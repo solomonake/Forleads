@@ -7,7 +7,15 @@
   identity name=`Solomon` email=`solomonriting@gmail.com` · **auto-push post-commit hook = YES**
   (every commit self-pushes). gh CLI authed as `solomonake`; `gh auth setup-git` is configured.
 - **Host:** Vercel (web) at https://forleads.vercel.app + Supabase project
-  `vszyarwkjujvicilylqr` (anon key provided; **migrations NOT yet run**; micro RAM tier).
+  `vszyarwkjujvicilylqr` (micro RAM tier). **Schema + RLS + geo helpers ARE NOW APPLIED**
+  (migrations 0002_rls, 0003_geo_helpers, 0004_function_hardening tracked; 0001 schema applied
+  earlier out-of-band). All 14 app tables have RLS on; service-role key bypasses it (only path the
+  app uses). `spatial_ref_sys` RLS + postgis/vector-in-public are accepted PostGIS exceptions.
+- **Persistence:** `SupabaseRepository` (src/lib/db/supabase-repo.ts) is a wired drop-in for the
+  Repository interface; activates when `FORLEADS_PERSIST=supabase` AND `NEXT_PUBLIC_SUPABASE_URL` +
+  `SUPABASE_SERVICE_ROLE_KEY` are present, else falls back to in-memory (logs a warning). Geo:
+  writes via `fl_upsert_lead_surface` RPC, reads via generated `lng`/`lat` cols. Slug IDs (loop-*,
+  conn-*) → stable uuid v5. Live geo round-trip verified via MCP. `@supabase/supabase-js` added.
 - **Gotchas:**
   - The production `npm run build` STALLS locally on this machine (maplibre-gl + webpack optimize
     pass exhausts RAM → 0% CPU hang). It builds fine on Vercel. To verify locally, run `npm run dev`
