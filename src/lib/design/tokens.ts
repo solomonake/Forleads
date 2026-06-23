@@ -33,12 +33,36 @@ export const tokens = {
     warn: "#F4B740",
     ok: "#38D39F",
   },
-  radius: { sm: "8px", md: "12px", lg: "18px", pill: "999px" },
+  radius: { sm: "8px", md: "12px", lg: "18px", xl: "24px", pill: "999px" },
+  // Liquid-glass material system — translucent fills + specular edges + float
+  // shadows that read as physical glass on the dark map. Used only via the CSS
+  // vars mirrored in globals.css; never hardcode these elsewhere.
+  glass: {
+    fill: "rgba(18,24,34,0.72)",
+    fillStrong: "rgba(18,24,34,0.92)",
+    edge: "rgba(255,255,255,0.08)", // specular top-light
+    edge2: "rgba(255,255,255,0.04)", // hairline inner
+    blur: "blur(22px) saturate(160%)",
+  },
+  shadow: {
+    float: "0 18px 50px -16px rgba(0,0,0,0.62)",
+    lift: "0 24px 70px -20px rgba(0,0,0,0.70)",
+    glowBrand: "0 8px 24px -6px rgba(93,109,240,0.55)",
+    glowSignal: "0 0 24px rgba(45,224,200,0.14)",
+  },
+  gradient: {
+    brand: "linear-gradient(135deg,#8B9AFF 0%,#5D6DF0 100%)",
+    signal: "linear-gradient(135deg,#46ECD6 0%,#20B7A2 100%)",
+    ambient:
+      "radial-gradient(1200px 600px at 18% -8%,rgba(124,140,255,0.10),transparent 60%),radial-gradient(1000px 520px at 92% 6%,rgba(45,224,200,0.08),transparent 58%)",
+  },
   motion: {
     easeFly: "cubic-bezier(.22,.61,.36,1)",
     easeCard: "cubic-bezier(.16,1,.3,1)",
+    easeSpring: "cubic-bezier(.34,1.56,.64,1)",
     durFly: "1800ms",
     durCard: "420ms",
+    durTap: "180ms",
   },
   font: {
     sans: 'Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
