@@ -66,7 +66,14 @@ without violating "no naked numbers".
   and `FORLEADS_AGENT_MODE=live`. (Building + the fallback path need no key.)
 
 **Done criteria:**
-- [ ] No-key mock mode identical to today; all gates green.
-- [ ] With key, drafts are Claude-written, grounded, compliance-passing.
-- [ ] Any client failure silently falls back to templates (tested).
-- [ ] `playbook.md` gotchas updated with anything learned; this file checked off.
+- [x] No-key mock mode identical to today; all gates green (43 tests).
+- [x] With key, drafts are Claude-written, grounded, compliance-passing (composeLive grounds in evidence only; applyExclusions + compliance lint run AFTER; live test exercises the happy path + the protected-class strip).
+- [x] Any client failure silently falls back to templates (tested — composer.test.ts: throw, empty-draft, and non-text cases).
+- [x] `playbook.md` gotchas updated with anything learned; this file checked off.
+
+**Built (feat/live-claude):**
+- `src/lib/agents/claude.ts` — the one Anthropic client + `claudeJSON()` (claude-opus-4-8, cached system block, low max_tokens, 1 retry/timeout, typed `ClaudeError`).
+- `composer.ts` — `composeLive` (email/sms) + `composeBest` (live → template fallback).
+- `notes.ts` — `classifyNoteLive` + `classifyNoteBest` (same pattern; actions stay deterministic).
+- Wired: `pipeline.ts` → `await composeBest` (+ honest model_trace mode/model/claudeCalls); `api/notes/route.ts` → `await classifyNoteBest`.
+- To go live: Vercel env `ANTHROPIC_API_KEY` + `FORLEADS_AGENT_MODE=live` (build + fallback need no key).
