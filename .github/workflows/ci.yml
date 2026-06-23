@@ -1,0 +1,36 @@
+# CI — runs the repo's gates on every PR so the "require status checks" branch
+# rule has something real to enforce. Fast + deterministic (typecheck, lint,
+# test). The heavy production build is covered by Vercel's preview deploy, so we
+# don't repeat it here (keeps Actions minutes low; see .agent/playbook.md).
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches-ignore: [main] # PRs cover main; this checks feature branches early
+
+jobs:
+  gates:
+    name: typecheck · lint · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # .npmrc pins legacy-peer-deps (React 18 peers); npm ci respects it.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
