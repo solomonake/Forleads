@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEMO_AGENT_ID } from "@/lib/core/config";
 import { nowISO, uuid } from "@/lib/core/ids";
-import { classifyNote } from "@/lib/agents/notes";
+import { classifyNoteBest } from "@/lib/agents/notes";
 import { getRepo } from "@/lib/db";
 import { emit } from "@/lib/pipeline";
 
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     }
     const agentId = body.agentId ?? DEMO_AGENT_ID;
     const repo = await getRepo();
-    const classification = classifyNote(body.body);
+    const classification = await classifyNoteBest(body.body);
 
     const note = await repo.addNote({
       id: uuid(),

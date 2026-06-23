@@ -20,6 +20,8 @@ import type {
   ArtifactPayload,
 } from "@/lib/core/types";
 import { nowISO } from "@/lib/core/ids";
+import { claudeLive } from "@/lib/core/config";
+import { claudeJSON } from "./claude";
 
 export interface ComposeInput {
   agent: Agent;
@@ -40,6 +42,7 @@ export interface ComposeOutput {
 }
 
 const PROMPT_VERSION = "composer-1.2.0";
+const LIVE_PROMPT_VERSION = "composer-live-1.0.0";
 
 // Phrases the composer proactively strips (familial status etc.). Mirrors the
 // canonical UC-1 rule: reference the home, never the children.
@@ -197,4 +200,100 @@ export function compose(input: ComposeInput): ComposeOutput {
       return { payload, evidenceUsed: usable, excluded: [], promptVersion: PROMPT_VERSION };
     }
   }
+}
+
+// ---- Live (Claude) path -----------------------------------------------------
+// Only the human-read text artifacts (email, sms) gain from real Claude. The
+// model REASONS in brand voice but may cite ONLY the grounded evidence passed
+// in — never a number it can't see (constitution §2). `applyExclusions` + the
+// compliance linter (run AFTER, in the pipeline) still gate the output: Claude
+// is not trusted to be compliant. Facts come from scouts/providers, not Claude.
+
+function evidenceBlock(cards: EvidenceCard[]): string {
+  if (cards.length === 0) {
+    return "(no grounded facts available — write a warm, honest note and OFFER to gather the facts; invent nothing)";
+  }
+  return cards
+    .map((c) => `- ${c.claim}${c.value != null ? `: ${c.value}` : ""} (confidence ${c.confidence})`)
+    .join("\n");
+}
+
+function liveSystem(input: ComposeInput): string {
+  return [
+    `You are ${input.agent.name}, a real-estate agent writing outreach in a "${input.agent.brandVoice}" brand voice.`,
+    `Non-negotiable rules:`,
+    `- Ground EVERY factual claim only in the EVIDENCE provided. Never invent numbers, comps, prices, or features. If evidence is thin, say so honestly and offer to gather it.`,
+    `- FAIR HOUSING: never reference or imply race, color, religion, sex, disability, familial status (children/families), national origin, or age. Describe the home and the market, never who "should" live there.`,
+    `- Honest, human, concise, no pressure. One or two short paragraphs. Sign off as ${input.agent.name}.`,
+  ].join("\n");
+}
+
+function liveUser(input: ComposeInput): string {
+  return [
+    `SITUATION: ${input.situation}`,
+    `PROPERTY: ${input.address}`,
+    `RECIPIENT: ${input.recipientLabel}`,
+    `EVIDENCE:`,
+    evidenceBlock(input.evidence.filter((c) => c.confidence !== "D")),
+  ].join("\n");
+}
+
+async function composeLive(input: ComposeInput): Promise<ComposeOutput> {
+  const usable = input.evidence.filter((c) => c.confidence !== "D");
+  const system = liveSystem(input);
+  const user = liveUser(input);
+
+  if (input.actionType === "sms") {
+    const out = await claudeJSON<{ body?: string }>({
+      system,
+      user,
+      schemaHint: `{ "body": string }  // one friendly SMS, under 320 chars`,
+      maxTokens: 300,
+    });
+    const clean = applyExclusions(String(out.body ?? "").trim());
+    if (!clean.text) throw new Error("live composer returned empty sms");
+    return {
+      payload: { to: input.recipientPhone ?? input.recipientLabel, body: clean.text } satisfies SmsPayload,
+      evidenceUsed: usable,
+      excluded: clean.excluded,
+      promptVersion: LIVE_PROMPT_VERSION,
+    };
+  }
+
+  // email
+  const out = await claudeJSON<{ subject?: string; body?: string }>({
+    system,
+    user,
+    schemaHint: `{ "subject": string, "body": string }`,
+    maxTokens: 800,
+  });
+  const subject = String(out.subject ?? "").trim();
+  const clean = applyExclusions(String(out.body ?? "").trim());
+  if (!subject || !clean.text) throw new Error("live composer returned empty email");
+  return {
+    payload: {
+      from: `${input.agent.name} <${input.agent.email}>`,
+      to: input.recipientEmail ?? input.recipientLabel,
+      subject,
+      body: clean.text,
+      signatureHtml: input.agent.signatureHtml,
+    } satisfies EmailPayload,
+    evidenceUsed: usable,
+    excluded: clean.excluded,
+    promptVersion: LIVE_PROMPT_VERSION,
+  };
+}
+
+/**
+ * The call site's entry point: live Claude when enabled (email/sms only),
+ * deterministic templates otherwise. ANY live failure falls back totally to the
+ * template — a draft is always produced, never a broken one.
+ */
+export async function composeBest(input: ComposeInput): Promise<ComposeOutput> {
+  if (claudeLive() && (input.actionType === "email" || input.actionType === "sms")) {
+    // .catch attaches synchronously (no microtask gap) — the live rejection is
+    // always handled; a draft is always produced, never a broken one.
+    return composeLive(input).catch(() => compose(input));
+  }
+  return compose(input);
 }

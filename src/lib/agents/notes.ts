@@ -12,6 +12,8 @@ import type {
   Situation,
   SuggestedAction,
 } from "@/lib/core/types";
+import { claudeLive } from "@/lib/core/config";
+import { claudeJSON } from "./claude";
 
 interface Matcher {
   situation: Situation;
@@ -128,4 +130,59 @@ export function classifyNote(body: string): NoteClassification {
 
 export function defaultActionType(situation: Situation): ActionType {
   return ACTIONS[situation].find((a) => a.recommended)?.type ?? "task";
+}
+
+// ---- Live (Claude) path -----------------------------------------------------
+// Same contract/output shape as classifyNote; Claude just reads the situation
+// with more nuance than keywords. The suggested actions stay deterministic
+// (mapped from the situation) so the next-best-action set never drifts.
+
+const VALID_SITUATIONS: readonly Situation[] = [
+  "no_contact",
+  "interested_seller",
+  "objection:timing",
+  "objection:price",
+  "objection:agent_loyalty",
+  "buyer_criteria",
+  "needs_repair_info",
+  "dead_not_now",
+  "unknown",
+];
+
+async function classifyNoteLive(body: string): Promise<NoteClassification> {
+  const system = [
+    `You classify a real-estate agent's field note into exactly ONE situation.`,
+    `Allowed situations: ${VALID_SITUATIONS.join(", ")}.`,
+    `Choose the single best match. Use "unknown" only when none fit. "confidence" is 0..1.`,
+  ].join("\n");
+  const out = await claudeJSON<{ situation?: string; confidence?: number; reasoning?: string }>({
+    system,
+    user: `NOTE: ${body}`,
+    schemaHint: `{ "situation": string, "confidence": number, "reasoning": string }`,
+    maxTokens: 200,
+  });
+  const situation = VALID_SITUATIONS.find((s) => s === out.situation);
+  if (!situation) throw new Error(`live classifier returned invalid situation: ${out.situation}`);
+  const confidence =
+    typeof out.confidence === "number" && out.confidence >= 0 && out.confidence <= 1
+      ? out.confidence
+      : 0.7;
+  return {
+    situation,
+    confidence,
+    suggested_actions: ACTIONS[situation],
+    reasoning: out.reasoning?.trim() || `Claude classified the note as '${situation}'.`,
+  };
+}
+
+/**
+ * Entry point for the notes route: live Claude when enabled, deterministic
+ * keyword classifier otherwise. Any live failure falls back totally.
+ */
+export async function classifyNoteBest(body: string): Promise<NoteClassification> {
+  if (claudeLive()) {
+    // .catch attaches synchronously — any live failure falls back totally.
+    return classifyNoteLive(body).catch(() => classifyNote(body));
+  }
+  return classifyNote(body);
 }

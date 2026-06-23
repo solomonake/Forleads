@@ -24,7 +24,8 @@ import type {
 import { planDispatch } from "@/lib/agents/dispatcher";
 import { runScout } from "@/lib/agents/scouts";
 import { reduce } from "@/lib/agents/reducer";
-import { compose } from "@/lib/agents/composer";
+import { composeBest } from "@/lib/agents/composer";
+import { config } from "@/lib/core/config";
 import { lintArtifactText } from "@/lib/agents/compliance";
 import { buildTrace } from "@/lib/agents/trace";
 import { connectorForAction } from "@/lib/connectors";
@@ -130,7 +131,7 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
   const repo = await getRepo();
   const { agent, lead } = input;
 
-  const composed = compose({
+  const composed = await composeBest({
     agent,
     situation: input.situation,
     actionType: input.actionType,
@@ -150,6 +151,9 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
   if ("notes" in p) textParts.push(String(p.notes));
   const compliance = lintArtifactText(textParts);
 
+  // A live draft is tagged by its prompt version; reflect that in the trace.
+  const isLive = composed.promptVersion.startsWith("composer-live");
+
   const artifactId = uuid();
   const traceId = uuid();
 
@@ -164,9 +168,9 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
     evidence_used: composed.evidenceUsed,
     compliance_result: compliance,
     model_trace: {
-      model: "deterministic-composer",
+      model: isLive ? config.claudeModel : "deterministic-composer",
       promptVersion: composed.promptVersion,
-      mode: "mock",
+      mode: isLive ? "live" : "mock",
     },
     trace_id: traceId,
     created_at: nowISO(),
@@ -183,7 +187,7 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
     evidenceUsed: composed.evidenceUsed,
     excluded: composed.excluded,
     compliance,
-    cost: { claudeCalls: 1, paidDataCalls: 0, ms: 0 },
+    cost: { claudeCalls: isLive ? 1 : 0, paidDataCalls: 0, ms: 0 },
   });
   // Bind the trace's id to the one referenced by the artifact.
   trace.id = traceId;
