@@ -75,7 +75,12 @@ export class OSMPropertyProvider implements PropertyDataProvider {
       const res = await fetch(this.overpassUrl, {
         method: "POST",
         body: query,
-        headers: { "Content-Type": "text/plain" },
+        // Overpass + most OSM endpoints 406/429 requests without a descriptive
+        // User-Agent (their fair-use policy). Verified: omitting this fails live.
+        headers: {
+          "Content-Type": "text/plain",
+          "User-Agent": "Forleads/1.0 (real-estate CRM; +https://forleads.vercel.app)",
+        },
       });
       if (!res.ok) return this.gap("Overpass request failed");
       const data = (await res.json()) as {

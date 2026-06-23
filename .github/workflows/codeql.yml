@@ -1,0 +1,38 @@
+# CodeQL — static security analysis, the real gate behind the "Agentic" ruleset's
+# code_scanning rule. JS/TS analyzes in interpreted mode (build-mode: none), so it
+# needs no `next build` (avoids the maplibre prod-build hang; see .agent/playbook.md).
+name: CodeQL
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches-ignore: [main] # PRs cover main; feature branches get analyzed early
+  schedule:
+    - cron: "0 6 * * 1" # weekly baseline so default-branch analysis never goes stale
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

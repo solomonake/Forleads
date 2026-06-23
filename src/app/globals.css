@@ -32,14 +32,34 @@
   --r-sm: 8px;
   --r-md: 12px;
   --r-lg: 18px;
+  --r-xl: 24px;
   --r-pill: 999px;
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 8px 30px rgba(0, 0, 0, 0.45);
   --shadow-glow: 0 0 0 1px var(--signal), 0 0 24px var(--signal-soft);
+  /* ---- Liquid-glass material (mirrors tokens.ts `glass`/`shadow`/`gradient`) */
+  --glass: rgba(18, 24, 34, 0.72);
+  --glass-strong: rgba(18, 24, 34, 0.92);
+  --glass-edge: rgba(255, 255, 255, 0.08);
+  --glass-edge-2: rgba(255, 255, 255, 0.04);
+  --blur: blur(22px) saturate(160%);
+  --shadow-float: 0 18px 50px -16px rgba(0, 0, 0, 0.62);
+  --shadow-lift: 0 24px 70px -20px rgba(0, 0, 0, 0.7);
+  --glow-brand: 0 8px 24px -6px rgba(93, 109, 240, 0.55);
+  --glow-signal: 0 0 24px rgba(45, 224, 200, 0.14);
+  --grad-brand: linear-gradient(135deg, #8b9aff 0%, #5d6df0 100%);
+  --grad-signal: linear-gradient(135deg, #46ecd6 0%, #20b7a2 100%);
+  --grad-ambient: radial-gradient(1200px 600px at 18% -8%, rgba(124, 140, 255, 0.1), transparent 60%),
+    radial-gradient(1000px 520px at 92% 6%, rgba(45, 224, 200, 0.08), transparent 58%);
+  /* Specular inner light + hairline — the "liquid glass" edge, layered under
+     each surface's own drop shadow. */
+  --edge: inset 0 1px 0 0 var(--glass-edge), inset 0 0 0 1px var(--glass-edge-2);
   --ease-fly: cubic-bezier(0.22, 0.61, 0.36, 1);
   --ease-card: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --dur-fly: 1800ms;
   --dur-card: 420ms;
+  --dur-tap: 180ms;
   --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
   --sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
@@ -82,9 +102,11 @@ button {
   width: 60px;
   flex-shrink: 0;
   z-index: 40;
-  background: rgba(14, 19, 28, 0.92);
-  backdrop-filter: blur(14px);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border-right: 1px solid var(--hairline);
+  box-shadow: var(--edge);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -115,15 +137,22 @@ button {
   cursor: pointer;
   font-size: 18px;
   position: relative;
+  transition: color var(--dur-tap) ease, background var(--dur-tap) ease,
+    border-color var(--dur-tap) ease, transform var(--dur-tap) var(--ease-spring);
 }
 .navbtn:hover {
   color: var(--signal);
   border-color: var(--hairline);
+  background: var(--signal-soft);
+}
+.navbtn:active {
+  transform: scale(0.92);
 }
 .navbtn.on {
   color: var(--bg);
-  background: var(--signal);
-  border-color: var(--signal);
+  background: var(--grad-signal);
+  border-color: transparent;
+  box-shadow: var(--glow-signal);
 }
 .navbtn .badge {
   position: absolute;
@@ -187,10 +216,17 @@ button {
   height: 54px;
   padding: 0 18px;
   border-radius: var(--r-pill);
-  background: rgba(18, 24, 34, 0.82);
-  backdrop-filter: blur(18px);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--hairline);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-float), var(--edge);
+  transition: box-shadow var(--dur-card) var(--ease-card),
+    border-color var(--dur-tap) ease;
+}
+#cmd .pill:focus-within {
+  border-color: var(--hairline-strong);
+  box-shadow: var(--shadow-float), var(--edge), var(--glow-signal);
 }
 #cmd .logo {
   font-weight: 700;
@@ -224,12 +260,13 @@ button {
 }
 #suggest {
   margin-top: 8px;
-  background: rgba(18, 24, 34, 0.95);
-  backdrop-filter: blur(18px);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--hairline);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   overflow: hidden;
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-float), var(--edge);
   display: none;
 }
 #suggest.open {
@@ -284,23 +321,33 @@ button {
   width: 46px;
   height: 46px;
   border-radius: 12px;
-  background: rgba(18, 24, 34, 0.82);
-  backdrop-filter: blur(14px);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-1), var(--edge);
   color: var(--text-2);
   display: grid;
   place-items: center;
   cursor: pointer;
   font-size: 17px;
+  transition: color var(--dur-tap) ease, border-color var(--dur-tap) ease,
+    transform var(--dur-tap) var(--ease-spring), box-shadow var(--dur-tap) ease;
 }
 .tool:hover {
   color: var(--signal);
   border-color: var(--hairline-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-2), var(--edge);
+}
+.tool:active {
+  transform: scale(0.94);
 }
 .tool.on {
   color: var(--bg);
-  background: var(--signal);
-  border-color: var(--signal);
+  background: var(--grad-signal);
+  border-color: transparent;
+  box-shadow: var(--glow-signal), var(--edge);
 }
 
 /* ---- Lead rail / sheet -------------------------------------------------- */
@@ -311,11 +358,12 @@ button {
   right: 16px;
   width: 404px;
   max-height: calc(100% - 120px);
-  background: rgba(16, 22, 32, 0.86);
-  backdrop-filter: blur(20px);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--hairline);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lift), var(--edge);
   display: flex;
   flex-direction: column;
   transform: translateX(460px);
@@ -379,6 +427,13 @@ button {
   padding: 13px 14px;
   margin: 8px 0;
   animation: cardIn 0.42s var(--ease-card) both;
+  transition: transform var(--dur-tap) var(--ease-card),
+    border-color var(--dur-tap) ease, box-shadow var(--dur-tap) ease;
+}
+.card:hover {
+  transform: translateY(-1px);
+  border-color: var(--hairline-strong);
+  box-shadow: var(--shadow-1);
 }
 @keyframes cardIn {
   from {
@@ -542,10 +597,16 @@ button {
   border-radius: var(--r-pill);
   padding: 6px 12px;
   cursor: pointer;
+  transition: color var(--dur-tap) ease, border-color var(--dur-tap) ease,
+    transform var(--dur-tap) var(--ease-spring);
 }
 .quick button:hover {
   color: var(--signal);
   border-color: var(--hairline-strong);
+  background: var(--signal-soft);
+}
+.quick button:active {
+  transform: scale(0.95);
 }
 .thinking {
   display: flex;
@@ -622,18 +683,26 @@ button {
   height: 40px;
   border: 0;
   border-radius: 10px;
-  background: var(--brand);
+  background: var(--grad-brand);
   color: #fff;
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
+  box-shadow: var(--glow-brand);
+  transition: transform var(--dur-tap) var(--ease-spring),
+    box-shadow var(--dur-tap) ease, filter var(--dur-tap) ease;
 }
 .nba .draftbtn:hover {
-  background: var(--brand-press);
+  filter: brightness(1.07);
+  box-shadow: var(--glow-brand), var(--shadow-2);
+}
+.nba .draftbtn:active {
+  transform: scale(0.98);
 }
 .nba .draftbtn:disabled {
   opacity: 0.5;
   cursor: default;
+  box-shadow: none;
 }
 
 /* ---- Modal / tray ------------------------------------------------------- */
@@ -652,10 +721,23 @@ button {
   width: min(560px, 100%);
   max-height: 90vh;
   overflow-y: auto;
-  background: var(--surface);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--hairline-strong);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lift), var(--edge);
+  animation: modalIn 0.32s var(--ease-spring) both;
+}
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .draft-head {
   display: flex;
@@ -768,19 +850,28 @@ button {
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
+  transition: transform var(--dur-tap) var(--ease-spring),
+    border-color var(--dur-tap) ease, box-shadow var(--dur-tap) ease,
+    filter var(--dur-tap) ease;
 }
 .btn.primary {
-  background: var(--brand);
-  border-color: var(--brand);
+  background: var(--grad-brand);
+  border-color: transparent;
   color: #fff;
   flex: 2;
+  box-shadow: var(--glow-brand);
 }
 .btn.primary:hover {
-  background: var(--brand-press);
+  filter: brightness(1.07);
+  box-shadow: var(--glow-brand), var(--shadow-2);
+}
+.btn.primary:active {
+  transform: scale(0.98);
 }
 .btn.primary:disabled {
   opacity: 0.4;
   cursor: default;
+  box-shadow: none;
 }
 .btn:hover {
   border-color: var(--hairline-strong);
@@ -858,9 +949,21 @@ button {
   position: absolute;
   inset: 0;
   z-index: 35;
-  background: var(--bg);
+  background: var(--grad-ambient), var(--bg);
+  background-attachment: fixed;
   overflow-y: auto;
   padding: 28px 32px 60px;
+  animation: panelIn 0.4s var(--ease-card) both;
+}
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .panel h1 {
   font-size: 24px;
@@ -892,17 +995,33 @@ button {
   border-radius: var(--r-pill);
   padding: 7px 14px;
   cursor: pointer;
+  transition: color var(--dur-tap) ease, background var(--dur-tap) ease,
+    border-color var(--dur-tap) ease;
+}
+.tab:hover {
+  color: var(--text);
+  border-color: var(--hairline-strong);
 }
 .tab.on {
   color: var(--bg);
-  background: var(--signal);
-  border-color: var(--signal);
+  background: var(--grad-signal);
+  border-color: transparent;
+  box-shadow: var(--glow-signal);
+}
+.tab.on:hover {
+  color: var(--bg);
 }
 .row {
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: var(--r-md);
   padding: 16px 18px;
+  transition: transform var(--dur-tap) var(--ease-card),
+    border-color var(--dur-tap) ease, box-shadow var(--dur-tap) ease;
+}
+.row:hover {
+  border-color: var(--hairline-strong);
+  box-shadow: var(--shadow-1);
 }
 .row .rtitle {
   font-size: 15px;
@@ -930,17 +1049,23 @@ button {
   border-radius: 9px;
   padding: 7px 13px;
   cursor: pointer;
+  transition: transform var(--dur-tap) var(--ease-spring),
+    border-color var(--dur-tap) ease, filter var(--dur-tap) ease;
 }
 .minibtn:hover {
   border-color: var(--hairline-strong);
 }
+.minibtn:active {
+  transform: scale(0.96);
+}
 .minibtn.primary {
-  background: var(--brand);
-  border-color: var(--brand);
+  background: var(--grad-brand);
+  border-color: transparent;
   color: #fff;
+  box-shadow: var(--glow-brand);
 }
 .minibtn.primary:hover {
-  background: var(--brand-press);
+  filter: brightness(1.07);
 }
 .minibtn.danger {
   border-color: var(--danger);
@@ -1011,6 +1136,13 @@ button {
   padding: 12px 14px;
   margin-bottom: 8px;
   cursor: pointer;
+  transition: transform var(--dur-tap) var(--ease-card),
+    border-color var(--dur-tap) ease, box-shadow var(--dur-tap) ease;
+}
+.kcard:hover {
+  transform: translateY(-2px);
+  border-color: var(--hairline-strong);
+  box-shadow: var(--shadow-2);
 }
 .kcard .ka {
   font-size: 13.5px;
@@ -1027,11 +1159,14 @@ button {
   width: min(520px, 100%);
   max-height: 90vh;
   overflow-y: auto;
-  background: var(--surface);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--hairline-strong);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lift), var(--edge);
   padding: 20px 22px;
+  animation: modalIn 0.32s var(--ease-spring) both;
 }
 .trace h3 {
   font-size: 16px;
@@ -1080,17 +1215,22 @@ button {
   height: 40px;
   padding: 0 16px;
   border-radius: var(--r-pill);
-  background: rgba(18, 24, 34, 0.92);
-  backdrop-filter: blur(18px);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--hairline);
   color: var(--text);
   font-size: 13.5px;
   font-weight: 600;
   text-decoration: none;
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-float), var(--edge);
+  transition: border-color var(--dur-tap) ease, transform var(--dur-tap) var(--ease-spring);
 }
 .account-signin:hover {
   border-color: var(--hairline-strong);
+}
+.account-signin:active {
+  transform: scale(0.97);
 }
 .account-signin .g {
   width: 20px;
@@ -1110,13 +1250,22 @@ button {
   height: 40px;
   padding: 0 12px 0 6px;
   border-radius: var(--r-pill);
-  background: rgba(18, 24, 34, 0.92);
-  backdrop-filter: blur(18px);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--hairline);
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: var(--shadow-float), var(--edge);
+  transition: border-color var(--dur-tap) ease, transform var(--dur-tap) var(--ease-spring);
+}
+.account-chip:hover {
+  border-color: var(--hairline-strong);
+}
+.account-chip:active {
+  transform: scale(0.97);
 }
 .account-avatar {
   width: 28px;
@@ -1144,12 +1293,14 @@ button {
   right: 16px;
   z-index: 32;
   width: 280px;
-  background: rgba(18, 24, 34, 0.97);
-  backdrop-filter: blur(18px);
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--hairline);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-float), var(--edge);
   padding: 14px;
+  animation: modalIn 0.26s var(--ease-spring) both;
 }
 .ap-head {
   padding-bottom: 10px;
@@ -1288,13 +1439,33 @@ button {
 }
 @media (prefers-reduced-motion: reduce) {
   .card,
-  .nba {
+  .nba,
+  .panel,
+  .draft,
+  .trace,
+  .account-pop {
     animation-duration: 0.01ms;
   }
-  .beacon .ring {
+  .beacon .ring,
+  .thinking .orb {
     animation: none;
   }
   #lead {
     transition: opacity 0.2s ease;
+  }
+  /* No transform-based motion when reduced motion is requested. */
+  .navbtn:active,
+  .tool:hover,
+  .tool:active,
+  .card:hover,
+  .kcard:hover,
+  .row:hover,
+  .btn.primary:active,
+  .minibtn:active,
+  .quick button:active,
+  .account-chip:active,
+  .account-signin:active,
+  .nba .draftbtn:active {
+    transform: none;
   }
 }

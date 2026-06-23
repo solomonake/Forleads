@@ -5,9 +5,12 @@
 -- ============================================================================
 
 -- Helper: the agent id(s) owned by the current authenticated user.
+-- search_path pinned (Supabase linter: mutable search_path).
 create or replace function current_agent_ids()
 returns setof uuid
 language sql stable
+security definer
+set search_path = public, pg_temp
 as $$
   select id from agent where auth_uid = auth.uid();
 $$;
