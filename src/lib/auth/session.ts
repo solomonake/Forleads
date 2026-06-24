@@ -35,18 +35,18 @@ export interface Session {
 }
 
 function key(): Buffer {
-  const secret =
-    process.env.SESSION_SECRET ??
-    process.env.NEXTAUTH_SECRET ??
-    // Dev fallback — set SESSION_SECRET in production (a warning is logged once).
-    "forleads-dev-insecure-session-secret-change-me";
-  if (
-    !process.env.SESSION_SECRET &&
-    process.env.NODE_ENV === "production" &&
-    !globalThis.__flSecretWarned
-  ) {
-    globalThis.__flSecretWarned = true;
-    console.warn("[forleads] SESSION_SECRET not set — using an insecure default. Set it in Vercel env.");
+  const secret = process.env.SESSION_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    // FAIL CLOSED in production: an unset secret would sign sessions with a
+    // public, repo-visible default — anyone could forge any session and bypass
+    // the auth layer entirely. Refuse rather than silently run insecure. The
+    // dev fallback stays only outside production so local dev/tests still work.
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "[forleads] SESSION_SECRET is required in production — refusing to fall back to an insecure default. Set it in the Vercel env.",
+      );
+    }
+    return createHash("sha256").update("forleads-dev-insecure-session-secret-change-me").digest();
   }
   return createHash("sha256").update(secret).digest(); // 32 bytes
 }
@@ -92,9 +92,4 @@ export function sessionCookieOptions() {
     path: "/",
     maxAge: 60 * 60 * 24 * 30, // 30 days
   };
-}
-
-declare global {
-  // eslint-disable-next-line no-var
-  var __flSecretWarned: boolean | undefined;
 }
