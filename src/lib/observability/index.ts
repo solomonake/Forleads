@@ -50,15 +50,26 @@ export function withRoute<C = unknown>(
       return res;
     } catch (e) {
       const err = e instanceof Error ? e : new Error(String(e));
-      log("error", "request.error", {
+      // A thrown error may declare its own client status (e.g. ValidationError →
+      // 400). 4xx are client faults (logged warn, message surfaced); anything
+      // else is a real server error (logged error+stack, message NOT leaked).
+      const status = typeof (e as { status?: unknown }).status === "number"
+        ? (e as { status: number }).status
+        : 500;
+      const client = status < 500;
+      log(client ? "warn" : "error", client ? "request.rejected" : "request.error", {
         name,
         method: req.method,
+        status,
         ms: Date.now() - started,
         requestId,
         error: err.message,
-        stack: err.stack,
+        ...(client ? {} : { stack: err.stack }),
       });
-      return NextResponse.json({ error: "internal error", requestId }, { status: 500 });
+      return NextResponse.json(
+        { error: client ? err.message : "internal error", requestId },
+        { status },
+      );
     }
   };
 }

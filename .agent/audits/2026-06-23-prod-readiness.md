@@ -158,8 +158,18 @@ branch → green CI + CodeQL → manual merge → prod-build review, per the con
   `{error,requestId}` (internal message not leaked). Net simplification — removed
   the per-route bespoke try/catch. Seam: wiring Sentry/Axiom later = one call in
   `withRoute`, not 10 routes. Verified live (structured logs + x-request-id).
-  **Still open:** input validation (axis 7); trace/[id] + zapier-inbound can adopt
-  the same one-line wrapper.
+  trace/[id] + zapier-inbound can adopt the same one-line wrapper.
+- **2026-06-23 · PR #11** — Input validation (axis 7) **C → B**. `src/lib/validation`
+  (deps-free): `validateBody` + typed field validators (`str/num/oneOf/optStr/
+  optNum`) with a 16 KB body cap replace the unchecked `as {...}` casts on
+  lead/notes/draft/loops/approve. `ValidationError` carries `status=400`; `withRoute`
+  maps any error's `.status` (4xx → warn+message, 5xx → error+stack, message not
+  leaked). Situation/ActionType now derive from `const` arrays (single source).
+  Verified live: bad enum/missing field/oversized/bad-JSON → descriptive 400.
+
+**Net result: every below-threshold axis remediated** — auth/authz/secrets to **A**;
+rate-limit/cache/observability/validation to **B** (each with a documented A-path).
+Not gold-plated: idempotency (B) and data/privacy (B) left as-is.
 
 ## Capacity envelope
 Computed in `.agent/audits/2026-06-23-capacity-envelope.md` (graded **C**). Binding

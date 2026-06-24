@@ -4,18 +4,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAgentId } from "@/lib/auth/agent";
 import { withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
+import { num, optStr, str, validateBody } from "@/lib/validation";
 import { ensureLead, runSwarm } from "@/lib/pipeline";
 
 export const POST = withRoute("lead", async (req: NextRequest) => {
-  const body = (await req.json()) as {
-    address: string;
-    lng: number;
-    lat: number;
-    locality?: string;
-  };
-  if (!body.address || typeof body.lng !== "number" || typeof body.lat !== "number") {
-    return NextResponse.json({ error: "address, lng, lat required" }, { status: 400 });
-  }
+  const body = await validateBody(req, (b) => ({
+    address: str(b, "address", { max: 300 }),
+    lng: num(b, "lng"),
+    lat: num(b, "lat"),
+    locality: optStr(b, "locality", { max: 200 }),
+  }));
   const agentId = requireAgentId();
   if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
   // Discovery fans out to the external (Overpass) budget — the binding

@@ -4,20 +4,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAgentId } from "@/lib/auth/agent";
 import { withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
+import { optStr, str, validateBody } from "@/lib/validation";
 import { nowISO, uuid } from "@/lib/core/ids";
 import { classifyNoteBest } from "@/lib/agents/notes";
 import { getRepo } from "@/lib/db";
 import { emit } from "@/lib/pipeline";
 
 export const POST = withRoute("notes", async (req: NextRequest) => {
-  const body = (await req.json()) as {
-    leadId: string;
-    body: string;
-    modality?: "text" | "voice";
-  };
-  if (!body.leadId || !body.body?.trim()) {
-    return NextResponse.json({ error: "leadId and body required" }, { status: 400 });
-  }
+  const body = await validateBody(req, (b) => ({
+    leadId: str(b, "leadId", { max: 100 }),
+    body: str(b, "body", { max: 8000 }),
+    modality: optStr(b, "modality", { allowed: ["text", "voice"] as const }),
+  }));
   const agentId = requireAgentId();
   if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
   const limited = enforceRateLimit(req, { name: "compose", agentId, perAgent: 30, perIp: 45 });
