@@ -2,11 +2,12 @@
 // emit domain events into Forleads ("Forleads as a platform"). Verifies a shared
 // secret; appends an idempotent domain event. (docs/_ProductionMarketPlan_ §6.)
 import { NextRequest, NextResponse } from "next/server";
+import { withRoute } from "@/lib/observability";
 import { config, DEMO_AGENT_ID } from "@/lib/core/config";
 import type { DomainEventType } from "@/lib/core/types";
 import { emit } from "@/lib/pipeline";
 
-export async function POST(req: NextRequest) {
+export const POST = withRoute("zapier.inbound", async (req: NextRequest) => {
   // Fail closed: an unconfigured secret means the webhook is NOT ready to accept
   // events, not "accept anything". Reject until ZAPIER_WEBHOOK_SECRET is set.
   if (!config.zapier.webhookSecret) {
@@ -16,24 +17,20 @@ export async function POST(req: NextRequest) {
   if (secret !== config.zapier.webhookSecret) {
     return NextResponse.json({ error: "invalid secret" }, { status: 401 });
   }
-  try {
-    const body = (await req.json()) as {
-      type?: DomainEventType;
-      leadId?: string;
-      payload?: Record<string, unknown>;
-    };
-    // The agent is NOT read from the request body (that was an IDOR). Inbound
-    // platform events land in the workspace bound to the configured secret —
-    // the default workspace until a per-secret agent map exists.
-    const event = await emit(
-      DEMO_AGENT_ID,
-      body.type ?? "watcher.hit",
-      body.payload ?? {},
-      "zapier-inbound",
-      body.leadId
-    );
-    return NextResponse.json({ ok: true, eventId: event.id });
-  } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "unknown" }, { status: 500 });
-  }
-}
+  const body = (await req.json()) as {
+    type?: DomainEventType;
+    leadId?: string;
+    payload?: Record<string, unknown>;
+  };
+  // The agent is NOT read from the request body (that was an IDOR). Inbound
+  // platform events land in the workspace bound to the configured secret —
+  // the default workspace until a per-secret agent map exists.
+  const event = await emit(
+    DEMO_AGENT_ID,
+    body.type ?? "watcher.hit",
+    body.payload ?? {},
+    "zapier-inbound",
+    body.leadId
+  );
+  return NextResponse.json({ ok: true, eventId: event.id });
+});

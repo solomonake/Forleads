@@ -13,6 +13,7 @@ import {
   MapillaryImageryProvider,
   OSMPropertyProvider,
   PhotonNominatimGeocodeProvider,
+  PublicNominatimGeocodeProvider,
 } from "./real";
 import type {
   GeocodeProvider,
@@ -25,6 +26,12 @@ export function getGeocodeProvider(): GeocodeProvider {
     return new PhotonNominatimGeocodeProvider(
       process.env.PHOTON_URL ?? "http://localhost:2322",
       process.env.NOMINATIM_URL ?? "http://localhost:8080"
+    );
+  }
+  if (config.geocoder === "nominatim") {
+    // Public OSM Nominatim — no self-hosting required. Fair-use: low QPS.
+    return new PublicNominatimGeocodeProvider(
+      process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org"
     );
   }
   return new MockGeocodeProvider();

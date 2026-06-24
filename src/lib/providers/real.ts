@@ -13,6 +13,70 @@ import type {
   PropertyQuery,
 } from "./types";
 
+// ---- Public Nominatim (zero self-hosting; ~1 req/sec fair-use) --------------
+// For solo testing and small workloads. For scale, switch to PhotonNominatim
+// pointed at self-hosted endpoints (FORLEADS_GEOCODER=photon-nominatim).
+
+export class PublicNominatimGeocodeProvider implements GeocodeProvider {
+  readonly name = "nominatim";
+  readonly mode = "live" as const;
+  // Default to the OSM-hosted Nominatim. Fair-use requires a real User-Agent +
+  // capping QPS — fine for one human typing in a search box.
+  constructor(private baseUrl = "https://nominatim.openstreetmap.org") {}
+
+  async autocomplete(query: string, limit = 6): Promise<GeoResult[]> {
+    const url = `${this.baseUrl}/search?q=${encodeURIComponent(query)}&format=jsonv2&addressdetails=1&limit=${limit}`;
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Forleads/1.0 (real-estate CRM; +https://forleads.vercel.app)",
+        "Accept-Language": "en",
+      },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as Array<{
+      lon: string;
+      lat: string;
+      display_name: string;
+      address?: Record<string, string>;
+    }>;
+    return data.map((r) => {
+      const a = r.address ?? {};
+      const headline =
+        [a.house_number, a.road].filter(Boolean).join(" ") ||
+        r.display_name.split(",")[0] ||
+        r.display_name;
+      const locality = [a.city ?? a.town ?? a.village, a.state, a.country]
+        .filter(Boolean)
+        .join(", ");
+      return {
+        address: headline,
+        locality,
+        lng: parseFloat(r.lon),
+        lat: parseFloat(r.lat),
+      };
+    });
+  }
+
+  async reverse(lng: number, lat: number): Promise<GeoResult | null> {
+    const url = `${this.baseUrl}/reverse?lon=${lng}&lat=${lat}&format=jsonv2`;
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Forleads/1.0 (real-estate CRM; +https://forleads.vercel.app)",
+        "Accept-Language": "en",
+      },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { display_name?: string; address?: Record<string, string> };
+    if (!data.display_name) return null;
+    return {
+      address: data.display_name.split(",").slice(0, 2).join(",").trim(),
+      locality: data.address?.city ?? data.address?.town,
+      lng,
+      lat,
+    };
+  }
+}
+
 // ---- Photon + Nominatim geocoding (self-hosted) -----------------------------
 
 export class PhotonNominatimGeocodeProvider implements GeocodeProvider {

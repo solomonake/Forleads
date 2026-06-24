@@ -13,7 +13,11 @@
     "test:watch": "vitest",
     "os:scan": "node scripts/os-scan.mjs",
     "demo:record": "node scripts/record-pr-demo.mjs",
-    "demo:e2e": "playwright test"
+    "demo:e2e": "playwright test",
+    "setup:env": "node scripts/setup-env.mjs",
+    "env:link": "node scripts/env-link.mjs",
+    "env:pull": "node scripts/env-pull.mjs",
+    "env:push": "npx vercel-env-push .env.local development preview production"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
