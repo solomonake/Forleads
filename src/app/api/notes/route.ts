@@ -7,6 +7,7 @@ import { enforceRateLimit } from "@/lib/ratelimit";
 import { optStr, str, validateBody } from "@/lib/validation";
 import { nowISO, uuid } from "@/lib/core/ids";
 import { classifyNoteBest } from "@/lib/agents/notes";
+import { persistNoteMemory } from "@/lib/agents/memory";
 import { getRepo } from "@/lib/db";
 import { emit } from "@/lib/pipeline";
 
@@ -40,6 +41,14 @@ export const POST = withRoute("notes", async (req: NextRequest) => {
     "notes",
     body.leadId
   );
+
+  // Persist the note as a memory row so the dispatcher can recall it next tap.
+  // Failure is non-fatal — the loop must still complete even if embedding fails.
+  try {
+    await persistNoteMemory(note);
+  } catch {
+    /* memory persistence is best-effort */
+  }
 
   return NextResponse.json({ note, classification });
 });

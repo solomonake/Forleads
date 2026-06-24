@@ -16,10 +16,14 @@ import type {
   LeadSurface,
   LoopDefinition,
   LoopRun,
+  Memory,
+  MemoryHit,
   Note,
   Watcher,
   WeeklyReport,
 } from "@/lib/core/types";
+
+import { cosineSimilarity } from "@/lib/agents/embedder";
 
 export interface Repository {
   // agents
@@ -73,6 +77,10 @@ export interface Repository {
   // connector accounts
   listConnectorAccounts(agentId: string): Promise<ConnectorAccount[]>;
   upsertConnectorAccount(a: ConnectorAccount): Promise<ConnectorAccount>;
+
+  // memories (lead-scoped recall)
+  saveMemory(m: Memory): Promise<Memory>;
+  recallMemories(leadId: string, query: number[], k: number): Promise<MemoryHit[]>;
 }
 
 interface Store {
@@ -88,6 +96,7 @@ interface Store {
   traces: Map<string, AgentTrace>;
   reports: WeeklyReport[];
   connectorAccounts: Map<string, ConnectorAccount>;
+  memories: Map<string, Memory[]>; // keyed by lead_surface_id
 }
 
 export class InMemoryRepository implements Repository {
@@ -219,6 +228,20 @@ export class InMemoryRepository implements Repository {
     this.s.connectorAccounts.set(a.provider, a);
     return a;
   }
+
+  async saveMemory(m: Memory) {
+    const arr = this.s.memories.get(m.lead_surface_id) ?? [];
+    arr.push(m);
+    this.s.memories.set(m.lead_surface_id, arr);
+    return m;
+  }
+  async recallMemories(leadId: string, query: number[], k: number) {
+    const rows = this.s.memories.get(leadId) ?? [];
+    return rows
+      .map((memory) => ({ memory, similarity: cosineSimilarity(memory.embedding, query) }))
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, Math.max(1, k));
+  }
 }
 
 export function emptyStore(): Store {
@@ -235,5 +258,6 @@ export function emptyStore(): Store {
     traces: new Map(),
     reports: [],
     connectorAccounts: new Map(),
+    memories: new Map(),
   };
 }

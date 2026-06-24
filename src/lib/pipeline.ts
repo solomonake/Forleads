@@ -24,6 +24,11 @@ import type {
 import { planDispatch } from "@/lib/agents/dispatcher";
 import { runScoutCached } from "@/lib/agents/scouts";
 import { reduce } from "@/lib/agents/reducer";
+import {
+  persistEvidenceMemory,
+  recallForLead,
+  renderRecallNote,
+} from "@/lib/agents/memory";
 import { composeBest } from "@/lib/agents/composer";
 import { config } from "@/lib/core/config";
 import { lintArtifactText } from "@/lib/agents/compliance";
@@ -93,11 +98,21 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
   const started = Date.now();
   await emit(lead.agent_id, "lead.tapped", { address: lead.address, status: lead.status }, "pipeline", lead.id);
 
+  // Lead-scoped recall BEFORE we spend any scout budget. The address +
+  // locality is a stable, scope-faithful query string for the property/risk
+  // facts the dispatcher would otherwise re-research.
+  const recall = await recallForLead(
+    lead,
+    `${lead.address}${lead.locality ? ", " + lead.locality : ""}`,
+  );
+
   const plan = await planDispatch({
     lng: lead.lng,
     lat: lead.lat,
     address: lead.address,
     status: lead.status,
+    priorMemoryRefs: recall.refs,
+    priorGroundedCount: recall.priorGroundedCount,
   });
 
   // Fan out in parallel — bounded by the dispatcher to <= 5.
@@ -108,10 +123,20 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
   const { summary, rejected } = reduce(scoutResults, Date.now() - started);
   await repo.saveEvidence(lead.id, summary.cards);
 
+  // Persist every reduced card so the NEXT tap can recall it.
+  for (const card of summary.cards) {
+    await persistEvidenceMemory(lead.agent_id, lead, card);
+  }
+
+  const recallNote = renderRecallNote(recall);
+  const summaryWithRecall: ReduceSummary = recallNote
+    ? { ...summary, recallNote }
+    : summary;
+
   const updated = { ...lead, status: lead.status === "new" ? "researching" : lead.status, last_worked_at: nowISO() } as LeadSurface;
   await repo.upsertLead(updated);
 
-  return { lead: updated, summary, rejected, scoutResults };
+  return { lead: updated, summary: summaryWithRecall, rejected, scoutResults };
 }
 
 // ---- Draft ------------------------------------------------------------------

@@ -86,6 +86,32 @@ export interface ReduceSummary {
   };
   scoutCount: number;
   elapsedMs: number;
+  /** FOMO-style copy describing recall hits — null when no prior memory was used. */
+  recallNote?: string;
+}
+
+// ---- Memory (lead-scoped recall: docs/Forleads_AgentLoops_v1.md §3) ---------
+// A persisted, embedded snippet — a prior evidence card, a note, or a domain
+// event — that the dispatcher can recall before spending scout budget. Scoped
+// to a single lead surface; cross-lead leakage would defeat the privacy floor.
+
+export type MemoryKind = "evidence" | "note" | "event";
+
+export interface Memory {
+  id: UUID;
+  agent_id: UUID;
+  lead_surface_id: UUID;
+  kind: MemoryKind;
+  text: string;                 // the embedded surface form (what was hashed)
+  ref?: string;                 // optional pointer to the source row id
+  confidence?: Confidence;      // mirrored from the source card when kind=evidence
+  embedding: number[];          // 1024-dim (bge-m3 / Qwen3-Embedding-0.6B)
+  created_at: ISODate;
+}
+
+export interface MemoryHit {
+  memory: Memory;
+  similarity: number;           // cosine, 0..1
 }
 
 // ---- Lead surface (the spatial unit) ----------------------------------------

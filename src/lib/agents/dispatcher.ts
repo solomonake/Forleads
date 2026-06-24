@@ -35,9 +35,19 @@ export interface DispatchInput {
   address: string;
   status: LeadStatus;
   priorMemoryRefs?: string[];
+  /**
+   * Number of prior grounded (A/B confidence) evidence cards recalled for this
+   * lead. >= SUFFICIENT_PRIOR_GROUNDED lets the dispatcher drop the property
+   * scout entirely — we already grounded those facts last time.
+   */
+  priorGroundedCount?: number;
   /** Tighten budgets if the agent is near a daily free-tier cap. */
   nearDailyCap?: boolean;
 }
+
+// Mirror of memory.SUFFICIENT_PRIOR_GROUNDED. Duplicated here so the
+// dispatcher stays self-contained and free of upward imports from agents/.
+const SUFFICIENT_PRIOR_GROUNDED = 2;
 
 export async function planDispatch(input: DispatchInput): Promise<DispatchPlan> {
   const scouts: ScoutJob[] = [];
@@ -51,8 +61,15 @@ export async function planDispatch(input: DispatchInput): Promise<DispatchPlan> 
   const add = (type: ScoutType, why: string) =>
     scouts.push({ type, budget: tighten(BUDGETS[type]), why, allowlist: ALLOWLISTS[type] });
 
-  // Always-on cheap global scouts.
-  add("property", "Building/parcel/land-use facts from the free OSM floor.");
+  // Always-on cheap global scouts. The property scout is the one we'll drop
+  // when prior memory already grounded enough of those facts.
+  const prior = input.priorGroundedCount ?? 0;
+  const skipProperty = prior >= SUFFICIENT_PRIOR_GROUNDED;
+  if (skipProperty) {
+    notes.push(`Skipping property scout: ${prior} prior A/B-grounded card(s) recalled from memory.`);
+  } else {
+    add("property", "Building/parcel/land-use facts from the free OSM floor.");
+  }
   add("imagery", "Street + aerial imagery with a graded vision caption.");
   add("risk", "Flood/zoning/area context from open hazard layers.");
 

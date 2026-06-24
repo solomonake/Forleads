@@ -1,0 +1,126 @@
+// ============================================================================
+// Memory — the lead-scoped recall layer.
+//
+// Before the dispatcher spends scout budget, it asks "what do we already know
+// about this lead?". This module is the seam between the embedder and the
+// repository: it owns the policy for how prior evidence + notes are turned
+// into memory rows on write, and how those rows are pulled back on read.
+//
+// Privacy floor: recall is ALWAYS scoped to a single lead_surface_id. The
+// repository contract enforces it; the RLS policy in 0005_memories.sql
+// enforces it again at the DB layer. No cross-lead recall, ever.
+// ============================================================================
+
+import { nowISO, uuid } from "@/lib/core/ids";
+import type {
+  Confidence,
+  EvidenceCard,
+  LeadSurface,
+  Memory,
+  MemoryHit,
+  Note,
+} from "@/lib/core/types";
+import { getRepo } from "@/lib/db";
+import { getEmbedder } from "./embedder";
+
+// "Sufficient prior grounding" = at least this many prior cards with A or B.
+// When recall is sufficient, the dispatcher drops the property scout entirely
+// (the cheapest grounded scout we'd otherwise run from scratch).
+export const SUFFICIENT_PRIOR_GROUNDED = 2;
+
+export interface RecallSummary {
+  hits: MemoryHit[];
+  refs: string[];                  // memory ids — surfaced to ReduceSummary trace
+  priorGroundedCount: number;      // # of evidence-kind hits with confidence A or B
+  sufficient: boolean;
+}
+
+function evidenceSurfaceForm(card: EvidenceCard): string {
+  const v = card.value === null ? "—" : String(card.value);
+  return `[${card.scout}/${card.confidence}] ${card.claim}: ${v}`;
+}
+
+/** Embed + persist one evidence card as a memory row. */
+export async function persistEvidenceMemory(
+  agentId: string,
+  lead: LeadSurface,
+  card: EvidenceCard,
+): Promise<Memory> {
+  const repo = await getRepo();
+  const embedder = getEmbedder();
+  const text = evidenceSurfaceForm(card);
+  const embedding = await embedder.embed(text);
+  const mem: Memory = {
+    id: uuid(),
+    agent_id: agentId,
+    lead_surface_id: lead.id,
+    kind: "evidence",
+    text,
+    ref: card.id,
+    confidence: card.confidence,
+    embedding,
+    created_at: nowISO(),
+  };
+  return repo.saveMemory(mem);
+}
+
+/** Embed + persist a free-text note as a memory row. */
+export async function persistNoteMemory(note: Note): Promise<Memory> {
+  const repo = await getRepo();
+  const embedder = getEmbedder();
+  const embedding = await embedder.embed(note.body);
+  const mem: Memory = {
+    id: uuid(),
+    agent_id: note.agent_id,
+    lead_surface_id: note.lead_surface_id,
+    kind: "note",
+    text: note.body,
+    ref: note.id,
+    embedding,
+    created_at: nowISO(),
+  };
+  return repo.saveMemory(mem);
+}
+
+/** Recall the top-K most relevant memories for `lead` against a query string. */
+export async function recallForLead(
+  lead: LeadSurface,
+  queryText: string,
+  k = 8,
+): Promise<RecallSummary> {
+  const repo = await getRepo();
+  const embedder = getEmbedder();
+  const query = await embedder.embed(queryText);
+  const hits = await repo.recallMemories(lead.id, query, k);
+
+  // Only count evidence-kind memories with A/B as "grounded" for the budget rule.
+  // Recall similarity threshold is intentionally loose (>= 0.0) because the
+  // privacy scope IS the lead — every hit is on-topic by construction.
+  const groundedConfidences: Confidence[] = ["A", "B"];
+  const priorGroundedCount = hits.filter(
+    (h) =>
+      h.memory.kind === "evidence" &&
+      h.memory.confidence !== undefined &&
+      groundedConfidences.includes(h.memory.confidence),
+  ).length;
+
+  return {
+    hits,
+    refs: hits.map((h) => h.memory.id),
+    priorGroundedCount,
+    sufficient: priorGroundedCount >= SUFFICIENT_PRIOR_GROUNDED,
+  };
+}
+
+/**
+ * Render a FOMO-flavored single-line summary that's only honest when the
+ * dispatcher actually consulted recall. Returns null when nothing was recalled
+ * so callers can omit the field rather than emit empty noise.
+ */
+export function renderRecallNote(r: RecallSummary): string | null {
+  if (r.hits.length === 0) return null;
+  if (r.sufficient) {
+    return `Found ${r.priorGroundedCount} fact${r.priorGroundedCount === 1 ? "" : "s"} you'd previously grounded · skipping fresh property research`;
+  }
+  return `Recalled ${r.hits.length} prior signal${r.hits.length === 1 ? "" : "s"} for this lead — no shortcut taken`;
+}

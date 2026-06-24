@@ -29,11 +29,15 @@ import type {
   Artifact,
   ConnectorAccount,
   ConnectorProvider,
+  Confidence,
   DomainEvent,
   EvidenceCard,
   LeadSurface,
   LoopDefinition,
   LoopRun,
+  Memory,
+  MemoryHit,
+  MemoryKind,
   Note,
   Watcher,
   WeeklyReport,
@@ -591,6 +595,50 @@ export class SupabaseRepository implements Repository {
         .order("generated_at", { ascending: false }),
     );
     return (data ?? []).map(reportFromRow);
+  }
+
+  // memories (lead-scoped recall)
+  async saveMemory(m: Memory) {
+    unwrap(
+      await this.sb
+        .from("memory")
+        .insert({
+          id: m.id,
+          agent_id: m.agent_id,
+          lead_surface_id: m.lead_surface_id,
+          kind: m.kind,
+          text: m.text,
+          ref: m.ref ?? null,
+          confidence: m.confidence ?? null,
+          embedding: m.embedding,
+          created_at: m.created_at,
+        })
+        .select(),
+    );
+    return m;
+  }
+  async recallMemories(leadId: string, query: number[], k: number) {
+    const data = unwrap(
+      await this.sb.rpc("fl_recall_memories", {
+        p_lead_id: leadId,
+        p_query: query,
+        p_k: k,
+      }),
+    );
+    return ((data ?? []) as Row[]).map<MemoryHit>((r) => ({
+      memory: {
+        id: r.id,
+        agent_id: r.agent_id,
+        lead_surface_id: r.lead_surface_id,
+        kind: r.kind as MemoryKind,
+        text: r.text,
+        ref: r.ref ?? undefined,
+        confidence: (r.confidence as Confidence) ?? undefined,
+        embedding: Array.isArray(r.embedding) ? r.embedding : [],
+        created_at: r.created_at,
+      },
+      similarity: Number(r.similarity ?? 0),
+    }));
   }
 
   // connector accounts
