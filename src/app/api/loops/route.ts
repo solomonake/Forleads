@@ -3,7 +3,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readAgentId, requireAgentId } from "@/lib/auth/agent";
 import { withRoute } from "@/lib/observability";
-import type { Situation } from "@/lib/core/types";
+import { optStr, str, validateBody } from "@/lib/validation";
+import { SITUATIONS, type Situation } from "@/lib/core/types";
 import { getRepo } from "@/lib/db";
 import { runLoop } from "@/lib/loops/engine";
 
@@ -18,11 +19,11 @@ export const GET = withRoute("loops.list", async () => {
 });
 
 export const POST = withRoute("loops.run", async (req: NextRequest) => {
-  const body = (await req.json()) as {
-    loopId: string;
-    leadId: string;
-    situation?: Situation;
-  };
+  const body = await validateBody(req, (b) => ({
+    loopId: str(b, "loopId", { max: 100 }),
+    leadId: str(b, "leadId", { max: 100 }),
+    situation: optStr<Situation>(b, "situation", { allowed: SITUATIONS }),
+  }));
   const agentId = requireAgentId();
   if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
   const repo = await getRepo();

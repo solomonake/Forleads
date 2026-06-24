@@ -126,16 +126,18 @@ export interface LeadContact {
 
 export type NoteModality = "text" | "voice";
 
-export type Situation =
-  | "no_contact"
-  | "interested_seller"
-  | "objection:timing"
-  | "objection:price"
-  | "objection:agent_loyalty"
-  | "buyer_criteria"
-  | "needs_repair_info"
-  | "dead_not_now"
-  | "unknown";
+export const SITUATIONS = [
+  "no_contact",
+  "interested_seller",
+  "objection:timing",
+  "objection:price",
+  "objection:agent_loyalty",
+  "buyer_criteria",
+  "needs_repair_info",
+  "dead_not_now",
+  "unknown",
+] as const;
+export type Situation = (typeof SITUATIONS)[number];
 
 export interface Note {
   id: UUID;
@@ -163,7 +165,8 @@ export interface NoteClassification {
 
 // ---- Actions / artifacts (drafts) -------------------------------------------
 
-export type ActionType = "email" | "sms" | "task" | "calendar" | "crm_note";
+export const ACTION_TYPES = ["email", "sms", "task", "calendar", "crm_note"] as const;
+export type ActionType = (typeof ACTION_TYPES)[number];
 
 export type ArtifactStatus =
   | "drafted"

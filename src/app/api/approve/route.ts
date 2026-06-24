@@ -6,13 +6,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { freshAccessToken } from "@/lib/auth/google";
 import { getSession, seal, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth/session";
 import { withRoute } from "@/lib/observability";
+import { str, validateBody } from "@/lib/validation";
 import { approveArtifact } from "@/lib/pipeline";
 
 export const POST = withRoute("approve", async (req: NextRequest) => {
-  const body = (await req.json()) as { artifactId: string };
-  if (!body.artifactId) {
-    return NextResponse.json({ error: "artifactId required" }, { status: 400 });
-  }
+  const body = await validateBody(req, (b) => ({
+    artifactId: str(b, "artifactId", { max: 100 }),
+  }));
 
   // The human gate is a mutating, outward-facing action (it can write a real
   // Gmail draft) — it MUST require an authenticated user. No anonymous approve.
