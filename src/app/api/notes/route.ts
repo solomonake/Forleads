@@ -2,6 +2,7 @@
 // next-best-actions. Emits note.created so matching loops can fire.
 import { NextRequest, NextResponse } from "next/server";
 import { requireAgentId } from "@/lib/auth/agent";
+import { enforceRateLimit } from "@/lib/ratelimit";
 import { nowISO, uuid } from "@/lib/core/ids";
 import { classifyNoteBest } from "@/lib/agents/notes";
 import { getRepo } from "@/lib/db";
@@ -19,6 +20,8 @@ export async function POST(req: NextRequest) {
     }
     const agentId = requireAgentId();
     if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
+    const limited = enforceRateLimit(req, { name: "compose", agentId, perAgent: 30, perIp: 45 });
+    if (limited) return limited;
     const repo = await getRepo();
     const classification = await classifyNoteBest(body.body);
 
