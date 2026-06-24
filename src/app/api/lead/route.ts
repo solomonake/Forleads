@@ -2,6 +2,7 @@
 // cited evidence cards + the reduce summary (the "fly-to" loading window).
 import { NextRequest, NextResponse } from "next/server";
 import { requireAgentId } from "@/lib/auth/agent";
+import { enforceRateLimit } from "@/lib/ratelimit";
 import { ensureLead, runSwarm } from "@/lib/pipeline";
 
 export async function POST(req: NextRequest) {
@@ -17,6 +18,10 @@ export async function POST(req: NextRequest) {
     }
     const agentId = requireAgentId();
     if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
+    // Discovery fans out to the external (Overpass) budget — the binding
+    // constraint. Tightest limit of any route. (.agent/audits/…capacity-envelope.md)
+    const limited = enforceRateLimit(req, { name: "lead", agentId, perAgent: 20, perIp: 30 });
+    if (limited) return limited;
     const lead = await ensureLead(agentId, {
       address: body.address,
       lng: body.lng,

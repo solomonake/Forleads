@@ -132,6 +132,21 @@ deploy-config gate, not a code defect — flag for the env review (HUMAN-ONLY se
 No gold-plating of axis 8/11 (already at/above bar). Each item ships via
 branch → green CI + CodeQL → manual merge → prod-build review, per the constitution.
 
+## Remediation log (living)
+- **2026-06-23 · PR #5** — Auth/authz/tenant isolation (axes 1–3) **D → A**.
+  Server-side `requireAgentId`/`readAgentId`; per-user workspaces; client `agentId`
+  never read. Webhook fail-closed (axis 9, partial). Verified in prod.
+- **2026-06-23 · PR #6** — Capacity envelope documented (DoD #3), graded **C**.
+- **2026-06-23 · PR #7** — `SESSION_SECRET` fail-closed in prod (axis 9) **C → A**.
+  Verified prod stays 200 (secret is set in Vercel).
+- **2026-06-23 · PR #8** — Rate limiting (axis 4) **D → B**. Per-IP + per-agent
+  fixed-window budgets on `/api/lead` (20/agent·30/IP per min — the Overpass-bound
+  route) and `/api/notes`,`/api/draft` (30/45). **Tier-honest: in-memory =
+  per-warm-instance on serverless, graded B not A.** The `RateLimiter` seam lets a
+  shared backend (Vercel KV / Upstash free tier) drop in via env for global (A)
+  limiting — a config flip, human provisions the store. **Still open:** cache
+  (axis 5), observability (axis 6), input validation (axis 7).
+
 ## Capacity envelope
 Computed in `.agent/audits/2026-06-23-capacity-envelope.md` (graded **C**). Binding
 constraint is **regime-dependent**: in the default all-mock config it is Vercel
