@@ -14,11 +14,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "artifactId required" }, { status: 400 });
     }
 
-    // Use the signed-in user's Google token for real drafts (refresh if stale).
+    // The human gate is a mutating, outward-facing action (it can write a real
+    // Gmail draft) — it MUST require an authenticated user. No anonymous approve.
     const session = getSession();
+    if (!session) {
+      return NextResponse.json({ error: "authentication required" }, { status: 401 });
+    }
+    // Use the signed-in user's Google token for real drafts (refresh if stale).
     let googleAccessToken: string | undefined;
     let refreshedSession = false;
-    if (session?.google) {
+    if (session.google) {
       try {
         const fresh = await freshAccessToken(session.google);
         googleAccessToken = fresh.access_token;

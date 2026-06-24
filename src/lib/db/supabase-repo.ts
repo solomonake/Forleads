@@ -22,7 +22,7 @@
 // ============================================================================
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { createHash } from "node:crypto";
+import { uuidV5 } from "@/lib/core/ids";
 import type {
   Agent,
   AgentTrace,
@@ -44,16 +44,6 @@ import type { Repository } from "./repository";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// RFC 4122 URL namespace — fixed so the same slug always yields the same uuid.
-const NS_BYTES = Buffer.from("6ba7b8119dad11d180b400c04fd430c8", "hex");
-
-function uuidV5(name: string): string {
-  const b = Buffer.from(createHash("sha1").update(NS_BYTES).update(name).digest().subarray(0, 16));
-  b.writeUInt8((b.readUInt8(6) & 0x0f) | 0x50, 6); // version 5
-  b.writeUInt8((b.readUInt8(8) & 0x3f) | 0x80, 8); // RFC 4122 variant
-  const x = b.toString("hex");
-  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20, 32)}`;
-}
 
 /** uuid passthrough; non-uuid slugs → stable uuid v5. */
 function toUuid(id: string): string {
