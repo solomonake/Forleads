@@ -2,7 +2,7 @@
 // (name/email/picture) + Gmail/Calendar tokens, seal them into the session
 // cookie, and bind the agent identity so drafts come from the real user.
 import { NextRequest, NextResponse } from "next/server";
-import { DEMO_AGENT_ID } from "@/lib/core/config";
+import { agentIdForSub } from "@/lib/auth/agent";
 import { exchangeCode, fetchProfile } from "@/lib/auth/google";
 import { SESSION_COOKIE, seal, sessionCookieOptions, type Session } from "@/lib/auth/session";
 import { getRepo } from "@/lib/db";
@@ -34,12 +34,14 @@ export async function GET(req: NextRequest) {
       createdAt: Date.now(),
     };
 
-    // Bind the workspace agent identity to the signed-in user so every composed
-    // draft is "from" them (and the real Gmail account that will hold the draft).
+    // Provision THIS user's own workspace (a per-user agent id derived from the
+    // Google subject) so each signed-in user is an isolated tenant — never the
+    // shared demo agent. Every composed draft is "from" them.
+    const agentId = agentIdForSub(profile.sub);
     const repo = await getRepo();
-    const existing = await repo.getAgent(DEMO_AGENT_ID);
+    const existing = await repo.getAgent(agentId);
     await repo.upsertAgent({
-      id: DEMO_AGENT_ID,
+      id: agentId,
       name: profile.name,
       email: profile.email,
       signatureHtml: `<p>${profile.name} · ${profile.email}</p>`,

@@ -1,7 +1,7 @@
 // POST /api/lead — ensure a lead surface, run the scout swarm, return graded,
 // cited evidence cards + the reduce summary (the "fly-to" loading window).
 import { NextRequest, NextResponse } from "next/server";
-import { DEMO_AGENT_ID } from "@/lib/core/config";
+import { requireAgentId } from "@/lib/auth/agent";
 import { ensureLead, runSwarm } from "@/lib/pipeline";
 
 export async function POST(req: NextRequest) {
@@ -11,12 +11,12 @@ export async function POST(req: NextRequest) {
       lng: number;
       lat: number;
       locality?: string;
-      agentId?: string;
     };
     if (!body.address || typeof body.lng !== "number" || typeof body.lat !== "number") {
       return NextResponse.json({ error: "address, lng, lat required" }, { status: 400 });
     }
-    const agentId = body.agentId ?? DEMO_AGENT_ID;
+    const agentId = requireAgentId();
+    if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
     const lead = await ensureLead(agentId, {
       address: body.address,
       lng: body.lng,

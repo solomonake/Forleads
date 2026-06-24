@@ -1,13 +1,13 @@
 // GET  /api/loops  — list loop definitions + recent runs (Loop Studio)
 // POST /api/loops  — run a loop now against a lead (manual trigger / demo)
 import { NextRequest, NextResponse } from "next/server";
-import { DEMO_AGENT_ID } from "@/lib/core/config";
+import { readAgentId, requireAgentId } from "@/lib/auth/agent";
 import type { Situation } from "@/lib/core/types";
 import { getRepo } from "@/lib/db";
 import { runLoop } from "@/lib/loops/engine";
 
-export async function GET(req: NextRequest) {
-  const agentId = req.nextUrl.searchParams.get("agentId") ?? DEMO_AGENT_ID;
+export async function GET() {
+  const agentId = readAgentId();
   const repo = await getRepo();
   const [definitions, runs] = await Promise.all([
     repo.listLoopDefs(agentId),
@@ -22,9 +22,9 @@ export async function POST(req: NextRequest) {
       loopId: string;
       leadId: string;
       situation?: Situation;
-      agentId?: string;
     };
-    const agentId = body.agentId ?? DEMO_AGENT_ID;
+    const agentId = requireAgentId();
+    if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
     const repo = await getRepo();
     const def = await repo.getLoopDef(body.loopId);
     const lead = await repo.getLead(body.leadId);

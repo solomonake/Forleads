@@ -7,19 +7,26 @@ import type { DomainEventType } from "@/lib/core/types";
 import { emit } from "@/lib/pipeline";
 
 export async function POST(req: NextRequest) {
+  // Fail closed: an unconfigured secret means the webhook is NOT ready to accept
+  // events, not "accept anything". Reject until ZAPIER_WEBHOOK_SECRET is set.
+  if (!config.zapier.webhookSecret) {
+    return NextResponse.json({ error: "webhook not configured" }, { status: 503 });
+  }
   const secret = req.headers.get("x-zapier-secret");
-  if (config.zapier.webhookSecret && secret !== config.zapier.webhookSecret) {
+  if (secret !== config.zapier.webhookSecret) {
     return NextResponse.json({ error: "invalid secret" }, { status: 401 });
   }
   try {
     const body = (await req.json()) as {
       type?: DomainEventType;
-      agentId?: string;
       leadId?: string;
       payload?: Record<string, unknown>;
     };
+    // The agent is NOT read from the request body (that was an IDOR). Inbound
+    // platform events land in the workspace bound to the configured secret —
+    // the default workspace until a per-secret agent map exists.
     const event = await emit(
-      body.agentId ?? DEMO_AGENT_ID,
+      DEMO_AGENT_ID,
       body.type ?? "watcher.hit",
       body.payload ?? {},
       "zapier-inbound",

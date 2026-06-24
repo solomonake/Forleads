@@ -3,6 +3,7 @@
 //   PATCH  → collect/update user info (phone, brand voice) — onboarding
 //   DELETE → logout
 import { NextRequest, NextResponse } from "next/server";
+import { agentIdForSub } from "@/lib/auth/agent";
 import {
   getSession,
   seal,
@@ -39,7 +40,7 @@ export async function PATCH(req: NextRequest) {
 
   // Persist the collected info onto the agent record too.
   const repo = await getRepo();
-  const agent = await repo.getAgent(s.sub);
+  const agent = await repo.getAgent(agentIdForSub(s.sub));
   if (agent) await repo.upsertAgent({ ...agent, brandVoice: s.brandVoice ?? agent.brandVoice });
 
   const res = NextResponse.json({ ok: true, user: { phone: s.phone, brandVoice: s.brandVoice } });

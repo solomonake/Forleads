@@ -1,7 +1,7 @@
 // POST /api/notes — record a note, classify the situation, return suggested
 // next-best-actions. Emits note.created so matching loops can fire.
 import { NextRequest, NextResponse } from "next/server";
-import { DEMO_AGENT_ID } from "@/lib/core/config";
+import { requireAgentId } from "@/lib/auth/agent";
 import { nowISO, uuid } from "@/lib/core/ids";
 import { classifyNoteBest } from "@/lib/agents/notes";
 import { getRepo } from "@/lib/db";
@@ -13,12 +13,12 @@ export async function POST(req: NextRequest) {
       leadId: string;
       body: string;
       modality?: "text" | "voice";
-      agentId?: string;
     };
     if (!body.leadId || !body.body?.trim()) {
       return NextResponse.json({ error: "leadId and body required" }, { status: 400 });
     }
-    const agentId = body.agentId ?? DEMO_AGENT_ID;
+    const agentId = requireAgentId();
+    if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
     const repo = await getRepo();
     const classification = await classifyNoteBest(body.body);
 

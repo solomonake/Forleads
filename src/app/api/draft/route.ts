@@ -1,7 +1,7 @@
 // POST /api/draft — compose a draft artifact for a situation/action, run the
 // fail-closed compliance linter, persist it + its Agent Trace. Draft-first.
 import { NextRequest, NextResponse } from "next/server";
-import { DEMO_AGENT_ID } from "@/lib/core/config";
+import { requireAgentId } from "@/lib/auth/agent";
 import type { ActionType, Situation } from "@/lib/core/types";
 import { getRepo } from "@/lib/db";
 import { DEMO_AGENT } from "@/lib/db/seed";
@@ -14,12 +14,12 @@ export async function POST(req: NextRequest) {
       situation: Situation;
       actionType: ActionType;
       situationConfidence?: number;
-      agentId?: string;
     };
     if (!body.leadId || !body.situation || !body.actionType) {
       return NextResponse.json({ error: "leadId, situation, actionType required" }, { status: 400 });
     }
-    const agentId = body.agentId ?? DEMO_AGENT_ID;
+    const agentId = requireAgentId();
+    if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
     const repo = await getRepo();
     const lead = await repo.getLead(body.leadId);
     if (!lead) return NextResponse.json({ error: "lead not found" }, { status: 404 });
