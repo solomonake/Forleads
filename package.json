@@ -10,7 +10,10 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "os:scan": "node scripts/os-scan.mjs",
+    "demo:record": "node scripts/record-pr-demo.mjs",
+    "demo:e2e": "playwright test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
@@ -23,6 +26,7 @@
     "zustand": "4.5.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "20.14.10",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",

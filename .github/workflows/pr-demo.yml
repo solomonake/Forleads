@@ -1,0 +1,78 @@
+# Record a video (or backend transcript) of the change running in the Vercel
+# preview, then post it as a PR comment. The reviewer can approve by watching.
+name: PR Demo
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write   # gh release create/upload
+  pull-requests: write
+
+jobs:
+  record:
+    name: record demo
+    runs-on: ubuntu-latest
+    # Skip on draft PRs to save minutes; reviewer can re-run by readying for review.
+    if: github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need history for the base-sha diff
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Resolve preview URL
+        id: preview
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Wait up to ~5 min for Vercel's deployment check to surface a preview URL.
+          sha="${{ github.event.pull_request.head.sha }}"
+          url=""
+          for i in $(seq 1 30); do
+            url=$(gh api "repos/${{ github.repository }}/commits/${sha}/deployments" --jq '.[0].url' 2>/dev/null || true)
+            if [ -n "$url" ] && [ "$url" != "null" ]; then
+              target=$(gh api "$url/statuses" --jq '.[0].target_url' 2>/dev/null || true)
+              if [ -n "$target" ] && [ "$target" != "null" ]; then
+                echo "url=$target" >> "$GITHUB_OUTPUT"
+                echo "[pr-demo] preview=$target"
+                break
+              fi
+            fi
+            sleep 10
+          done
+          echo "[pr-demo] (preview URL may be empty for backend-only PRs)"
+
+      - name: Record + post demo
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_DEMO_BASE_URL: ${{ steps.preview.outputs.url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          node scripts/record-pr-demo.mjs \
+            --post \
+            --base-sha "origin/${{ github.event.pull_request.base.ref }}"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-demo-${{ github.event.pull_request.number }}
+          path: |
+            .playwright/videos/**
+            .playwright/traces/**
+          if-no-files-found: ignore
+          retention-days: 14
