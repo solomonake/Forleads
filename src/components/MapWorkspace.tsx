@@ -226,8 +226,13 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
           },
           reduceMotion ? 0 : all.length * 90 + 100
         );
-      } catch {
+      } catch (e) {
         setWorking(false);
+        setLead(null); // clear the optimistic placeholder so the UI isn't stuck
+        const msg = e instanceof Error ? e.message : String(e);
+        const auth = /401|authentication required|unauthor/i.test(msg);
+        setToast(auth ? "Sign in to research this address" : `Couldn't load — ${msg}`);
+        setTimeout(() => setToast(null), 3500);
       }
     },
     [makeBeacon, reduceMotion]
@@ -252,8 +257,12 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
           setClassification(d.classification);
           setSelectedAction(0);
         }, 1300);
-      } catch {
+      } catch (e) {
         setThinking(null);
+        const msg = e instanceof Error ? e.message : String(e);
+        const auth = /401|authentication required|unauthor/i.test(msg);
+        setToast(auth ? "Sign in to add notes" : `Couldn't classify — ${msg}`);
+        setTimeout(() => setToast(null), 3500);
       }
     },
     [lead]
@@ -286,7 +295,6 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
   return (
     <>
       <div id="map" ref={mapDiv} />
-      <div className="demoflag">◆ Demo data · real map · mock providers (no keys needed)</div>
 
       {/* Command bar */}
       <div id="cmd">
@@ -481,11 +489,6 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
             </div>
           )}
         </div>
-      </div>
-
-      <div className="hint">
-        Tap a suggested address → watch it <b>fly in</b> while <b>scouts</b> ground the facts. Then
-        click <b>“Knocked, no answer”</b> to see a compliant draft write itself.
       </div>
 
       {draft && (
