@@ -2,49 +2,46 @@
 // next-best-actions. Emits note.created so matching loops can fire.
 import { NextRequest, NextResponse } from "next/server";
 import { requireAgentId } from "@/lib/auth/agent";
+import { withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { nowISO, uuid } from "@/lib/core/ids";
 import { classifyNoteBest } from "@/lib/agents/notes";
 import { getRepo } from "@/lib/db";
 import { emit } from "@/lib/pipeline";
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = (await req.json()) as {
-      leadId: string;
-      body: string;
-      modality?: "text" | "voice";
-    };
-    if (!body.leadId || !body.body?.trim()) {
-      return NextResponse.json({ error: "leadId and body required" }, { status: 400 });
-    }
-    const agentId = requireAgentId();
-    if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
-    const limited = enforceRateLimit(req, { name: "compose", agentId, perAgent: 30, perIp: 45 });
-    if (limited) return limited;
-    const repo = await getRepo();
-    const classification = await classifyNoteBest(body.body);
-
-    const note = await repo.addNote({
-      id: uuid(),
-      lead_surface_id: body.leadId,
-      agent_id: agentId,
-      body: body.body,
-      modality: body.modality ?? "text",
-      situation: classification.situation,
-      created_at: nowISO(),
-    });
-
-    await emit(
-      agentId,
-      "note.created",
-      { noteId: note.id, situation: classification.situation, confidence: classification.confidence },
-      "notes",
-      body.leadId
-    );
-
-    return NextResponse.json({ note, classification });
-  } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "unknown" }, { status: 500 });
+export const POST = withRoute("notes", async (req: NextRequest) => {
+  const body = (await req.json()) as {
+    leadId: string;
+    body: string;
+    modality?: "text" | "voice";
+  };
+  if (!body.leadId || !body.body?.trim()) {
+    return NextResponse.json({ error: "leadId and body required" }, { status: 400 });
   }
-}
+  const agentId = requireAgentId();
+  if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
+  const limited = enforceRateLimit(req, { name: "compose", agentId, perAgent: 30, perIp: 45 });
+  if (limited) return limited;
+  const repo = await getRepo();
+  const classification = await classifyNoteBest(body.body);
+
+  const note = await repo.addNote({
+    id: uuid(),
+    lead_surface_id: body.leadId,
+    agent_id: agentId,
+    body: body.body,
+    modality: body.modality ?? "text",
+    situation: classification.situation,
+    created_at: nowISO(),
+  });
+
+  await emit(
+    agentId,
+    "note.created",
+    { noteId: note.id, situation: classification.situation, confidence: classification.confidence },
+    "notes",
+    body.leadId
+  );
+
+  return NextResponse.json({ note, classification });
+});

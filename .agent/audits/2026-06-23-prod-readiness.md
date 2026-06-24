@@ -150,8 +150,16 @@ branch → green CI + CodeQL → manual merge → prod-build review, per the con
   normalized address (point-correct — an H3 res-10 cell is ~65m, too coarse for
   building facts), risk/market by H3 cell (area-correct), **people never cached**
   (no cross-lead personal-data leak). 6h TTL, only `ok` results cached. Same
-  in-memory=B / shared-backend=A tier story as rate-limit. **Still open:**
-  observability (axis 6), input validation (axis 7).
+  in-memory=B / shared-backend=A tier story as rate-limit.
+- **2026-06-23 · PR #10** — Observability (axis 6) **D → B**. `src/lib/observability`
+  `withRoute` wraps all 10 primary API routes: one structured JSON log line per
+  request (name/method/status/ms/requestId), `x-request-id` on every response, and
+  a catch-all error boundary that turns any uncaught throw into a logged 500
+  `{error,requestId}` (internal message not leaked). Net simplification — removed
+  the per-route bespoke try/catch. Seam: wiring Sentry/Axiom later = one call in
+  `withRoute`, not 10 routes. Verified live (structured logs + x-request-id).
+  **Still open:** input validation (axis 7); trace/[id] + zapier-inbound can adopt
+  the same one-line wrapper.
 
 ## Capacity envelope
 Computed in `.agent/audits/2026-06-23-capacity-envelope.md` (graded **C**). Binding
