@@ -374,6 +374,9 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
               {summary ? `overall grade ${summary.grade} · ${summary.scoutCount} scouts` : ""}
             </span>
           </div>
+          {summary?.recallNote ? (
+            <div className="recall-note" data-testid="recall-note">{summary.recallNote}</div>
+          ) : null}
           <ConfidenceLegend />
         </div>
 
