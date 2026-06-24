@@ -22,7 +22,7 @@ import type {
   Situation,
 } from "@/lib/core/types";
 import { planDispatch } from "@/lib/agents/dispatcher";
-import { runScout } from "@/lib/agents/scouts";
+import { runScoutCached } from "@/lib/agents/scouts";
 import { reduce } from "@/lib/agents/reducer";
 import { composeBest } from "@/lib/agents/composer";
 import { config } from "@/lib/core/config";
@@ -102,7 +102,7 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
 
   // Fan out in parallel — bounded by the dispatcher to <= 5.
   const scoutResults = await Promise.all(
-    plan.scouts.map((job) => runScout({ lng: lead.lng, lat: lead.lat, address: lead.address, job }))
+    plan.scouts.map((job) => runScoutCached({ lng: lead.lng, lat: lead.lat, address: lead.address, job }))
   );
 
   const { summary, rejected } = reduce(scoutResults, Date.now() - started);
