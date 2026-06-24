@@ -7,7 +7,7 @@
 // ============================================================================
 
 import { DEMO_AGENT_ID } from "@/lib/core/config";
-import { uuidV5 } from "@/lib/core/ids";
+import { deterministicUuid } from "@/lib/core/ids";
 import { getSession } from "./session";
 
 /**
@@ -16,7 +16,7 @@ import { getSession } from "./session";
  * the app multi-tenant: each signed-in user gets their own isolated workspace.
  */
 export function agentIdForSub(sub: string): string {
-  return uuidV5(`forleads:agent:${sub}`);
+  return deterministicUuid(`forleads:agent:${sub}`);
 }
 
 /** The signed-in user's agent id, or null when unauthenticated. */

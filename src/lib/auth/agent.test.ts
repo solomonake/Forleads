@@ -28,6 +28,12 @@ describe("agentIdForSub", () => {
   it("never collides with the shared demo workspace", () => {
     expect(agentIdForSub("any-real-user")).not.toBe(DEMO_AGENT_ID);
   });
+
+  it("derives via the strong SHA-256 path (version-8 uuid), not SHA-1", () => {
+    // CodeQL flagged SHA-1 (v5) receiving user-derived input; the per-user id
+    // must come from deterministicUuid (v8). The version nibble is char 14.
+    expect(agentIdForSub("google|123")[14]).toBe("8");
+  });
 });
 
 describe("currentAgentId / requireAgentId", () => {
