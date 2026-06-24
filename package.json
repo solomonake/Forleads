@@ -11,6 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "os:scan": "node scripts/os-scan.mjs",
+    "demo:record": "node scripts/record-pr-demo.mjs",
+    "demo:e2e": "playwright test",
     "setup:env": "node scripts/setup-env.mjs",
     "env:link": "node scripts/env-link.mjs",
     "env:pull": "node scripts/env-pull.mjs",
@@ -27,6 +30,7 @@
     "zustand": "4.5.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "20.14.10",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
