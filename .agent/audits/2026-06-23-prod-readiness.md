@@ -133,5 +133,9 @@ No gold-plating of axis 8/11 (already at/above bar). Each item ships via
 branch → green CI + CodeQL → manual merge → prod-build review, per the constitution.
 
 ## Capacity envelope
-Computed separately in `.agent/audits/2026-06-23-capacity-envelope.md` once caching lands
-(the binding constraint is the uncached Overpass call; see axis 5).
+Computed in `.agent/audits/2026-06-23-capacity-envelope.md` (graded **C**). Binding
+constraint is **regime-dependent**: in the default all-mock config it is Vercel
+function concurrency (compute-bound, ~100s/min); in the live OSM regime it is the
+**shared-IP Overpass fair-use budget** (~15–40 *global* new-lead-opens/min — one
+abuser can starve all users, which is why rate-limiting is ROI #2). The H3 cache
+(axis 5) is the highest-leverage capacity lever (~5–50× on the live regime).
