@@ -5,6 +5,8 @@
 // the Reducer. Scouts never call each other.
 // ============================================================================
 
+import { getCache } from "@/lib/cache";
+import { addressKey, h3Key } from "@/lib/core/geo";
 import { nowISO } from "@/lib/core/ids";
 import type {
   EvidenceCard,
@@ -165,4 +167,48 @@ const RUNNERS: Record<ScoutType, (i: ScoutInput) => Promise<ScoutResult>> = {
 export async function runScout(input: ScoutInput): Promise<ScoutResult> {
   const runner = RUNNERS[input.job.type];
   return runner(input);
+}
+
+// ---- Cache-first by H3 (constitution §10, audit axis 5) ---------------------
+
+// OSM-floor facts change slowly; 6h keeps cost ≈ $0 while staying fresh enough.
+const SCOUT_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * The cache key at the granularity that is actually CORRECT for each scout:
+ * - property/imagery are POINT-specific → keyed by normalized address (an H3
+ *   res-10 cell is ~65m and can hold several distinct buildings, so caching
+ *   building facts by cell would be wrong).
+ * - risk/market are AREA-level → keyed by H3 cell (legitimately shared).
+ * - people is NEVER cached (personal signals must not leak across leads).
+ */
+function scoutCacheKey(input: ScoutInput): string | null {
+  switch (input.job.type) {
+    case "property":
+    case "imagery":
+      return `scout:${input.job.type}:addr:${addressKey(input.address)}`;
+    case "risk":
+    case "market":
+      return `scout:${input.job.type}:h3:${h3Key(input.lng, input.lat)}`;
+    default:
+      return null; // people → never cache
+  }
+}
+
+/**
+ * Cache-first scout runner. On a fresh hit, returns the cached result WITHOUT
+ * re-running the scout (and thus without re-hitting the external budget). Only
+ * caches clean `ok` results — never a transient `budget_exceeded` timeout.
+ */
+export async function runScoutCached(input: ScoutInput): Promise<ScoutResult> {
+  const key = scoutCacheKey(input);
+  if (!key) return runScout(input);
+
+  const cache = getCache();
+  const hit = cache.get<ScoutResult>(key);
+  if (hit) return hit;
+
+  const result = await runScout(input);
+  if (result.status === "ok") cache.set(key, result, SCOUT_CACHE_TTL_MS);
+  return result;
 }

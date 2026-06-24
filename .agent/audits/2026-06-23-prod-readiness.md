@@ -144,8 +144,14 @@ branch → green CI + CodeQL → manual merge → prod-build review, per the con
   route) and `/api/notes`,`/api/draft` (30/45). **Tier-honest: in-memory =
   per-warm-instance on serverless, graded B not A.** The `RateLimiter` seam lets a
   shared backend (Vercel KV / Upstash free tier) drop in via env for global (A)
-  limiting — a config flip, human provisions the store. **Still open:** cache
-  (axis 5), observability (axis 6), input validation (axis 7).
+  limiting — a config flip, human provisions the store.
+- **2026-06-23 · PR #9** — Cache-first by H3 (axis 5, constitution §10) **D → B**.
+  `src/lib/cache` TTL seam + `runScoutCached`: property/imagery cached by
+  normalized address (point-correct — an H3 res-10 cell is ~65m, too coarse for
+  building facts), risk/market by H3 cell (area-correct), **people never cached**
+  (no cross-lead personal-data leak). 6h TTL, only `ok` results cached. Same
+  in-memory=B / shared-backend=A tier story as rate-limit. **Still open:**
+  observability (axis 6), input validation (axis 7).
 
 ## Capacity envelope
 Computed in `.agent/audits/2026-06-23-capacity-envelope.md` (graded **C**). Binding
