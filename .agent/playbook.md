@@ -46,6 +46,7 @@
 | Next 15 typecheck says `cookies()` is a Promise | Next 15 makes request APIs asynchronous | Make session helpers async and await them through auth boundaries; do not cast away the Promise. |
 | Vitest 4 rejects `poolOptions.forks.singleFork` | Vitest 4 removed the old pool options shape | Use `fileParallelism: false` and `maxWorkers: 1` for the shared in-memory integration suite. |
 | `tsc --noEmit` reports missing `.next/types` files only when run beside `next build` | Both commands race while Next rewrites generated route types | Run typecheck and production build sequentially; a parallel proof runner must treat `.next` as a shared mutable artifact. |
+| `git push` works but `gh pr list/view/create` says the token is invalid or cannot reach the API | Git HTTPS credentials and GitHub CLI authentication are separate; macOS Keychain may still authenticate Git while `gh` stores an expired OAuth token | Run `gh auth status`. If invalid, use `gh auth login -h github.com -p https -w`, approve the device code, then rerun `gh auth status` and `gh repo view`. Do not debug the remote or rewrite Git credentials when push already succeeds. |
 
 ## Verification quick-reference
 
