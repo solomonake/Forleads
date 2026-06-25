@@ -1,6 +1,8 @@
 # Forleads — Hosting & Setup Playbook
 
-Everything here is **optional** — the app runs fully locally in mock mode with `npm install && npm run dev`. Follow these to put it online and turn on real providers.
+Local development runs in deterministic mock mode with `npm install && npm run dev`.
+Production is different: mock connector writes are disabled by default, so an
+unconfigured integration is shown as **setup required** and fails closed.
 
 Order I recommend: **1) Git/GitHub → 2) Vercel (web is live) → 3) Supabase (real persistence) → 4) Google OAuth (real Gmail drafts) → 5) other connectors as needed.**
 
@@ -76,11 +78,16 @@ gh pr create --fill        # open a PR; Vercel auto-builds a preview URL
 1. Push to GitHub (step 1).
 2. Go to **vercel.com → Add New → Project → Import** your `forleads` repo.
 3. Framework preset: **Next.js** (auto-detected). Build command `next build`, output auto. No changes needed.
-4. **Environment Variables** (Project → Settings → Environment Variables): you can deploy with **none** (mock mode works in prod too). Add keys from `.env.example` as you enable providers. At minimum later:
+4. **Environment Variables** (Project → Settings → Environment Variables):
+   configure the live persistence and provider values from `.env.example`.
+   Production does not treat missing connector credentials as successful writes.
+   At minimum:
    - `NEXT_PUBLIC_APP_URL=https://<your-app>.vercel.app`
 5. **Deploy.** Every push to `main` redeploys; every PR gets a preview URL.
 
-That's it — the living map is online in mock mode.
+The deployment can now start, but it is client-ready only when `/api/health`
+returns `ok:true` and the Connector Hub shows the integrations needed by that
+client as `connected · live`.
 
 ---
 

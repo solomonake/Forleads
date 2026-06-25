@@ -28,6 +28,9 @@ export const DEMO_AGENT_ID =
 export type Mode = "mock" | "live";
 
 export const config = {
+  production,
+  allowMockConnectorWrites:
+    !production || env("FORLEADS_ALLOW_PRODUCTION_MOCKS") === "1",
   allowDemoMutations:
     env("FORLEADS_ALLOW_DEMO_MUTATIONS") === "1" ||
     process.env.NODE_ENV === "development",
@@ -89,6 +92,17 @@ export const config = {
     webhookSecret: env("ZAPIER_WEBHOOK_SECRET"),
   },
 } as const;
+
+export function coreLiveModeViolations(): string[] {
+  if (!production) return [];
+  const violations: string[] = [];
+  if (config.persist !== "supabase") violations.push("persistence");
+  if (config.geocoder === "mock") violations.push("geocoder");
+  if (config.propertyProvider === "osm-mock") violations.push("property");
+  if (config.imageryProvider === "mock") violations.push("imagery");
+  if (config.agentMode === "mock") violations.push("agent");
+  return violations;
+}
 
 /** True if Claude credentials are present and live mode requested. */
 export function claudeLive(): boolean {

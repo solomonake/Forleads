@@ -20,7 +20,8 @@ export class GoHighLevelConnector implements Connector {
   constructor(
     private apiKey?: string,
     private locationId?: string,
-    private baseUrl = "https://services.leadconnectorhq.com"
+    private baseUrl = "https://services.leadconnectorhq.com",
+    private readonly mockWritesEnabled = true,
   ) {
     this.mode = apiKey && locationId ? "live" : "mock";
   }
@@ -36,6 +37,16 @@ export class GoHighLevelConnector implements Connector {
   private async post(path: string, body: unknown, meta: ConnectorWriteMeta, kind: string): Promise<ConnectorResult> {
     return once(meta.idempotencyKey, async () => {
       if (this.mode === "mock") {
+        if (!this.mockWritesEnabled) {
+          return {
+            ok: false,
+            provider: "gohighlevel",
+            idempotencyKey: meta.idempotencyKey,
+            deduped: false,
+            mode: "mock",
+            error: "GoHighLevel is not configured. Add GHL_API_KEY and GHL_LOCATION_ID.",
+          };
+        }
         return {
           ok: true,
           provider: "gohighlevel",
@@ -75,7 +86,10 @@ export class GoHighLevelConnector implements Connector {
     );
   }
   async syncContacts() {
-    return { imported: this.mode === "mock" ? 18 : 0, mode: this.mode };
+    return {
+      imported: this.mode === "mock" && this.mockWritesEnabled ? 18 : 0,
+      mode: this.mode,
+    };
   }
 
   private no(meta: ConnectorWriteMeta, what: string): Promise<ConnectorResult> {
@@ -103,9 +117,14 @@ export class GoHighLevelConnector implements Connector {
   async healthCheck(): Promise<HealthStatus> {
     return {
       provider: "gohighlevel",
-      healthy: this.mode === "live" ? true : true,
+      healthy: this.mode === "live" || this.mockWritesEnabled,
       mode: this.mode,
-      detail: this.mode === "live" ? "Connected — notes/tasks." : "Mock mode — add GHL_API_KEY + GHL_LOCATION_ID.",
+      detail:
+        this.mode === "live"
+          ? "Connected — notes/tasks."
+          : this.mockWritesEnabled
+            ? "Local mock mode — add GHL_API_KEY + GHL_LOCATION_ID."
+            : "Setup required — add GHL_API_KEY + GHL_LOCATION_ID; production mock writes are disabled.",
       capabilities: this.capabilities,
     };
   }

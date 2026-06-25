@@ -19,7 +19,10 @@ export class GmailDraftConnector implements Connector {
   readonly capabilities = ["createDraft", "updateDraft"];
   readonly mode: "mock" | "live";
 
-  constructor(private accessToken?: string) {
+  constructor(
+    private accessToken?: string,
+    private readonly mockWritesEnabled = true,
+  ) {
     this.mode = accessToken ? "live" : "mock";
   }
 
@@ -34,6 +37,16 @@ export class GmailDraftConnector implements Connector {
 
       // Mock fallback — flow still completes without credentials.
       if (!this.accessToken) {
+        if (!this.mockWritesEnabled) {
+          return {
+            ok: false,
+            provider: "google",
+            idempotencyKey: meta.idempotencyKey,
+            deduped: false,
+            mode: "mock",
+            error: "Google is not connected. Complete Google OAuth before approving an email draft.",
+          };
+        }
         return {
           ok: true,
           provider: "google",
@@ -91,6 +104,16 @@ export class GmailDraftConnector implements Connector {
     return once(meta.idempotencyKey, async () => {
       const raw = buildGmailRaw({ from: payload.from, to: payload.to, subject: payload.subject, body: payload.body });
       if (!this.accessToken) {
+        if (!this.mockWritesEnabled) {
+          return {
+            ok: false,
+            provider: "google",
+            idempotencyKey: meta.idempotencyKey,
+            deduped: false,
+            mode: "mock",
+            error: "Google is not connected. Complete Google OAuth before updating an email draft.",
+          };
+        }
         return {
           ok: true,
           provider: "google",
@@ -146,11 +169,13 @@ export class GmailDraftConnector implements Connector {
   async healthCheck(): Promise<HealthStatus> {
     return {
       provider: "google",
-      healthy: true,
+      healthy: Boolean(this.accessToken) || this.mockWritesEnabled,
       mode: this.mode,
       detail: this.accessToken
         ? "Connected — Gmail compose (drafts only)."
-        : "Mock mode — add GOOGLE_CLIENT_ID/SECRET and connect OAuth to go live.",
+        : this.mockWritesEnabled
+          ? "Local mock mode — connect Google OAuth to go live."
+          : "Setup required — connect Google OAuth; production mock writes are disabled.",
       capabilities: this.capabilities,
     };
   }
