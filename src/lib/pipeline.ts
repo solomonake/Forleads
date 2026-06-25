@@ -154,9 +154,25 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
   }
 
   const recallNote = renderRecallNote(recall);
-  const summaryWithRecall: ReduceSummary = recallNote
-    ? { ...summary, recallNote }
-    : summary;
+  // Project hits into a UI-safe shape (no embeddings) and sort newest-first
+  // so the rail's expanded list reads top-down as "most recent prior signal".
+  const recalledHits = recall.hits.length
+    ? recall.hits
+        .map((h) => ({
+          memoryId: h.memory.id,
+          kind: h.memory.kind,
+          text: h.memory.text,
+          confidence: h.memory.confidence,
+          ref: h.memory.ref,
+          createdAt: h.memory.created_at,
+        }))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    : undefined;
+  const summaryWithRecall: ReduceSummary = {
+    ...summary,
+    ...(recallNote ? { recallNote } : {}),
+    ...(recalledHits ? { recalledHits } : {}),
+  };
 
   const updated = { ...lead, status: lead.status === "new" ? "researching" : lead.status, last_worked_at: nowISO() } as LeadSurface;
   await repo.upsertLead(updated);

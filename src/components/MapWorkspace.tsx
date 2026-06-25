@@ -8,6 +8,7 @@ import type {
   EvidenceCard,
   LeadSurface,
   NoteClassification,
+  RecalledHit,
   ReduceSummary,
   ScoutType,
   SuggestedAction,
@@ -414,6 +415,21 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
           {summary?.recallNote ? (
             <div className="recall-note" data-testid="recall-note">{summary.recallNote}</div>
           ) : null}
+          {summary?.recalledHits && summary.recalledHits.length > 0 ? (
+            <RecalledMemoriesChip
+              hits={summary.recalledHits}
+              onJumpToCard={(ref) => {
+                // Scroll the matching evidence card into view if it exists in
+                // the current rail. Best-effort; not all recalled hits map to
+                // currently rendered cards (e.g. older grounded facts).
+                const idx = cards.findIndex((c) => c.id === ref);
+                if (idx < 0) return;
+                document
+                  .getElementById(`card-${idx}`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+            />
+          ) : null}
           <ConfidenceLegend />
         </div>
 
@@ -425,7 +441,11 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
                 const globalIdx = cards.indexOf(c);
                 const isOpen = expanded.has(globalIdx);
                 return (
-                  <div className={`card ${c.confidence === "D" ? "gradeD" : ""}`} key={`${g.key}-${ci}`}>
+                  <div
+                    id={`card-${globalIdx}`}
+                    className={`card ${c.confidence === "D" ? "gradeD" : ""}`}
+                    key={`${g.key}-${ci}`}
+                  >
                     <div className="row1">
                       <span className="claim">{c.claim}</span>
                       <span
@@ -589,5 +609,77 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
         )}
       </div>
     </>
+  );
+}
+
+// Expandable chip rendered under the FOMO recall note. Default = collapsed
+// (just the "▸ 8 prior signals" pill). Click → expands the list so the agent
+// can SEE what shortcut was taken. Clicking an evidence-kind hit jumps to the
+// matching card in the current rail (when it's currently rendered).
+function RecalledMemoriesChip({
+  hits,
+  onJumpToCard,
+}: {
+  hits: RecalledHit[];
+  onJumpToCard: (ref: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const fmtDate = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    } catch {
+      return "";
+    }
+  };
+  return (
+    <div className="recalled-chip" data-testid="recalled-chip">
+      <button
+        type="button"
+        className="recalled-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="caret">{open ? "▾" : "▸"}</span>
+        <span>
+          {hits.length} prior signal{hits.length === 1 ? "" : "s"}
+        </span>
+      </button>
+      {open ? (
+        <ul className="recalled-list">
+          {hits.map((h) => {
+            const isClickable = h.kind === "evidence" && !!h.ref;
+            return (
+              <li
+                key={h.memoryId}
+                className={`recalled-row ${isClickable ? "clickable" : ""}`}
+                onClick={isClickable ? () => onJumpToCard(h.ref!) : undefined}
+                onKeyDown={
+                  isClickable
+                    ? (event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        onJumpToCard(h.ref!);
+                      }
+                    : undefined
+                }
+                role={isClickable ? "button" : undefined}
+                tabIndex={isClickable ? 0 : undefined}
+              >
+                {h.kind === "evidence" && h.confidence ? (
+                  <span className={`mini-chip g${h.confidence}`}>{h.confidence}</span>
+                ) : (
+                  <span className="mini-chip note">note</span>
+                )}
+                <span className="recalled-text" title={h.text}>
+                  {h.text}
+                </span>
+                <span className="recalled-date">{fmtDate(h.createdAt)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
   );
 }
