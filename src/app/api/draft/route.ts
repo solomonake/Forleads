@@ -1,7 +1,7 @@
 // POST /api/draft — compose a draft artifact for a situation/action, run the
 // fail-closed compliance linter, persist it + its Agent Trace. Draft-first.
 import { NextRequest, NextResponse } from "next/server";
-import { requireAgentId } from "@/lib/auth/agent";
+import { ensureCurrentAgent } from "@/lib/auth/agent";
 import { withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { oneOf, optNum, str, validateBody } from "@/lib/validation";
@@ -17,7 +17,7 @@ export const POST = withRoute("draft", async (req: NextRequest) => {
     actionType: oneOf<ActionType>(b, "actionType", ACTION_TYPES),
     situationConfidence: optNum(b, "situationConfidence", { min: 0, max: 1 }),
   }));
-  const agentId = requireAgentId();
+  const agentId = await ensureCurrentAgent();
   if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
   const limited = enforceRateLimit(req, { name: "compose", agentId, perAgent: 30, perIp: 45 });
   if (limited) return limited;
