@@ -64,6 +64,72 @@ export async function persistEvidenceMemory(
   return repo.saveMemory(mem);
 }
 
+// Scout kinds that describe the AREA, not the PERSON. Only these are written
+// as neighborhood priors — people/contact-shaped facts must NEVER cross leads.
+const NEIGHBORHOOD_SAFE_SCOUTS: ReadonlySet<EvidenceCard["scout"]> = new Set([
+  "property",
+  "market",
+  "risk",
+  "imagery",
+]);
+
+/** Strip identifying tokens from an evidence card's surface form before it's
+ *  written as a cross-lead neighborhood prior. The original card is unchanged;
+ *  the returned text is what gets embedded + stored. */
+function neighborhoodSurfaceForm(card: EvidenceCard): string {
+  const v = card.value === null ? "—" : String(card.value);
+  // Surface form intentionally OMITS the lead's address/contact — neighborhood
+  // priors describe blocks, not individual leads.
+  return `[${card.scout}/${card.confidence}] ${card.claim}: ${v}`;
+}
+
+/** Embed + persist a cross-lead "this block has X facts" memory. No-ops for
+ *  scout kinds that could leak PII (e.g. people). Always best-effort. */
+export async function persistNeighborhoodMemory(
+  agentId: string,
+  lead: LeadSurface,
+  card: EvidenceCard,
+): Promise<Memory | null> {
+  if (!NEIGHBORHOOD_SAFE_SCOUTS.has(card.scout)) return null;
+  if (!lead.h3_index) return null;
+  try {
+    const repo = await getRepo();
+    const embedder = getEmbedder();
+    const text = neighborhoodSurfaceForm(card);
+    const embedding = await embedder.embed(text);
+    const mem: Memory = {
+      id: uuid(),
+      agent_id: agentId,
+      lead_surface_id: lead.id,
+      kind: "neighborhood",
+      text,
+      ref: card.id,
+      confidence: card.confidence,
+      h3_index: lead.h3_index,
+      embedding,
+      created_at: nowISO(),
+    };
+    return await repo.saveMemory(mem);
+  } catch {
+    return null;
+  }
+}
+
+/** How many cross-lead block-level facts do we already know about this cell? */
+export async function recallNeighborhood(
+  agentId: string,
+  h3Index: string,
+  k = 16,
+): Promise<MemoryHit[]> {
+  const repo = await getRepo();
+  return repo.recallNeighborhood(agentId, h3Index, k);
+}
+
+export function renderNeighborhoodNote(n: number): string | null {
+  if (n <= 0) return null;
+  return `${n} fact${n === 1 ? "" : "s"} known about this block`;
+}
+
 /** Embed + persist a free-text note as a memory row. */
 export async function persistNoteMemory(note: Note): Promise<Memory> {
   const repo = await getRepo();

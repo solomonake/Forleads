@@ -413,6 +413,13 @@ button {
   letter-spacing: 0.01em;
   font-style: italic;
 }
+.neighborhood-note {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--brand);
+  letter-spacing: 0.01em;
+  cursor: help;
+}
 .lead-body {
   overflow-y: auto;
   padding: 8px 14px 14px;

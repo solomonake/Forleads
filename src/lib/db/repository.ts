@@ -81,6 +81,15 @@ export interface Repository {
   // memories (lead-scoped recall)
   saveMemory(m: Memory): Promise<Memory>;
   recallMemories(leadId: string, query: number[], k: number): Promise<MemoryHit[]>;
+  /** Cross-lead recall scoped to an H3 cell, for "neighborhood priors". Only
+   *  returns kind="neighborhood" rows (the persistor guarantees those are
+   *  PII-stripped before they're written). Agent-scoped: a row from another
+   *  agent's lead in the same cell must NOT surface. */
+  recallNeighborhood(
+    agentId: string,
+    h3Index: string,
+    k: number,
+  ): Promise<MemoryHit[]>;
 }
 
 interface Store {
@@ -241,6 +250,22 @@ export class InMemoryRepository implements Repository {
       .map((memory) => ({ memory, similarity: cosineSimilarity(memory.embedding, query) }))
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, Math.max(1, k));
+  }
+  async recallNeighborhood(agentId: string, h3Index: string, k: number) {
+    // The in-memory store keys by lead_surface_id; neighborhood priors are
+    // sprinkled across leads. Walk every bucket, filter by (agent, h3, kind),
+    // sort by recency (no query embedding — every match is on-cell, score = 1).
+    const matches: Memory[] = [];
+    for (const arr of this.s.memories.values()) {
+      for (const m of arr) {
+        if (m.kind !== "neighborhood") continue;
+        if (m.agent_id !== agentId) continue;
+        if (m.h3_index !== h3Index) continue;
+        matches.push(m);
+      }
+    }
+    matches.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    return matches.slice(0, Math.max(1, k)).map((m) => ({ memory: m, similarity: 1 }));
   }
 }
 

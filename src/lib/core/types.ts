@@ -88,6 +88,13 @@ export interface ReduceSummary {
   elapsedMs: number;
   /** FOMO-style copy describing recall hits — null when no prior memory was used. */
   recallNote?: string;
+  /** Count of cross-lead neighborhood (H3-cell) priors the dispatcher saw for
+   *  this block. Surfaced in the lead rail as a "N facts about this block"
+   *  chip. Undefined when there are no priors. */
+  neighborhoodPriors?: number;
+  /** A short FOMO line — "5 facts known about this block" — when
+   *  neighborhoodPriors > 0; null otherwise. */
+  neighborhoodNote?: string;
 }
 
 // ---- Memory (lead-scoped recall: docs/Forleads_AgentLoops_v1.md §3) ---------
@@ -95,7 +102,7 @@ export interface ReduceSummary {
 // event — that the dispatcher can recall before spending scout budget. Scoped
 // to a single lead surface; cross-lead leakage would defeat the privacy floor.
 
-export type MemoryKind = "evidence" | "note" | "event";
+export type MemoryKind = "evidence" | "note" | "event" | "neighborhood";
 
 export interface Memory {
   id: UUID;
@@ -105,6 +112,10 @@ export interface Memory {
   text: string;                 // the embedded surface form (what was hashed)
   ref?: string;                 // optional pointer to the source row id
   confidence?: Confidence;      // mirrored from the source card when kind=evidence
+  /** Set ONLY for kind="neighborhood" — the H3 cell this fact aggregates over.
+   *  Lets the dispatcher recall block-level priors without leaking lead PII
+   *  (only non-identifying evidence kinds are ever written as neighborhood). */
+  h3_index?: string;
   embedding: number[];          // 1024-dim (bge-m3 / Qwen3-Embedding-0.6B)
   created_at: ISODate;
 }

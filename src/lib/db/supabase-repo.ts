@@ -610,12 +610,43 @@ export class SupabaseRepository implements Repository {
           text: m.text,
           ref: m.ref ?? null,
           confidence: m.confidence ?? null,
+          h3_index: m.h3_index ?? null,
           embedding: m.embedding,
           created_at: m.created_at,
         })
         .select(),
     );
     return m;
+  }
+  async recallNeighborhood(agentId: string, h3Index: string, k: number) {
+    // Neighborhood recall is a simple table scan filtered by (agent, h3, kind).
+    // No similarity score needed — every match is on-cell by definition. RLS
+    // gates by agent at the DB layer; we double-check on the .eq() chain.
+    const data = unwrap(
+      await this.sb
+        .from("memory")
+        .select("*")
+        .eq("agent_id", agentId)
+        .eq("kind", "neighborhood")
+        .eq("h3_index", h3Index)
+        .order("created_at", { ascending: false })
+        .limit(Math.max(1, k)),
+    );
+    return ((data ?? []) as Row[]).map<MemoryHit>((r) => ({
+      memory: {
+        id: r.id,
+        agent_id: r.agent_id,
+        lead_surface_id: r.lead_surface_id,
+        kind: r.kind as MemoryKind,
+        text: r.text,
+        ref: r.ref ?? undefined,
+        confidence: (r.confidence as Confidence) ?? undefined,
+        h3_index: r.h3_index ?? undefined,
+        embedding: Array.isArray(r.embedding) ? r.embedding : [],
+        created_at: r.created_at,
+      },
+      similarity: 1,
+    }));
   }
   async recallMemories(leadId: string, query: number[], k: number) {
     const data = unwrap(
@@ -634,6 +665,7 @@ export class SupabaseRepository implements Repository {
         text: r.text,
         ref: r.ref ?? undefined,
         confidence: (r.confidence as Confidence) ?? undefined,
+        h3_index: r.h3_index ?? undefined,
         embedding: Array.isArray(r.embedding) ? r.embedding : [],
         created_at: r.created_at,
       },

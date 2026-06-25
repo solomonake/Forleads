@@ -377,6 +377,15 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
           {summary?.recallNote ? (
             <div className="recall-note" data-testid="recall-note">{summary.recallNote}</div>
           ) : null}
+          {summary?.neighborhoodNote ? (
+            <div
+              className="neighborhood-note"
+              data-testid="neighborhood-note"
+              title="Cross-lead block-level priors — only describes the area, never another lead's PII"
+            >
+              ⌖ {summary.neighborhoodNote}
+            </div>
+          ) : null}
           <ConfidenceLegend />
         </div>
 

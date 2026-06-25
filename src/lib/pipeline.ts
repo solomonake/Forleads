@@ -26,7 +26,10 @@ import { runScoutCached } from "@/lib/agents/scouts";
 import { reduce } from "@/lib/agents/reducer";
 import {
   persistEvidenceMemory,
+  persistNeighborhoodMemory,
   recallForLead,
+  recallNeighborhood,
+  renderNeighborhoodNote,
   renderRecallNote,
 } from "@/lib/agents/memory";
 import { composeBest } from "@/lib/agents/composer";
@@ -123,15 +126,34 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
   const { summary, rejected } = reduce(scoutResults, Date.now() - started);
   await repo.saveEvidence(lead.id, summary.cards);
 
-  // Persist every reduced card so the NEXT tap can recall it.
+  // Persist every reduced card so the NEXT tap can recall it. Property/market/
+  // risk/imagery cards ALSO get a neighborhood prior so the NEXT lead in this
+  // H3 cell starts smarter. persistNeighborhoodMemory no-ops for PII-leaning
+  // scouts and on cards with no h3_index, so this loop is safe to run for all.
   for (const card of summary.cards) {
     await persistEvidenceMemory(lead.agent_id, lead, card);
+    await persistNeighborhoodMemory(lead.agent_id, lead, card);
   }
 
+  // Cross-lead neighborhood recall — what do we know about THIS block already?
+  // Privacy: agent-scoped + only neighborhood-safe kinds were ever written.
+  const neighborhood = lead.h3_index
+    ? await recallNeighborhood(lead.agent_id, lead.h3_index)
+    : [];
+  // Drop priors that came from THIS lead — we want CROSS-lead context here.
+  const crossLeadPriors = neighborhood.filter(
+    (h) => h.memory.lead_surface_id !== lead.id,
+  );
+  const neighborhoodCount = crossLeadPriors.length;
+  const neighborhoodNote = renderNeighborhoodNote(neighborhoodCount);
+
   const recallNote = renderRecallNote(recall);
-  const summaryWithRecall: ReduceSummary = recallNote
-    ? { ...summary, recallNote }
-    : summary;
+  const summaryWithRecall: ReduceSummary = {
+    ...summary,
+    ...(recallNote ? { recallNote } : {}),
+    ...(neighborhoodCount > 0 ? { neighborhoodPriors: neighborhoodCount } : {}),
+    ...(neighborhoodNote ? { neighborhoodNote } : {}),
+  };
 
   const updated = { ...lead, status: lead.status === "new" ? "researching" : lead.status, last_worked_at: nowISO() } as LeadSurface;
   await repo.upsertLead(updated);
