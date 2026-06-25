@@ -110,6 +110,40 @@ describe("approveArtifact with editedBody", () => {
     expect(outcomes.length).toBe(1);
     expect(outcomes[0]!.text.startsWith("[approved] email:")).toBe(true);
   });
+
+  it("uses a new connector idempotency key when the approved payload changes", async () => {
+    const { artifact } = await setup("16 Revision Key Way");
+    if (artifact.status === "blocked") throw new Error("setup blocked");
+
+    const first = await approveArtifact(artifact.id);
+    const edited = "A materially different approved body.";
+    const second = await approveArtifact(artifact.id, { editedBody: edited });
+
+    expect(first?.connector.deduped).toBe(false);
+    expect(second?.connector.deduped).toBe(false);
+    expect(second?.artifact.external_draft_ref?.idempotencyKey).not.toBe(
+      first?.artifact.external_draft_ref?.idempotencyKey,
+    );
+  });
+
+  it("does not approve or record an outcome when the connector write fails", async () => {
+    const { lead, artifact } = await setup("16 Failed Connector Way");
+    if (artifact.status === "blocked") throw new Error("setup blocked");
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response("nope", { status: 503 });
+
+    try {
+      await expect(
+        approveArtifact(artifact.id, { googleAccessToken: "expired-token" }),
+      ).rejects.toThrow(/Connector write failed/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const repo = await getRepo();
+    expect((await repo.getArtifact(artifact.id))?.status).toBe("drafted");
+    expect(await recallOutcomes(lead, "email")).toHaveLength(0);
+  });
 });
 
 describe("rejectArtifact → outcome memory + cancellation", () => {
@@ -130,6 +164,7 @@ describe("rejectArtifact → outcome memory + cancellation", () => {
     const outcomes = await recallOutcomes(lead, "email");
     expect(outcomes.length).toBe(1);
     expect(outcomes[0]!.text.startsWith("[rejected] email:")).toBe(true);
+    expect(outcomes[0]!.text).toContain('reason="Too pushy for a first touch."');
   });
 
   it("is idempotent — rejecting a cancelled artifact does not write a second memory", async () => {

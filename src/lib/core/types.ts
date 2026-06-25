@@ -88,6 +88,20 @@ export interface ReduceSummary {
   elapsedMs: number;
   /** FOMO-style copy describing recall hits — null when no prior memory was used. */
   recallNote?: string;
+  /** When recall fired, a compact projection of the hits so the rail can render
+   * an expandable chip ("8 prior signals" → list of [A] Building footprint…).
+   * Excludes the embedding vector — only the surface form, kind, grade, ref,
+   * and timestamp. Sorted newest-first. */
+  recalledHits?: RecalledHit[];
+}
+
+export interface RecalledHit {
+  memoryId: UUID;
+  kind: MemoryKind;
+  text: string;
+  confidence?: Confidence;
+  ref?: string;
+  createdAt: ISODate;
 }
 
 // ---- Memory (lead-scoped recall: docs/Forleads_AgentLoops_v1.md §3) ---------
@@ -329,7 +343,8 @@ export type DomainEventType =
   | "loop.run.completed"
   | "connector.write"
   | "artifact.cancelled"
-  | "outcome.recorded";
+  | "outcome.recorded"
+  | "memory.recalled";
 
 export interface DomainEvent {
   id: UUID;

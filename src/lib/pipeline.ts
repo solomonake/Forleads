@@ -38,6 +38,7 @@ import { lintArtifactText } from "@/lib/agents/compliance";
 import { buildTrace } from "@/lib/agents/trace";
 import { connectorForAction } from "@/lib/connectors";
 import { getRepo } from "@/lib/db";
+import { log } from "@/lib/observability";
 
 // ---- Events -----------------------------------------------------------------
 
@@ -109,6 +110,30 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
     `${lead.address}${lead.locality ? ", " + lead.locality : ""}`,
   );
 
+  // Observability: a silent recall is an unverifiable recall. Emit a structured
+  // log AND a domain event whenever recall returns hits, so prod traffic proves
+  // the path actually fires and the Agent Trace shows it for any tap.
+  if (recall.hits.length > 0) {
+    log("info", "recall.fired", {
+      leadId: lead.id,
+      hits: recall.hits.length,
+      priorGrounded: recall.priorGroundedCount,
+      sufficient: recall.sufficient,
+    });
+    await emit(
+      lead.agent_id,
+      "memory.recalled",
+      {
+        hits: recall.hits.length,
+        priorGrounded: recall.priorGroundedCount,
+        sufficient: recall.sufficient,
+        refs: recall.refs,
+      },
+      "memory",
+      lead.id,
+    );
+  }
+
   const plan = await planDispatch({
     lng: lead.lng,
     lat: lead.lat,
@@ -132,9 +157,25 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
   }
 
   const recallNote = renderRecallNote(recall);
-  const summaryWithRecall: ReduceSummary = recallNote
-    ? { ...summary, recallNote }
-    : summary;
+  // Project hits into a UI-safe shape (no embeddings) and sort newest-first
+  // so the rail's expanded list reads top-down as "most recent prior signal".
+  const recalledHits = recall.hits.length
+    ? recall.hits
+        .map((h) => ({
+          memoryId: h.memory.id,
+          kind: h.memory.kind,
+          text: h.memory.text,
+          confidence: h.memory.confidence,
+          ref: h.memory.ref,
+          createdAt: h.memory.created_at,
+        }))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    : undefined;
+  const summaryWithRecall: ReduceSummary = {
+    ...summary,
+    ...(recallNote ? { recallNote } : {}),
+    ...(recalledHits ? { recalledHits } : {}),
+  };
 
   const updated = { ...lead, status: lead.status === "new" ? "researching" : lead.status, last_worked_at: nowISO() } as LeadSurface;
   await repo.upsertLead(updated);
@@ -270,7 +311,7 @@ export async function approveArtifact(
   // the original linter never saw. Fail-closed if the edit broke compliance.
   let workingPayload = artifact.payload;
   let editedExcerpt: string | undefined;
-  if (opts?.editedBody && artifact.type === "email") {
+  if (opts?.editedBody !== undefined && artifact.type === "email") {
     const orig = artifact.payload as unknown as Record<string, unknown>;
     const origBody = typeof orig.body === "string" ? orig.body : "";
     if (opts.editedBody !== origBody) {
@@ -289,7 +330,12 @@ export async function approveArtifact(
   }
 
   const connector = connectorForAction(artifact.type, opts);
-  const key = idempotencyKey([artifact.id, artifact.type, connector.provider]);
+  const key = idempotencyKey([
+    artifact.id,
+    artifact.type,
+    connector.provider,
+    JSON.stringify(workingPayload),
+  ]);
   const meta = { idempotencyKey: key, agentId: artifact.agent_id, leadSurfaceId: artifact.lead_surface_id };
 
   // Route to the right connector method by action type. workingPayload may be
@@ -314,6 +360,12 @@ export async function approveArtifact(
     default:
       result = await connector.writeCrmNote(workingPayload as never, meta);
       break;
+  }
+
+  if (!result.ok) {
+    throw new Error(
+      `Connector write failed: ${result.error ?? `${result.provider} returned an unsuccessful result`}`,
+    );
   }
 
   // Email drafts are "drafted in the user's tool" (sent=false); others are written.

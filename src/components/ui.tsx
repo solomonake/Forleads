@@ -30,10 +30,42 @@ export function ConfidenceLegend() {
   );
 }
 
+// A typed failure that carries the request id from the server's withRoute()
+// envelope so the UI can surface "incident 4f0334ea…" + a Retry CTA. Per
+// [[accountability-show-failures]]: never hide an error behind a generic string.
+export class ApiError extends Error {
+  status: number;
+  requestId?: string;
+  constructor(message: string, status: number, requestId?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.requestId = requestId;
+  }
+}
+
+async function parseApiResponse<T>(res: Response, label: string): Promise<T> {
+  // The server's withRoute always sets x-request-id on success AND failure,
+  // and includes `requestId` in the JSON body on failure. Prefer the body
+  // value (set explicitly by the route) and fall back to the header.
+  const headerReqId = res.headers.get("x-request-id") ?? undefined;
+  // Some routes can legitimately return non-JSON (rate limiter HTML); guard.
+  let data: (T & { error?: string; requestId?: string }) | null = null;
+  try {
+    data = (await res.json()) as T & { error?: string; requestId?: string };
+  } catch {
+    data = null;
+  }
+  if (!res.ok) {
+    const msg = data?.error ?? `${label} → ${res.status}`;
+    throw new ApiError(msg, res.status, data?.requestId ?? headerReqId);
+  }
+  return data as T;
+}
+
 export async function apiGet<T>(url: string): Promise<T> {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`GET ${url} → ${res.status}`);
-  return (await res.json()) as T;
+  return parseApiResponse<T>(res, `GET ${url}`);
 }
 
 export async function apiPost<T>(url: string, body: unknown): Promise<T> {
@@ -42,7 +74,5 @@ export async function apiPost<T>(url: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `POST ${url} → ${res.status}`);
-  return data;
+  return parseApiResponse<T>(res, `POST ${url}`);
 }
