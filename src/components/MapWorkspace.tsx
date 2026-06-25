@@ -12,7 +12,14 @@ import type {
   ScoutType,
   SuggestedAction,
 } from "@/lib/core/types";
-import { apiGet, apiPost, ConfidenceLegend, GradeChip } from "./ui";
+import { apiGet, apiPost, ApiError, ConfidenceLegend, GradeChip } from "./ui";
+
+// Toast model: success path is a green pill; failure path is a red, actionable
+// pill that exposes the server's request id (so the user can paste it in a
+// support reply) and a Retry CTA closure. Honest failures over silent ones.
+type ToastValue =
+  | { kind: "ok"; text: string }
+  | { kind: "err"; text: string; requestId?: string; retry?: () => void };
 import { ReviewTray } from "./ReviewTray";
 
 interface GeoResult {
@@ -59,7 +66,7 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
 
   const [draft, setDraft] = useState<Artifact | null>(null);
   const [sat, setSat] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastValue | null>(null);
 
   // ---- Map init -----------------------------------------------------------
   useEffect(() => {
@@ -230,9 +237,22 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
         setWorking(false);
         setLead(null); // clear the optimistic placeholder so the UI isn't stuck
         const msg = e instanceof Error ? e.message : String(e);
-        const auth = /401|authentication required|unauthor/i.test(msg);
-        setToast(auth ? "Sign in to research this address" : `Couldn't load — ${msg}`);
-        setTimeout(() => setToast(null), 3500);
+        const requestId = e instanceof ApiError ? e.requestId : undefined;
+        const status = e instanceof ApiError ? e.status : 0;
+        const auth = status === 401 || /authentication required|unauthor/i.test(msg);
+        if (auth) {
+          setToast({ kind: "err", text: "Sign in to research this address" });
+          setTimeout(() => setToast(null), 3500);
+        } else {
+          setToast({
+            kind: "err",
+            text: `Couldn't load this address — ${msg}`,
+            requestId,
+            retry: () => goTo(p),
+          });
+          // Failure toast sticks until the user clicks Retry or dismisses
+          // (auto-hide hides the retry CTA before they can use it).
+        }
       }
     },
     [makeBeacon, reduceMotion]
@@ -260,9 +280,20 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
       } catch (e) {
         setThinking(null);
         const msg = e instanceof Error ? e.message : String(e);
-        const auth = /401|authentication required|unauthor/i.test(msg);
-        setToast(auth ? "Sign in to add notes" : `Couldn't classify — ${msg}`);
-        setTimeout(() => setToast(null), 3500);
+        const requestId = e instanceof ApiError ? e.requestId : undefined;
+        const status = e instanceof ApiError ? e.status : 0;
+        const auth = status === 401 || /authentication required|unauthor/i.test(msg);
+        if (auth) {
+          setToast({ kind: "err", text: "Sign in to add notes" });
+          setTimeout(() => setToast(null), 3500);
+        } else {
+          setToast({
+            kind: "err",
+            text: `Couldn't classify the note — ${msg}`,
+            requestId,
+            retry: () => submitNote(text),
+          });
+        }
       }
     },
     [lead]
@@ -280,8 +311,14 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
         });
         setDraft(d.artifact);
       } catch (e) {
-        setToast(String(e));
-        setTimeout(() => setToast(null), 2600);
+        const msg = e instanceof Error ? e.message : String(e);
+        const requestId = e instanceof ApiError ? e.requestId : undefined;
+        setToast({
+          kind: "err",
+          text: `Couldn't draft this action — ${msg}`,
+          requestId,
+          retry: () => draftIt(action),
+        });
       }
     },
     [lead, classification]
@@ -501,15 +538,55 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
           onOpenTrace={onOpenTrace}
           onApproved={(msg) => {
             setDraft(null);
-            setToast(msg);
+            setToast({ kind: "ok", text: msg });
             setTimeout(() => setToast(null), 2800);
             if (lead) setLead({ ...lead, status: "contacted" });
           }}
         />
       )}
 
-      <div id="toast" className={toast ? "show" : ""}>
-        ✓ <span>{toast}</span>
+      <div
+        id="toast"
+        className={`${toast ? "show " : ""}${toast?.kind === "err" ? "err" : ""}`}
+        role={toast?.kind === "err" ? "alert" : undefined}
+      >
+        {toast?.kind === "err" ? (
+          <>
+            <span>⚠</span>
+            <span>{toast.text}</span>
+            {toast.requestId ? (
+              <span className="req" title="request id — paste in support replies">
+                {toast.requestId.slice(0, 8)}
+              </span>
+            ) : null}
+            {toast.retry ? (
+              <button
+                type="button"
+                className="retry"
+                onClick={() => {
+                  const r = toast.retry!;
+                  setToast(null);
+                  r();
+                }}
+              >
+                Retry
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="retry"
+              aria-label="dismiss"
+              onClick={() => setToast(null)}
+              style={{ background: "transparent", padding: "4px 6px" }}
+            >
+              ✕
+            </button>
+          </>
+        ) : (
+          <>
+            ✓ <span>{toast?.text}</span>
+          </>
+        )}
       </div>
     </>
   );
