@@ -1,41 +1,31 @@
 # Current agent checkpoint
 
-Generated: 2026-06-25T14:53:05.967Z
+Generated: 2026-06-25T14:56:39.848Z
 
 ## State
-- Branch: `codex/agent-continuity-metrics`
-- Commit: `108169ec2a5d`
-- Worktree: dirty
+- Branch: `codex/finalize-agent-checkpoint`
+- Commit: `73f23190cf4b`
+- Worktree: clean
 - Changed files:
-  - M .agent/AGENT_OS.md
-  -  M .agent/templates/handoff.md
-  -  M AGENTS.md
-  -  M package.json
-  -  M scripts/agent-doctor.mjs
-  - ?? .agent/handoffs/current.md
-  - ?? .agent/metrics/
-  - ?? .agent/plans/agent-continuity-metrics.md
-  - ?? docs/Agentic_Systems_Evaluation_v1.md
-  - ?? scripts/agent-checkpoint.mjs
-  - ?? scripts/agent-scorecard.mjs
+  - none
 
 ## Goal
-Ship model-neutral continuity checkpoints and agent evaluation metrics
+Replace remaining grade-D property, owner, market, and hazard gaps with licensed live providers without ever fabricating data
 
 ## Completed
-Implementation complete; doctor 53/53, typecheck, lint, 155/155 tests, eval 15/15; first scorecard recorded
+PR #30 fixed tenant provisioning; PR #31 disabled production mock connector successes; PR #32 added cross-model checkpoints and scorecards; production core is healthy and address search is live
 
 ## Next exact action
-Commit, push, open PR, wait for CI, merge, then use the checkpoint in the next session
+User creates an ATTOM developer API key; next agent implements and verifies the ATTOM provider adapter, then adds the no-key FEMA NFHL risk adapter
 
 ## Blockers
-none
+ATTOM_API_KEY is not yet available; do not add or guess paid-provider data
 
 ## Authority
 In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secrets, spending, destructive actions, and external communication require the user.
 
 ## Verification proof
-PR #30 fixed production; PR #31 disabled production mock successes; prod /api/lead 200 request 1a2c7948-3e01-4f71-9ae5-315bc086591a; prod /api/health 200 request 272d24a7-1334-47ae-859f-94757569b5b9
+prod /api/lead POST 200 in 3049ms request 1a2c7948-3e01-4f71-9ae5-315bc086591a; prod /api/health 200 request 272d24a7-1334-47ae-859f-94757569b5b9 with mockConnectorWritesAllowed=false and zero live-mode violations
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.
