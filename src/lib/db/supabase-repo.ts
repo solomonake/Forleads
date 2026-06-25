@@ -111,6 +111,18 @@ const evidenceFromRow = (r: Row): EvidenceCard => ({
   created_at: r.created_at,
 });
 
+export const evidenceToRow = (leadId: string, c: EvidenceCard): Row => ({
+  ...(c.id ? { id: c.id } : {}),
+  lead_surface_id: leadId,
+  scout: c.scout,
+  claim: c.claim,
+  value_json: c.value ?? null,
+  source_json: c.sources ?? [],
+  confidence: c.confidence,
+  reasoning: c.reasoning ?? null,
+  ...(c.created_at ? { created_at: c.created_at } : {}),
+});
+
 const noteFromRow = (r: Row): Note => ({
   id: r.id,
   lead_surface_id: r.lead_surface_id,
@@ -414,15 +426,7 @@ export class SupabaseRepository implements Repository {
     // Replace semantics, matching the in-memory repo.
     unwrap(await this.sb.from("evidence_card").delete().eq("lead_surface_id", leadId).select());
     if (!cards.length) return;
-    const rows = cards.map((c) => ({
-      lead_surface_id: leadId,
-      scout: c.scout,
-      claim: c.claim,
-      value_json: c.value ?? null,
-      source_json: c.sources ?? [],
-      confidence: c.confidence,
-      reasoning: c.reasoning ?? null,
-    }));
+    const rows = cards.map((c) => evidenceToRow(leadId, c));
     unwrap(await this.sb.from("evidence_card").insert(rows).select());
   }
   async listEvidence(leadId: string) {

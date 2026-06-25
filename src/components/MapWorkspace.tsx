@@ -654,6 +654,15 @@ function RecalledMemoriesChip({
                 key={h.memoryId}
                 className={`recalled-row ${isClickable ? "clickable" : ""}`}
                 onClick={isClickable ? () => onJumpToCard(h.ref!) : undefined}
+                onKeyDown={
+                  isClickable
+                    ? (event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        onJumpToCard(h.ref!);
+                      }
+                    : undefined
+                }
                 role={isClickable ? "button" : undefined}
                 tabIndex={isClickable ? 0 : undefined}
               >

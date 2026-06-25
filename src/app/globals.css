@@ -469,6 +469,12 @@ button {
   background: var(--signal-soft);
   color: var(--text);
 }
+.recalled-row.clickable:focus-visible {
+  background: var(--signal-soft);
+  color: var(--text);
+  outline: 2px solid var(--signal);
+  outline-offset: -2px;
+}
 .recalled-row .recalled-text {
   overflow: hidden;
   text-overflow: ellipsis;
