@@ -26,6 +26,20 @@ import type {
 } from "@/lib/core/types";
 import { getRepo } from "@/lib/db";
 import { getEmbedder } from "./embedder";
+import { log } from "@/lib/observability";
+
+// Degrade-gracefully envelope (CLAUDE.md non-negotiable #6): if the memory
+// table or RPC is unavailable (schema drift, transient Supabase outage),
+// the loop must still complete. Recall returns empty, persist returns null,
+// and the failure is loud in the structured log so prod observability sees it.
+function logMemoryDegraded(
+  op: string,
+  err: unknown,
+  fields: Record<string, unknown> = {},
+): void {
+  const msg = err instanceof Error ? err.message : String(err);
+  log("warn", "memory.degraded", { op, error: msg, ...fields });
+}
 
 // "Sufficient prior grounding" = at least this many prior cards with A or B.
 // When recall is sufficient, the dispatcher drops the property scout entirely
@@ -44,28 +58,35 @@ function evidenceSurfaceForm(card: EvidenceCard): string {
   return `[${card.scout}/${card.confidence}] ${card.claim}: ${v}`;
 }
 
-/** Embed + persist one evidence card as a memory row. */
+/** Embed + persist one evidence card as a memory row. Best-effort: if the
+ *  memory table or embedder is unavailable, log and return null so the swarm
+ *  still completes without recall on subsequent taps. */
 export async function persistEvidenceMemory(
   agentId: string,
   lead: LeadSurface,
   card: EvidenceCard,
-): Promise<Memory> {
-  const repo = await getRepo();
-  const embedder = getEmbedder();
-  const text = evidenceSurfaceForm(card);
-  const embedding = await embedder.embed(text);
-  const mem: Memory = {
-    id: uuid(),
-    agent_id: agentId,
-    lead_surface_id: lead.id,
-    kind: "evidence",
-    text,
-    ref: card.id,
-    confidence: card.confidence,
-    embedding,
-    created_at: nowISO(),
-  };
-  return repo.saveMemory(mem);
+): Promise<Memory | null> {
+  try {
+    const repo = await getRepo();
+    const embedder = getEmbedder();
+    const text = evidenceSurfaceForm(card);
+    const embedding = await embedder.embed(text);
+    const mem: Memory = {
+      id: uuid(),
+      agent_id: agentId,
+      lead_surface_id: lead.id,
+      kind: "evidence",
+      text,
+      ref: card.id,
+      confidence: card.confidence,
+      embedding,
+      created_at: nowISO(),
+    };
+    return await repo.saveMemory(mem);
+  } catch (err) {
+    logMemoryDegraded("persistEvidence", err, { leadId: lead.id, cardId: card.id });
+    return null;
+  }
 }
 
 // Only scouts already keyed by an area cell may cross leads. Property and
@@ -112,14 +133,20 @@ export async function persistNeighborhoodMemory(
   }
 }
 
-/** How many cross-lead area facts do we already know about this cell? */
+/** How many cross-lead area facts do we already know about this cell?
+ *  Returns [] on any failure so the dispatcher still runs without priors. */
 export async function recallNeighborhood(
   agentId: string,
   h3Index: string,
   k = 16,
 ): Promise<MemoryHit[]> {
-  const repo = await getRepo();
-  return repo.recallNeighborhood(agentId, h3Index, k);
+  try {
+    const repo = await getRepo();
+    return await repo.recallNeighborhood(agentId, h3Index, k);
+  } catch (err) {
+    logMemoryDegraded("recallNeighborhood", err, { agentId, h3Index });
+    return [];
+  }
 }
 
 export function renderNeighborhoodNote(n: number): string | null {
@@ -271,28 +298,33 @@ export async function recallForLead(
   queryText: string,
   k = 8,
 ): Promise<RecallSummary> {
-  const repo = await getRepo();
-  const embedder = getEmbedder();
-  const query = await embedder.embed(queryText);
-  const hits = await repo.recallMemories(lead.id, query, k);
+  try {
+    const repo = await getRepo();
+    const embedder = getEmbedder();
+    const query = await embedder.embed(queryText);
+    const hits = await repo.recallMemories(lead.id, query, k);
 
-  // Only count evidence-kind memories with A/B as "grounded" for the budget rule.
-  // Recall similarity threshold is intentionally loose (>= 0.0) because the
-  // privacy scope IS the lead — every hit is on-topic by construction.
-  const groundedConfidences: Confidence[] = ["A", "B"];
-  const priorGroundedCount = hits.filter(
-    (h) =>
-      h.memory.kind === "evidence" &&
-      h.memory.confidence !== undefined &&
-      groundedConfidences.includes(h.memory.confidence),
-  ).length;
+    // Only count evidence-kind memories with A/B as "grounded" for the budget rule.
+    // Recall similarity threshold is intentionally loose (>= 0.0) because the
+    // privacy scope IS the lead — every hit is on-topic by construction.
+    const groundedConfidences: Confidence[] = ["A", "B"];
+    const priorGroundedCount = hits.filter(
+      (h) =>
+        h.memory.kind === "evidence" &&
+        h.memory.confidence !== undefined &&
+        groundedConfidences.includes(h.memory.confidence),
+    ).length;
 
-  return {
-    hits,
-    refs: hits.map((h) => h.memory.id),
-    priorGroundedCount,
-    sufficient: priorGroundedCount >= SUFFICIENT_PRIOR_GROUNDED,
-  };
+    return {
+      hits,
+      refs: hits.map((h) => h.memory.id),
+      priorGroundedCount,
+      sufficient: priorGroundedCount >= SUFFICIENT_PRIOR_GROUNDED,
+    };
+  } catch (err) {
+    logMemoryDegraded("recallForLead", err, { leadId: lead.id });
+    return { hits: [], refs: [], priorGroundedCount: 0, sufficient: false };
+  }
 }
 
 /**
