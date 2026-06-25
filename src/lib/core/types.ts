@@ -313,7 +313,8 @@ export type DomainEventType =
   | "watcher.hit"
   | "loop.run.started"
   | "loop.run.completed"
-  | "connector.write";
+  | "connector.write"
+  | "memory.recalled";
 
 export interface DomainEvent {
   id: UUID;
