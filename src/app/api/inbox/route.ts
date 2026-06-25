@@ -1,12 +1,12 @@
 // GET /api/inbox — all prepared work (drafts/tasks/holds/blocked/sent) for the
 // Action Inbox. Joins each artifact with its lead address for display.
 import { NextResponse } from "next/server";
-import { readAgentId } from "@/lib/auth/agent";
+import { readAgentIdEnsured } from "@/lib/auth/agent";
 import { withRoute } from "@/lib/observability";
 import { getRepo } from "@/lib/db";
 
 export const GET = withRoute("inbox", async () => {
-  const agentId = readAgentId();
+  const agentId = await readAgentIdEnsured();
   const repo = await getRepo();
   const artifacts = await repo.listArtifacts(agentId);
   const items = await Promise.all(
