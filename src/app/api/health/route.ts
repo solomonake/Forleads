@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { config } from "@/lib/core/config";
 import { getRepo } from "@/lib/db";
+import { assertSupabaseSchema } from "@/lib/db/supabase-health";
 import { withRoute } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +10,7 @@ export const GET = withRoute("health", async () => {
   try {
     const repo = await getRepo();
     await repo.listLeads("00000000-0000-0000-0000-000000000001");
+    await assertSupabaseSchema();
     return NextResponse.json({
       ok: true,
       modes: {
