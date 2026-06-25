@@ -7,7 +7,7 @@
 
 import { getCache } from "@/lib/cache";
 import { addressKey, h3Key } from "@/lib/core/geo";
-import { nowISO } from "@/lib/core/ids";
+import { nowISO, uuid } from "@/lib/core/ids";
 import type {
   EvidenceCard,
   ScoutJob,
@@ -57,7 +57,16 @@ async function withBudget<T>(
 }
 
 function stamp(cards: EvidenceCard[], scout: ScoutType): EvidenceCard[] {
-  return cards.map((c) => ({ ...c, scout, created_at: c.created_at ?? nowISO() }));
+  // Every card gets a stable id at stamp time so the memory layer can store a
+  // ref back to the source card. Without this, the recalled-memories chip in
+  // the lead rail can't jump-to-card on click — every evidence hit's ref is
+  // undefined because nothing else in the pipeline assigns ids.
+  return cards.map((c) => ({
+    ...c,
+    id: c.id ?? uuid(),
+    scout,
+    created_at: c.created_at ?? nowISO(),
+  }));
 }
 
 async function runProperty(input: ScoutInput): Promise<ScoutResult> {
