@@ -81,6 +81,7 @@ export interface Repository {
   // memories (lead-scoped recall)
   saveMemory(m: Memory): Promise<Memory>;
   recallMemories(leadId: string, query: number[], k: number): Promise<MemoryHit[]>;
+  listOutcomeMemories(leadId: string): Promise<Memory[]>;
   /** Cross-lead recall scoped to an area cell. The writer accepts only
    * provider-backed A/B market facts. Agent scope must never be crossed. */
   recallNeighborhood(
@@ -248,6 +249,11 @@ export class InMemoryRepository implements Repository {
       .map((memory) => ({ memory, similarity: cosineSimilarity(memory.embedding, query) }))
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, Math.max(1, k));
+  }
+  async listOutcomeMemories(leadId: string) {
+    return (this.s.memories.get(leadId) ?? [])
+      .filter((m) => m.kind === "outcome")
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   }
   async recallNeighborhood(agentId: string, h3Index: string, k: number) {
     // The in-memory store keys by lead_surface_id; neighborhood priors are
