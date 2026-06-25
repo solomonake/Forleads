@@ -2,10 +2,10 @@
 // cited evidence cards + the reduce summary (the "fly-to" loading window).
 import { NextRequest, NextResponse } from "next/server";
 import { requireAgentId } from "@/lib/auth/agent";
-import { withRoute } from "@/lib/observability";
+import { log, withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { num, optStr, str, validateBody } from "@/lib/validation";
-import { ensureLead, runSwarm } from "@/lib/pipeline";
+import { buildDegradedLeadSummary, ensureLead, runSwarm } from "@/lib/pipeline";
 
 export const POST = withRoute("lead", async (req: NextRequest) => {
   const body = await validateBody(req, (b) => ({
@@ -26,10 +26,28 @@ export const POST = withRoute("lead", async (req: NextRequest) => {
     lat: body.lat,
     locality: body.locality,
   });
-  const swarm = await runSwarm(lead);
-  return NextResponse.json({
-    lead: swarm.lead,
-    summary: swarm.summary,
-    rejectedCount: swarm.rejected.length,
-  });
+  try {
+    const swarm = await runSwarm(lead);
+    return NextResponse.json({
+      lead: swarm.lead,
+      summary: swarm.summary,
+      rejectedCount: swarm.rejected.length,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Scout pass degraded";
+    log("warn", "lead.swarm.degraded", {
+      agentId,
+      address: body.address,
+      error: message,
+    });
+    return NextResponse.json({
+      lead,
+      summary: buildDegradedLeadSummary(
+        lead,
+        `The scout pass degraded before evidence finished loading. ${message}.`
+      ),
+      rejectedCount: 0,
+      degraded: true,
+    });
+  }
 });

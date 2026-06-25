@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "name": "Forleads engineering handoff scorecard",
+  "checks": [
+    {
+      "id": "agent-contract",
+      "label": "Agent checkpoint contract",
+      "command": ["node", "scripts/agent-system.mjs", "verify"],
+      "points": 20,
+      "required": true,
+      "timeoutMs": 60000
+    },
+    {
+      "id": "production-policy",
+      "label": "Live production policy",
+      "command": ["node", "scripts/agent-system.mjs", "verify-production"],
+      "points": 20,
+      "required": true,
+      "timeoutMs": 60000
+    },
+    {
+      "id": "typecheck",
+      "label": "TypeScript typecheck",
+      "command": ["npm", "run", "typecheck"],
+      "points": 20,
+      "required": true,
+      "timeoutMs": 480000
+    },
+    {
+      "id": "lint",
+      "label": "Next.js lint",
+      "command": ["npm", "run", "lint"],
+      "points": 15,
+      "required": true,
+      "timeoutMs": 480000
+    },
+    {
+      "id": "tests",
+      "label": "Vitest suite",
+      "command": ["npm", "test"],
+      "points": 25,
+      "required": true,
+      "timeoutMs": 480000
+    }
+  ],
+  "gradeBands": {
+    "A": 90,
+    "B": 80,
+    "C": 70,
+    "D": 0
+  }
+}

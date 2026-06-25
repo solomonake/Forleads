@@ -88,6 +88,43 @@ export interface SwarmResult {
   scoutResults: ScoutResult[];
 }
 
+export function buildDegradedLeadSummary(
+  lead: Pick<LeadSurface, "address" | "locality">,
+  reason: string
+): ReduceSummary {
+  return {
+    cards: [
+      {
+        scout: "property",
+        claim: "Lead surface",
+        value: lead.locality ?? lead.address,
+        sources: [{ name: "Operator search" }],
+        confidence: "B",
+        reasoning:
+          "The lead was captured from the operator's typed search so the workflow can keep moving while scouts recover.",
+      },
+      {
+        scout: "market",
+        claim: "Scout pass",
+        value: null,
+        sources: [],
+        confidence: "D",
+        reasoning: reason,
+      },
+    ],
+    grade: "D",
+    gaps: [reason],
+    breakout: {
+      kind: "ask_human",
+      target: "Scout pass",
+      question: "Retry the scout pass now, or continue manually with a field note?",
+      reason: "The lead exists, but the scouting pass degraded before it could finish.",
+    },
+    scoutCount: 0,
+    elapsedMs: 0,
+  };
+}
+
 export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
   const repo = await getRepo();
   const started = Date.now();

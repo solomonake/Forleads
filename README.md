@@ -37,9 +37,16 @@ Other scripts:
 ```bash
 npm run typecheck   # tsc --noEmit
 npm run lint        # next lint
-npm test            # vitest (33 tests)
+npm test            # vitest (87 tests)
 npm run build       # next production build
+npm run agent:scorecard # production policy + typecheck + lint + tests + atomic handoff
 ```
+
+Agent/model handoffs are machine-backed in `.agent/`: edit
+`session-state.json` when the objective changes, then run
+`npm run agent:scorecard`. The generated `CHECKPOINT.json`, `SCORECARD.json`,
+and `SESSION_HANDOFF.md` preserve exact progress across crashes and
+Claude/Codex switches.
 
 ---
 

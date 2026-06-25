@@ -48,11 +48,11 @@ export default function Page() {
 
       <div id="stage">
         {/* The map mounts once and stays alive; panels overlay it. The map is the home screen. */}
-        <MapWorkspace onOpenTrace={setTraceRef} />
+        <MapWorkspace onOpenTrace={setTraceRef} onNavigate={setView} />
         <AccountBar />
         {view === "inbox" && <ActionInbox onOpenTrace={setTraceRef} />}
         {view === "loops" && <LoopStudio />}
-        {view === "pipeline" && <Pipeline />}
+        {view === "pipeline" && <Pipeline onNavigate={setView} />}
         {view === "connectors" && <ConnectorHub />}
         {view === "report" && <WeeklyReport />}
       </div>

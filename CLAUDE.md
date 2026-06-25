@@ -1,6 +1,10 @@
 # Forleads — Engineering Constitution
 
 You are building Forleads: a living-map agentic CRM for real-estate agents.
+Before changing code, read `.agent/CHECKPOINT.json` (or run
+`npm run agent:checkpoint` if it does not exist). Before claiming completion,
+run `npm run agent:scorecard`; a missing, running, interrupted, or failed
+scorecard is not success.
 The docs/ folder is the SOURCE OF TRUTH. Read docs/Forleads_Vision_v1.md,
 _Architecture_, _AgentLoops_, _DesignSystem_, _MapGIS_, _Screens_, and
 _ProductionMarketPlan_ before coding.

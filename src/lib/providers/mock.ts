@@ -15,16 +15,31 @@ import type {
 
 // A small global gazetteer so "global from day one" is felt in mock mode.
 const PLACES: GeoResult[] = [
-  { address: "12 Oak Street", locality: "San Francisco, USA", lng: -122.4469, lat: 37.7694 },
-  { address: "221B Baker Street", locality: "London, UK", lng: -0.1574, lat: 51.5237 },
-  { address: "Karen Road", locality: "Nairobi, Kenya", lng: 36.7073, lat: -1.3318 },
-  { address: "Shibuya 2-chome", locality: "Tokyo, Japan", lng: 139.7005, lat: 35.6595 },
-  { address: "Rua Barata Ribeiro", locality: "Rio de Janeiro, Brazil", lng: -43.186, lat: -22.969 },
-  { address: "Connaught Place", locality: "New Delhi, India", lng: 77.2167, lat: 28.6315 },
-  { address: "Plaka", locality: "Athens, Greece", lng: 23.729, lat: 37.9715 },
-  { address: "Bondi Beach Rd", locality: "Sydney, Australia", lng: 151.2744, lat: -33.8908 },
-  { address: "8 Pine Road", locality: "Austin, USA", lng: -97.7431, lat: 30.2672 },
-  { address: "88 Elm Avenue", locality: "Portland, USA", lng: -122.6765, lat: 45.5231 },
+  { address: "12 Oak Street", locality: "San Francisco, USA", lng: -122.4469, lat: 37.7694, mode: "catalog" },
+  { address: "221B Baker Street", locality: "London, UK", lng: -0.1574, lat: 51.5237, mode: "catalog" },
+  { address: "Karen Road", locality: "Nairobi, Kenya", lng: 36.7073, lat: -1.3318, mode: "catalog" },
+  { address: "Shibuya 2-chome", locality: "Tokyo, Japan", lng: 139.7005, lat: 35.6595, mode: "catalog" },
+  { address: "Rua Barata Ribeiro", locality: "Rio de Janeiro, Brazil", lng: -43.186, lat: -22.969, mode: "catalog" },
+  { address: "Connaught Place", locality: "New Delhi, India", lng: 77.2167, lat: 28.6315, mode: "catalog" },
+  { address: "Plaka", locality: "Athens, Greece", lng: 23.729, lat: 37.9715, mode: "catalog" },
+  { address: "Bondi Beach Rd", locality: "Sydney, Australia", lng: 151.2744, lat: -33.8908, mode: "catalog" },
+  { address: "8 Pine Road", locality: "Austin, USA", lng: -97.7431, lat: 30.2672, mode: "catalog" },
+  { address: "88 Elm Avenue", locality: "Portland, USA", lng: -122.6765, lat: 45.5231, mode: "catalog" },
+];
+
+const REGION_HINTS: { pattern: RegExp; locality: string; lng: number; lat: number }[] = [
+  { pattern: /\b(clarksburg|gaithersburg|rockville|maryland|bethesda)\b/i, locality: "Maryland, USA", lng: -77.2717, lat: 39.2387 },
+  { pattern: /\b(kampala|uganda)\b/i, locality: "Central Region, Uganda", lng: 32.5825, lat: 0.3476 },
+  { pattern: /\b(nairobi|karen|kenya)\b/i, locality: "Nairobi, Kenya", lng: 36.8219, lat: -1.2921 },
+  { pattern: /\b(london|uk|england)\b/i, locality: "London, UK", lng: -0.1276, lat: 51.5072 },
+  { pattern: /\b(tokyo|shibuya|japan)\b/i, locality: "Tokyo, Japan", lng: 139.6917, lat: 35.6895 },
+  { pattern: /\b(rio|copacabana|brazil)\b/i, locality: "Rio de Janeiro, Brazil", lng: -43.1729, lat: -22.9068 },
+  { pattern: /\b(delhi|india|connaught)\b/i, locality: "New Delhi, India", lng: 77.209, lat: 28.6139 },
+  { pattern: /\b(athens|plaka|greece)\b/i, locality: "Athens, Greece", lng: 23.7275, lat: 37.9838 },
+  { pattern: /\b(sydney|bondi|australia)\b/i, locality: "Sydney, Australia", lng: 151.2093, lat: -33.8688 },
+  { pattern: /\b(austin|texas)\b/i, locality: "Texas, USA", lng: -97.7431, lat: 30.2672 },
+  { pattern: /\b(portland|oregon)\b/i, locality: "Oregon, USA", lng: -122.6765, lat: 45.5231 },
+  { pattern: /\b(san francisco|california)\b/i, locality: "California, USA", lng: -122.4194, lat: 37.7749 },
 ];
 
 // Deterministic pseudo-random from a string seed → stable mock data per address.
@@ -43,16 +58,55 @@ function seeded(seed: string): () => number {
   };
 }
 
+function normalizeQuery(query: string): string {
+  return query.replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").trim();
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function localityFromQuery(query: string, fallback?: string): string | undefined {
+  const parts = query
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length >= 2) return parts.slice(-2).join(", ");
+  return fallback;
+}
+
+export function synthesizeGeoResult(query: string): GeoResult | null {
+  const cleaned = normalizeQuery(query);
+  if (cleaned.length < 5) return null;
+
+  const hint = REGION_HINTS.find((entry) => entry.pattern.test(cleaned));
+  const rng = seeded(`${cleaned}:freeform`);
+  const baseLng = hint?.lng ?? -150 + rng() * 300;
+  const baseLat = hint?.lat ?? -45 + rng() * 90;
+
+  return {
+    address: cleaned,
+    locality: localityFromQuery(cleaned, hint?.locality) ?? "Typed search area",
+    lng: clamp(baseLng + (rng() - 0.5) * 0.18, -179.9, 179.9),
+    lat: clamp(baseLat + (rng() - 0.5) * 0.12, -58, 75),
+    mode: "synthetic",
+  };
+}
+
 export class MockGeocodeProvider implements GeocodeProvider {
   readonly name = "mock-gazetteer";
   readonly mode = "mock" as const;
 
   async autocomplete(query: string, limit = 6): Promise<GeoResult[]> {
-    const q = query.toLowerCase().trim();
+    const q = normalizeQuery(query).toLowerCase();
     if (!q) return PLACES.slice(0, limit);
-    return PLACES.filter((p) =>
+    const matches = PLACES.filter((p) =>
       `${p.address} ${p.locality ?? ""}`.toLowerCase().includes(q)
-    ).slice(0, limit);
+    );
+    const synthetic = synthesizeGeoResult(query);
+    if (!synthetic) return matches.slice(0, limit);
+    const duplicate = matches.some((place) => normalizeQuery(place.address).toLowerCase() === q);
+    return (duplicate ? matches : [synthetic, ...matches]).slice(0, limit);
   }
 
   async reverse(lng: number, lat: number): Promise<GeoResult | null> {

@@ -33,6 +33,7 @@
 |---|---|---|
 | `npm run build` hangs at 0% CPU locally | maplibre-gl + webpack optimize exhausts low RAM | Don't prod-build locally. Verify via `npm run dev` + `bash scripts/smoke.sh`. It builds fine on Vercel CI. |
 | Long command stalls with no output | harness stdout back-pressure | Redirect to a file: `cmd > /tmp/out.log 2>&1`, then read the file. |
+| Node `fetch()` reports `fetch failed` for a reachable production URL inside an agent sandbox | Node networking can be restricted differently from the approved system `curl` path | For verification probes, try `fetch` first and fall back to bounded `curl --fail --max-time`; still fail the gate if both paths fail. |
 | `npm test` flaky / cross-test bleed | integration tests share in-memory singletons | vitest pinned to single fork in `vitest.config.ts`. Keep it. |
 | `npm i` peer-dep errors (React 18) | `@vercel/analytics` / supabase want newer peers | `.npmrc` pins `legacy-peer-deps=true`. Install with `--legacy-peer-deps`. |
 | **Live OSM Overpass returns `406 Not Acceptable`** | **request sent without a `User-Agent` (OSM fair-use)** | **`OSMPropertyProvider` now sends a descriptive UA header. Any new OSM/Nominatim/Overpass call MUST set `User-Agent`.** |

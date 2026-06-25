@@ -12,6 +12,7 @@ export interface GeoResult {
   lng: number;
   lat: number;
   bbox?: [number, number, number, number];
+  mode?: "catalog" | "synthetic";
 }
 
 export interface GeocodeProvider {

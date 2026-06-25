@@ -14,7 +14,11 @@ too — it's the shared brain.
 | `playbook.md` | Reusable patterns + a **gotchas table** (failures already solved) | Before acting; before debugging anything |
 | `decisions.md` | Why the architecture is the way it is (ADRs) | When a choice seems odd or you want to change it |
 | `plans/*.md` | Model-agnostic, ready-to-execute plans for upcoming work | When picking up the next chunk |
-| `SESSION_HANDOFF.md` | The latest "resume here" summary | When continuing a session in a fresh window |
+| `session-state.json` | Human-owned objective, acceptance criteria, baseline, next actions | When the phase changes |
+| `scorecard.config.json` | Model-neutral commands, points, timeouts, required gates | Before changing verification |
+| `CHECKPOINT.json` | Atomic machine snapshot of repo + run state | First after a crash or model switch |
+| `SCORECARD.json` | Last run, including interrupted/running/failed checks | Before claiming completion |
+| `SESSION_HANDOFF.md` | Generated readable view of the checkpoint | When continuing in a fresh window |
 
 Cross-link between files with `→ playbook.md#osm` style references. The graph is
 the links.
@@ -37,6 +41,12 @@ ORIENT → PLAN → ACT → VERIFY → RECORD
    If you made a non-obvious choice, log it in decisions.md. Update
    onboarding-notes if a fact changed. This is the self-improvement step — skip
    it and the next session repeats your pain.
+
+For any session that changes code, finish with `npm run agent:scorecard`. Do not
+hand-edit `CHECKPOINT.json`, `SCORECARD.json`, or `SESSION_HANDOFF.md`; they are
+atomically generated from `session-state.json`, the scorecard config, live
+production policy, command results, and Git state. After a crash, read
+`CHECKPOINT.json` and run its `resumeCommand`.
 
 ## Token budget discipline (cost = quality here)
 

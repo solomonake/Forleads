@@ -11,6 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "agent:checkpoint": "node scripts/agent-system.mjs checkpoint",
+    "agent:scorecard": "node scripts/agent-system.mjs scorecard",
+    "agent:verify": "node scripts/agent-system.mjs verify",
     "os:scan": "node scripts/os-scan.mjs",
     "demo:record": "node scripts/record-pr-demo.mjs",
     "demo:e2e": "playwright test"
