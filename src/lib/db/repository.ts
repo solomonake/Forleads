@@ -81,10 +81,8 @@ export interface Repository {
   // memories (lead-scoped recall)
   saveMemory(m: Memory): Promise<Memory>;
   recallMemories(leadId: string, query: number[], k: number): Promise<MemoryHit[]>;
-  /** Cross-lead recall scoped to an H3 cell, for "neighborhood priors". Only
-   *  returns kind="neighborhood" rows (the persistor guarantees those are
-   *  PII-stripped before they're written). Agent-scoped: a row from another
-   *  agent's lead in the same cell must NOT surface. */
+  /** Cross-lead recall scoped to an area cell. The writer accepts only
+   * provider-backed A/B market facts. Agent scope must never be crossed. */
   recallNeighborhood(
     agentId: string,
     h3Index: string,

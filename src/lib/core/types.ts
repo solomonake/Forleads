@@ -88,13 +88,27 @@ export interface ReduceSummary {
   elapsedMs: number;
   /** FOMO-style copy describing recall hits — null when no prior memory was used. */
   recallNote?: string;
-  /** Count of cross-lead neighborhood (H3-cell) priors the dispatcher saw for
-   *  this block. Surfaced in the lead rail as a "N facts about this block"
-   *  chip. Undefined when there are no priors. */
+  /** Count of cross-lead area-cell priors the dispatcher saw for
+   *  this location. Surfaced in the lead rail as an area-facts note.
+   *  Undefined when there are no priors. */
   neighborhoodPriors?: number;
-  /** A short FOMO line — "5 facts known about this block" — when
+  /** A short line — "5 area facts known near this location" — when
    *  neighborhoodPriors > 0; null otherwise. */
   neighborhoodNote?: string;
+  /** When recall fired, a compact projection of the hits so the rail can render
+   * an expandable chip ("8 prior signals" → list of [A] Building footprint…).
+   * Excludes the embedding vector — only the surface form, kind, grade, ref,
+   * and timestamp. Sorted newest-first. */
+  recalledHits?: RecalledHit[];
+}
+
+export interface RecalledHit {
+  memoryId: UUID;
+  kind: MemoryKind;
+  text: string;
+  confidence?: Confidence;
+  ref?: string;
+  createdAt: ISODate;
 }
 
 // ---- Memory (lead-scoped recall: docs/Forleads_AgentLoops_v1.md §3) ---------
@@ -102,7 +116,12 @@ export interface ReduceSummary {
 // event — that the dispatcher can recall before spending scout budget. Scoped
 // to a single lead surface; cross-lead leakage would defeat the privacy floor.
 
-export type MemoryKind = "evidence" | "note" | "event" | "neighborhood";
+export type MemoryKind = "evidence" | "note" | "event" | "outcome" | "neighborhood";
+
+// Persisted whenever the human gate fires (approve / edit / reject). Lets the
+// composer answer "what did the agent ALREADY send to this lead?" and warn
+// before drafting a duplicate. Distinct from `event` so we can filter.
+export type OutcomeVerdict = "approved" | "edited" | "rejected";
 
 export interface Memory {
   id: UUID;
@@ -112,9 +131,8 @@ export interface Memory {
   text: string;                 // the embedded surface form (what was hashed)
   ref?: string;                 // optional pointer to the source row id
   confidence?: Confidence;      // mirrored from the source card when kind=evidence
-  /** Set ONLY for kind="neighborhood" — the H3 cell this fact aggregates over.
-   *  Lets the dispatcher recall block-level priors without leaking lead PII
-   *  (only non-identifying evidence kinds are ever written as neighborhood). */
+  /** Set ONLY for kind="neighborhood" — the area cell this fact aggregates over.
+   *  Only grounded provider-backed market facts may be written here. */
   h3_index?: string;
   embedding: number[];          // 1024-dim (bge-m3 / Qwen3-Embedding-0.6B)
   created_at: ISODate;
@@ -324,7 +342,10 @@ export type DomainEventType =
   | "watcher.hit"
   | "loop.run.started"
   | "loop.run.completed"
-  | "connector.write";
+  | "connector.write"
+  | "artifact.cancelled"
+  | "outcome.recorded"
+  | "memory.recalled";
 
 export interface DomainEvent {
   id: UUID;

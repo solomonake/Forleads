@@ -12,6 +12,10 @@ import { approveArtifact } from "@/lib/pipeline";
 export const POST = withRoute("approve", async (req: NextRequest) => {
   const body = await validateBody(req, (b) => ({
     artifactId: str(b, "artifactId", { max: 100 }),
+    editedBody:
+      b.editedBody === undefined || b.editedBody === null
+        ? undefined
+        : str(b, "editedBody", { max: 10_000 }),
   }));
 
   // The human gate is a mutating, outward-facing action (it can write a real
@@ -38,7 +42,10 @@ export const POST = withRoute("approve", async (req: NextRequest) => {
 
   let result;
   try {
-    result = await approveArtifact(body.artifactId, { googleAccessToken });
+    result = await approveArtifact(body.artifactId, {
+      googleAccessToken,
+      editedBody: body.editedBody,
+    });
   } catch (e) {
     // Fail-closed compliance is a client-correctable 422, not a server error;
     // anything else propagates to the route's error boundary (logged + 500).
