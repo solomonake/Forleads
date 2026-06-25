@@ -9,11 +9,12 @@
 // ============================================================================
 
 import type { LoopDefinition } from "@/lib/core/types";
+import { workspaceSeedId } from "@/lib/db/seed-id";
 
 export function defaultLoops(agentId: string, nowISO: string): LoopDefinition[] {
   return [
     {
-      id: "loop-no-contact",
+      id: workspaceSeedId(agentId, "loop-no-contact"),
       agent_id: agentId,
       name: "No-contact follow-up",
       description:
@@ -30,7 +31,7 @@ export function defaultLoops(agentId: string, nowISO: string): LoopDefinition[] 
       stats: { runs: 0, approved: 0, replies: 0, blocked: 0 },
     },
     {
-      id: "loop-stale-revival",
+      id: workspaceSeedId(agentId, "loop-stale-revival"),
       agent_id: agentId,
       name: "Stale lead revival",
       description:
@@ -48,7 +49,7 @@ export function defaultLoops(agentId: string, nowISO: string): LoopDefinition[] 
       stats: { runs: 0, approved: 0, replies: 0, blocked: 0 },
     },
     {
-      id: "loop-buyer-watcher",
+      id: workspaceSeedId(agentId, "loop-buyer-watcher"),
       agent_id: agentId,
       name: "Buyer watcher",
       description:
@@ -62,7 +63,7 @@ export function defaultLoops(agentId: string, nowISO: string): LoopDefinition[] 
       stats: { runs: 0, approved: 0, replies: 0, blocked: 0 },
     },
     {
-      id: "loop-listing-prep",
+      id: workspaceSeedId(agentId, "loop-listing-prep"),
       agent_id: agentId,
       name: "Listing prep",
       description:

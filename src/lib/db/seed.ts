@@ -9,6 +9,7 @@ import type { Agent, ConnectorAccount } from "@/lib/core/types";
 import { ALL_PROVIDERS, getConnector } from "@/lib/connectors";
 import { defaultLoops } from "@/lib/loops/definitions";
 import type { Repository } from "./repository";
+import { workspaceSeedId } from "./seed-id";
 
 export const DEMO_AGENT: Agent = {
   id: DEMO_AGENT_ID,
@@ -36,7 +37,7 @@ export async function provisionWorkspace(repo: Repository, agent: Agent): Promis
     if (connected.has(provider)) continue;
     const health = await getConnector(provider).healthCheck();
     const account: ConnectorAccount = {
-      id: `conn-${provider}`,
+      id: workspaceSeedId(agent.id, `conn-${provider}`),
       agent_id: agent.id,
       provider,
       scopes:
