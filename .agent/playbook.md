@@ -54,3 +54,80 @@
 - Live DB layer: probe via Supabase MCP `execute_sql` (round-trip a row, then delete).
 - UI: `preview_start` → `preview_screenshot` (the dev server, not a prod build).
 - External provider: one `curl` against the real endpoint with correct headers.
+
+## Secrets rotation runbook
+
+Two secrets the app encrypts data with. Rotation is a deploy-time operation —
+there is no live-rekey path. If a key is compromised, follow the corresponding
+section below. **Read this BEFORE you have to.**
+
+### `SESSION_SECRET`
+
+What it seals: the session cookie (login state, `googleCredentialRef` pointer,
+and any legacy `session.google` tokens still in flight). AES-256-GCM via
+`src/lib/auth/session.ts` (`sealValue`/`unsealValue`).
+
+Blast radius if compromised: an attacker with the secret can forge a session
+cookie and impersonate any agent who has signed in since the secret was set.
+They cannot decrypt `connector_credential` rows (those use the same key —
+**rotating session secret invalidates every stored Google credential**) and
+cannot read the Supabase database directly (RLS gate on `agent_id`).
+
+**Rotation steps:**
+
+1. Generate a new secret: `openssl rand -hex 32`.
+2. Verify the prod env target: `vercel env ls production` (project=`forleads`,
+   team=`precious-muwanguzis-projects`). Do NOT push to the wrong project.
+3. Replace the existing value: `vercel env rm SESSION_SECRET production`, then
+   `echo "<new-hex>" | vercel env add SESSION_SECRET production`.
+4. Trigger a fresh prod deploy (the env var only takes effect on cold start).
+5. **All connector credentials are now undecryptable** because
+   `loadGoogleCredential` calls `unsealValue` with the new key. Users will
+   need to re-authenticate Google via `/api/auth/login`. Plan the rotation
+   for a low-traffic window.
+6. After the deploy is healthy, mark old `connector_credential` rows as
+   revoked in Supabase:
+   `update connector_credential set revoked_at = now() where revoked_at is null;`
+   (RLS-bypassed via service role.) This isn't strictly required — the
+   `unsealValue` failure already makes them unusable — but it makes the
+   ledger truthful.
+
+**When NOT to rotate:** if the leak is suspected but unconfirmed and the audit
+trail is intact (no anomalous events in `domain_event`), prefer to revoke the
+specific compromised connector credential rather than reset every user's
+Google session.
+
+### Per-credential rotation (no global secret change)
+
+If only a single user's Google token is suspected, you don't need to rotate
+`SESSION_SECRET`. Run:
+
+```sql
+update connector_credential
+   set revoked_at = now()
+ where agent_id = '<agent-uuid>'
+   and provider = 'google';
+```
+
+The user's next approval will fail to find a non-revoked credential (per
+`connector_credential_agent_provider_ix`) and they'll be redirected through
+`/api/auth/login`. Their cookie still works for read routes; the rest of the
+app is unaffected.
+
+### What rotation does NOT do
+
+- Does not invalidate `agent` rows or revoke past Gmail drafts (those already
+  landed in the user's Gmail and are owned by them).
+- Does not rotate the Google OAuth client secret (that lives in
+  `GOOGLE_CLIENT_SECRET`; rotate via Google Cloud Console + Vercel env, same
+  pattern).
+- Does not rotate the Supabase service role key (`SUPABASE_SERVICE_ROLE_KEY`).
+  That's a separate rotation done in the Supabase dashboard.
+
+### When to rotate proactively
+
+- Suspected compromise: anomaly in `domain_event` (e.g., outcome.recorded for
+  artifacts the user denies approving).
+- Departing operator with deploy access.
+- Annually as a baseline hygiene practice — easier to test the runbook
+  during planned downtime than during an incident.
