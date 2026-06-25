@@ -95,7 +95,12 @@ export interface ReduceSummary {
 // event — that the dispatcher can recall before spending scout budget. Scoped
 // to a single lead surface; cross-lead leakage would defeat the privacy floor.
 
-export type MemoryKind = "evidence" | "note" | "event";
+export type MemoryKind = "evidence" | "note" | "event" | "outcome";
+
+// Persisted whenever the human gate fires (approve / edit / reject). Lets the
+// composer answer "what did the agent ALREADY send to this lead?" and warn
+// before drafting a duplicate. Distinct from `event` so we can filter.
+export type OutcomeVerdict = "approved" | "edited" | "rejected";
 
 export interface Memory {
   id: UUID;
@@ -313,7 +318,9 @@ export type DomainEventType =
   | "watcher.hit"
   | "loop.run.started"
   | "loop.run.completed"
-  | "connector.write";
+  | "connector.write"
+  | "artifact.cancelled"
+  | "outcome.recorded";
 
 export interface DomainEvent {
   id: UUID;

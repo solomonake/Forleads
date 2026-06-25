@@ -25,19 +25,53 @@ export function ReviewTray({
   const compliance = artifact.compliance_result;
   const blocked = !compliance.pass;
 
+  // Send the edited body only when the user actually touched the textarea
+  // (different from the original) — keeps the unedited-approve path identical
+  // and avoids spurious "edit" outcome rows in memory.
+  const bodyEdited = !!email && body !== email.body;
+
   const approve = async () => {
     setBusy(true);
     setError(null);
     try {
       const d = await apiPost<{ connector: { provider: string; deduped: boolean; mode: string; url?: string } }>(
         "/api/approve",
-        { artifactId: artifact.id }
+        {
+          artifactId: artifact.id,
+          ...(bodyEdited ? { editedBody: body } : {}),
+        },
       );
       const c = d.connector;
+      const editTag = bodyEdited ? " · with your edits" : "";
       onApproved(
         isEmail
-          ? `Draft created in ${c.provider} (${c.mode})${c.deduped ? " · deduped" : ""} — logged to memory`
-          : `${artifact.type} written to ${c.provider} (${c.mode}) — logged to memory`
+          ? `Draft created in ${c.provider} (${c.mode})${c.deduped ? " · deduped" : ""}${editTag} — logged to memory`
+          : `${artifact.type} written to ${c.provider} (${c.mode})${editTag} — logged to memory`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reject = async () => {
+    const reason = window.prompt(
+      "Why is this draft wrong? (optional — helps the composer next time)",
+      "",
+    );
+    if (reason === null) return; // user cancelled the prompt
+    setBusy(true);
+    setError(null);
+    try {
+      await apiPost<{ memoryId: string | null }>("/api/reject", {
+        artifactId: artifact.id,
+        ...(reason.trim() ? { reason: reason.trim() } : {}),
+      });
+      onApproved(
+        reason.trim()
+          ? `Marked rejected · "${reason.trim().slice(0, 60)}" — logged to memory`
+          : "Marked rejected — logged to memory",
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -118,6 +152,14 @@ export function ReviewTray({
           <button className="btn" onClick={onClose}>
             Discard
           </button>
+          <button
+            className="btn"
+            disabled={busy || artifact.status === "cancelled"}
+            onClick={reject}
+            title="Mark this draft wrong — the composer will learn from it"
+          >
+            Reject
+          </button>
           {artifact.trace_id && (
             <button className="btn" onClick={() => onOpenTrace(artifact.trace_id!)}>
               Why?
@@ -129,7 +171,15 @@ export function ReviewTray({
             </button>
           )}
           <button className="btn primary" disabled={blocked || busy} onClick={approve}>
-            {busy ? "Working…" : blocked ? "Blocked" : isEmail ? "Approve & Create Draft" : "Approve & Write"}
+            {busy
+              ? "Working…"
+              : blocked
+                ? "Blocked"
+                : isEmail
+                  ? bodyEdited
+                    ? "Approve with edits"
+                    : "Approve & Create Draft"
+                  : "Approve & Write"}
           </button>
         </div>
       </div>
