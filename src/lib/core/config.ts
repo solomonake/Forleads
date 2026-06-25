@@ -17,7 +17,7 @@ export type Mode = "mock" | "live";
 
 export const config = {
   agentMode: (env("FORLEADS_AGENT_MODE") ?? "mock") as Mode,
-  claudeModel: env("FORLEADS_CLAUDE_MODEL") ?? "claude-opus-4-8",
+  claudeModel: env("FORLEADS_CLAUDE_MODEL") ?? "claude-sonnet-4-6",
   anthropicKey: env("ANTHROPIC_API_KEY"),
 
   persist: (env("FORLEADS_PERSIST") ?? "memory") as "memory" | "supabase",

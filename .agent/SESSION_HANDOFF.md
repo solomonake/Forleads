@@ -1,6 +1,6 @@
 # Session handoff — generated, do not hand-edit
 
-_Generated 2026-06-25T23:32:33.769Z from `.agent/session-state.json` and live repository state._
+_Generated 2026-06-25T23:35:16.697Z from `.agent/session-state.json` and live repository state._
 
 ## Objective
 Make Claude/Codex switching crash-resistant through an atomic checkpoint and a deterministic, model-neutral scorecard.
@@ -8,7 +8,7 @@ Make Claude/Codex switching crash-resistant through an atomic checkpoint and a d
 ## Current state
 - Phase: `agent-checkpoint-and-scorecard`
 - Declared status: `complete`
-- Branch: `codex/operator-loop-checkpoint` at `8f9968d`
+- Branch: `codex/operator-loop-checkpoint` at `198a141`
 - Upstream: `none` (ahead ?, behind ?)
 - Working tree dirty: `true`
 - Scorecard: `passed` · 100/100 (A) · requiredPassed=true
@@ -30,40 +30,28 @@ The command records each gate before it starts and immediately after it exits. R
 ## Scorecard checks
 | Check | Status | Points | Duration ms |
 |---|---:|---:|---:|
-| Agent checkpoint contract | passed | 20 | 57 |
-| Live production policy | passed | 20 | 1731 |
-| TypeScript typecheck | passed | 20 | 4785 |
-| Next.js lint | passed | 15 | 2884 |
-| Vitest suite | passed | 25 | 2794 |
+| Agent checkpoint contract | passed | 20 | 54 |
+| Live production policy | passed | 20 | 772 |
+| TypeScript typecheck | passed | 20 | 3036 |
+| Next.js lint | passed | 15 | 2429 |
+| Vitest suite | passed | 25 | 2764 |
 
 ## Working tree captured at checkpoint
-- `M  .agent/AGENT_OS.md`
-- `AM .agent/CHECKPOINT.json`
-- `AM .agent/SCORECARD.json`
-- `MM .agent/SESSION_HANDOFF.md`
-- `M  .agent/playbook.md`
-- `A  .agent/scorecard.config.json`
-- `A  .agent/session-state.json`
+- `M .agent/CHECKPOINT.json`
+- ` M .agent/SCORECARD.json`
+- ` M .agent/SESSION_HANDOFF.md`
+- `M  .env.example`
 - `M  .gitignore`
-- `M  CLAUDE.md`
-- `M  README.md`
-- `A  docs/os-scans/2026-06-24-agent-orchestration-frameworks.md`
-- `A  docs/os-scans/2026-06-24-small-open-llm-json-drafting.md`
-- `A  docs/os-scans/2026-06-24-vector-db-and-embeddings-spatial.md`
-- `A  docs/os-scans/2026-06-24-vision-ocr-street-imagery.md`
 - `M  package.json`
-- `A  scripts/agent-system.mjs`
-- `A  scripts/os-scan.mjs`
-- `M  src/app/api/lead/route.ts`
-- `M  src/app/globals.css`
-- `M  src/app/page.tsx`
+- `A  scripts/env-link.mjs`
+- `A  scripts/env-pull.mjs`
+- `A  scripts/setup-env.mjs`
+- `M  src/app/api/connectors/zapier/inbound/route.ts`
+- `M  src/app/api/trace/[id]/route.ts`
 - `M  src/components/MapWorkspace.tsx`
-- `M  src/components/Pipeline.tsx`
-- `A  src/lib/pipeline.test.ts`
-- `M  src/lib/pipeline.ts`
-- `A  src/lib/providers/mock.test.ts`
-- `M  src/lib/providers/mock.ts`
-- `M  src/lib/providers/types.ts`
+- `M  src/lib/core/config.ts`
+- `M  src/lib/providers/index.ts`
+- `M  src/lib/providers/real.ts`
 
 ## Acceptance criteria
 - [x] A checkpoint is written atomically and captures objective, phase, repository state, production baseline, scorecard state, and exact resume command.

@@ -32,7 +32,7 @@ const QUICK_NOTES = [
   { label: "Objection: timing", text: "Seller worried it's the wrong time to sell." },
 ];
 
-const DEMO_SEARCHES = [
+const SAMPLE_SEARCHES = [
   "22125 Clarksburg Rd, Maryland",
   "Kampala, Uganda",
   "Karen Road, Nairobi",
@@ -292,14 +292,21 @@ export function MapWorkspace({
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : "The scout pass paused.";
+        const authenticationFailed = /401|authentication required|unauthor/i.test(message);
+        setWorking(false);
+        makeBeacon(target.lng, target.lat, false);
+        if (authenticationFailed) {
+          setLead(null);
+          setLeadOpen(false);
+          pulseToast("Sign in to research this address.");
+          return;
+        }
         const degraded = clientFallbackSummary(
           target,
           `The scout pass paused before full evidence loaded. ${message}.`
         );
         setCards(degraded.cards);
         setSummary(degraded);
-        setWorking(false);
-        makeBeacon(target.lng, target.lat, false);
         pulseToast("Lead opened in degraded mode — retry scouts or continue manually.");
       }
     },
@@ -326,8 +333,12 @@ export function MapWorkspace({
           setSelectedAction(0);
           pulseToast("Next-best action ready — review it below.");
         }, 1300);
-      } catch {
+      } catch (e) {
         setThinking(null);
+        const msg = e instanceof Error ? e.message : String(e);
+        const auth = /401|authentication required|unauthor/i.test(msg);
+        setToast(auth ? "Sign in to add notes" : `Couldn't classify — ${msg}`);
+        setTimeout(() => setToast(null), 3500);
       }
     },
     [lead, pulseToast]
@@ -396,7 +407,6 @@ export function MapWorkspace({
   return (
     <>
       <div id="map" ref={mapDiv} />
-      <div className="demoflag">◆ Demo data · real map · mock providers (no keys needed)</div>
 
       {!leadOpen && (
         <div className="launchpad">
@@ -407,7 +417,7 @@ export function MapWorkspace({
             the field signal, and tee up the next outreach without losing operator control.
           </div>
           <div className="launch-actions">
-            {DEMO_SEARCHES.map((sample) => (
+            {SAMPLE_SEARCHES.map((sample) => (
               <button
                 key={sample}
                 className="launch-chip"
@@ -712,11 +722,6 @@ export function MapWorkspace({
             </div>
           )}
         </div>
-      </div>
-
-      <div className="hint">
-        Type or tap an address, let the scouts ground it, add the field note, then push the draft
-        into review without losing the lead flow.
       </div>
 
       {draft && (
