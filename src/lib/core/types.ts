@@ -102,6 +102,15 @@ export type MemoryKind = "evidence" | "note" | "event" | "outcome";
 // before drafting a duplicate. Distinct from `event` so we can filter.
 export type OutcomeVerdict = "approved" | "edited" | "rejected";
 
+export interface PriorOutcomeSummary {
+  approved: number;
+  edited: number;
+  rejected: number;
+  /** ISO timestamp of the most recent rejected outcome — used by the composer
+   *  to soften tone when the previous attempt was refused recently. */
+  lastRejectedAt?: ISODate;
+}
+
 export interface Memory {
   id: UUID;
   agent_id: UUID;
@@ -438,6 +447,9 @@ export interface AgentTrace {
   evidenceUsed: { claim: string; confidence: Confidence }[];
   excluded: { content: string; reason: string }[];
   policy: { name: string; result: "pass" | "fail" }[];
+  /** Summary of prior approve/edit/reject outcomes the composer consulted for
+   *  this lead+actionType — surfaced in the "Why this happened" panel. */
+  priorOutcomes?: PriorOutcomeSummary;
   connector?: { provider: string; action: string; idempotencyKey: string; sent: boolean };
   cost: { claudeCalls: number; paidDataCalls: number; ms: number };
   created_at: ISODate;

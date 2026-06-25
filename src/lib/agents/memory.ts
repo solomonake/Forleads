@@ -116,6 +116,32 @@ export async function persistOutcomeMemory(
   }
 }
 
+/** Bucket a list of outcome-kind memories into approved/edited/rejected counts
+ *  + the timestamp of the most recent rejection. Used by the composer + trace. */
+export function summarizeOutcomes(memos: Memory[]): {
+  approved: number;
+  edited: number;
+  rejected: number;
+  lastRejectedAt?: string;
+} {
+  let approved = 0;
+  let edited = 0;
+  let rejected = 0;
+  let lastRejectedAt: string | undefined;
+  for (const m of memos) {
+    if (m.kind !== "outcome") continue;
+    if (m.text.startsWith("[approved]")) approved++;
+    else if (m.text.startsWith("[edited]")) edited++;
+    else if (m.text.startsWith("[rejected]")) {
+      rejected++;
+      if (!lastRejectedAt || m.created_at > lastRejectedAt) {
+        lastRejectedAt = m.created_at;
+      }
+    }
+  }
+  return { approved, edited, rejected, lastRejectedAt };
+}
+
 /** Recall prior outcomes for this lead, optionally filtered by action type.
  * Used by the composer-trace to surface "you already approved 2 emails here". */
 export async function recallOutcomes(
