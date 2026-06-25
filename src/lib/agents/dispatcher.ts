@@ -41,6 +41,11 @@ export interface DispatchInput {
    * scout entirely — we already grounded those facts last time.
    */
   priorGroundedCount?: number;
+  /** Cross-lead H3-cell priors. A scout type in this set already has at least
+   *  one A/B-grade fact on the block from a SIBLING lead — the dispatcher
+   *  drops that scout to save budget. Lead-scoped property recall takes
+   *  precedence; this only covers the OTHER scout kinds. */
+  neighborhoodCoveredScouts?: ScoutType[];
   /** Tighten budgets if the agent is near a daily free-tier cap. */
   nearDailyCap?: boolean;
 }
@@ -58,8 +63,19 @@ export async function planDispatch(input: DispatchInput): Promise<DispatchPlan> 
       ? { maxCalls: Math.max(1, b.maxCalls - 1), maxMs: Math.round(b.maxMs * 0.7), maxTokens: Math.round(b.maxTokens * 0.7) }
       : b;
 
-  const add = (type: ScoutType, why: string) =>
+  // A scout is "covered by neighbors" if a sibling lead in the same H3 cell
+  // already grounded an A/B-grade fact under that scout — the dispatcher
+  // skips it and saves the budget. Lead-scoped recall (property) wins over
+  // this; we don't double-count when the same scout shows up in both.
+  const coveredSet = new Set(input.neighborhoodCoveredScouts ?? []);
+
+  const add = (type: ScoutType, why: string) => {
+    if (coveredSet.has(type)) {
+      notes.push(`Skipping ${type} scout: covered by a sibling lead on this block.`);
+      return;
+    }
     scouts.push({ type, budget: tighten(BUDGETS[type]), why, allowlist: ALLOWLISTS[type] });
+  };
 
   // Always-on cheap global scouts. The property scout is the one we'll drop
   // when prior memory already grounded enough of those facts.
