@@ -995,6 +995,36 @@ button {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+/* Error variant — the toast is now actionable (Retry CTA + request-id chip)
+   so pointer-events must enable. Don't suppress the failure with a green pill. */
+#toast.err {
+  background: var(--danger);
+  color: #2a0606;
+  pointer-events: auto;
+  align-items: baseline;
+}
+#toast.err .req {
+  font-weight: 500;
+  font-size: 11px;
+  opacity: 0.78;
+  letter-spacing: 0.02em;
+  margin-left: 4px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+}
+#toast.err .retry {
+  background: rgba(255, 255, 255, 0.18);
+  color: inherit;
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  margin-left: 8px;
+}
+#toast.err .retry:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
 
 /* ---- Beacon ------------------------------------------------------------- */
 .beacon {

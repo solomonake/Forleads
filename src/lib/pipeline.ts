@@ -35,6 +35,7 @@ import { lintArtifactText } from "@/lib/agents/compliance";
 import { buildTrace } from "@/lib/agents/trace";
 import { connectorForAction } from "@/lib/connectors";
 import { getRepo } from "@/lib/db";
+import { log } from "@/lib/observability";
 
 // ---- Events -----------------------------------------------------------------
 
@@ -105,6 +106,30 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
     lead,
     `${lead.address}${lead.locality ? ", " + lead.locality : ""}`,
   );
+
+  // Observability: a silent recall is an unverifiable recall. Emit a structured
+  // log AND a domain event whenever recall returns hits, so prod traffic proves
+  // the path actually fires and the Agent Trace shows it for any tap.
+  if (recall.hits.length > 0) {
+    log("info", "recall.fired", {
+      leadId: lead.id,
+      hits: recall.hits.length,
+      priorGrounded: recall.priorGroundedCount,
+      sufficient: recall.sufficient,
+    });
+    await emit(
+      lead.agent_id,
+      "memory.recalled",
+      {
+        hits: recall.hits.length,
+        priorGrounded: recall.priorGroundedCount,
+        sufficient: recall.sufficient,
+        refs: recall.refs,
+      },
+      "memory",
+      lead.id,
+    );
+  }
 
   const plan = await planDispatch({
     lng: lead.lng,
