@@ -46,7 +46,12 @@ export async function provisionWorkspace(repo: Repository, agent: Agent): Promis
           : provider === "followupboss"
             ? ["people:read", "notes:write", "tasks:write"]
             : [],
-      status: health.mode === "live" ? "connected" : provider === "twilio" ? "needs_setup" : "mock",
+      status:
+        health.mode === "live"
+          ? "connected"
+          : health.healthy
+            ? "mock"
+            : "needs_setup",
       credentials_ref: `vault://${provider}/${agent.id}`,
       capabilities: health.capabilities,
       last_healthcheck_at: nowISO(),

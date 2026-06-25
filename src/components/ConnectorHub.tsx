@@ -44,19 +44,20 @@ export function ConnectorHub() {
     <div className="panel">
       <h1>Connector Hub</h1>
       <div className="sub">
-        Trust made visible — exactly what Forleads can do, and whether it's live or running in safe
-        mock mode. Scopes are minimal (Gmail: compose drafts only). Every write is idempotent.
+        Trust made visible — exactly what Forleads can do, whether it is live, or whether setup is
+        still required. Scopes are minimal (Gmail: compose drafts only). Every write is idempotent.
       </div>
       <div className="panel-grid">
         {health.map((h) => {
           const acct = accountFor(h.provider);
           const live = h.mode === "live" || (h.provider === "google" && Boolean(gmailUser));
+          const setupRequired = !live && !h.healthy;
           return (
             <div className="row" key={h.provider + (acct?.id ?? "")}>
               <div className="rtitle">
                 <span>{LABELS[h.provider] ?? h.provider}</span>
                 <span className={`pill-status ${live ? "pill-live" : "pill-mock"}`}>
-                  {live ? "connected · live" : "mock mode"}
+                  {live ? "connected · live" : setupRequired ? "setup required" : "local mock"}
                 </span>
               </div>
               <div className="rmeta">
@@ -84,7 +85,7 @@ export function ConnectorHub() {
                   </span>
                 )}
                 {h.provider !== "google" &&
-                  (h.mode === "mock" ? (
+                  (!live ? (
                     <button className="minibtn">Add credentials in .env to go live</button>
                   ) : (
                     <button className="minibtn">Manage permissions</button>

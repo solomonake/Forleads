@@ -15,13 +15,26 @@ export class GoogleCalendarConnector implements Connector {
   readonly provider = "google" as const;
   readonly capabilities = ["createCalendarEvent"];
   readonly mode: "mock" | "live";
-  constructor(private accessToken?: string) {
+  constructor(
+    private accessToken?: string,
+    private readonly mockWritesEnabled = true,
+  ) {
     this.mode = accessToken ? "live" : "mock";
   }
 
   async createCalendarEvent(payload: CalendarPayload, meta: ConnectorWriteMeta): Promise<ConnectorResult> {
     return once(meta.idempotencyKey, async () => {
       if (!this.accessToken) {
+        if (!this.mockWritesEnabled) {
+          return {
+            ok: false,
+            provider: "google",
+            idempotencyKey: meta.idempotencyKey,
+            deduped: false,
+            mode: "mock",
+            error: "Google is not connected. Complete Google OAuth before approving a calendar event.",
+          };
+        }
         return {
           ok: true,
           provider: "google",
@@ -89,9 +102,13 @@ export class GoogleCalendarConnector implements Connector {
   async healthCheck(): Promise<HealthStatus> {
     return {
       provider: "google",
-      healthy: true,
+      healthy: Boolean(this.accessToken) || this.mockWritesEnabled,
       mode: this.mode,
-      detail: this.accessToken ? "Connected — Calendar events." : "Mock mode — connect Google OAuth to go live.",
+      detail: this.accessToken
+        ? "Connected — Calendar events."
+        : this.mockWritesEnabled
+          ? "Local mock mode — connect Google OAuth to go live."
+          : "Setup required — connect Google OAuth; production mock writes are disabled.",
       capabilities: this.capabilities,
     };
   }

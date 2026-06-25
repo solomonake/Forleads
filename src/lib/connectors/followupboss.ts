@@ -21,7 +21,8 @@ export class FollowUpBossConnector implements Connector {
 
   constructor(
     private apiKey?: string,
-    private baseUrl = "https://api.followupboss.com/v1"
+    private baseUrl = "https://api.followupboss.com/v1",
+    private readonly mockWritesEnabled = true,
   ) {
     this.mode = apiKey ? "live" : "mock";
   }
@@ -39,6 +40,16 @@ export class FollowUpBossConnector implements Connector {
   ): Promise<ConnectorResult> {
     return once(meta.idempotencyKey, async () => {
       if (!this.apiKey) {
+        if (!this.mockWritesEnabled) {
+          return {
+            ok: false,
+            provider: "followupboss",
+            idempotencyKey: meta.idempotencyKey,
+            deduped: false,
+            mode: "mock",
+            error: "Follow Up Boss is not configured. Add FOLLOWUPBOSS_API_KEY.",
+          };
+        }
         return {
           ok: true,
           provider: "followupboss",
@@ -86,7 +97,9 @@ export class FollowUpBossConnector implements Connector {
     );
   }
   async syncContacts(meta: ConnectorWriteMeta) {
-    if (!this.apiKey) return { imported: 24, mode: "mock" as const };
+    if (!this.apiKey) {
+      return { imported: this.mockWritesEnabled ? 24 : 0, mode: "mock" as const };
+    }
     const res = await fetch(`${this.baseUrl}/people?limit=100`, {
       headers: { Authorization: this.authHeader() },
     });
@@ -116,11 +129,13 @@ export class FollowUpBossConnector implements Connector {
   async healthCheck(): Promise<HealthStatus> {
     return {
       provider: "followupboss",
-      healthy: true,
+      healthy: Boolean(this.apiKey) || this.mockWritesEnabled,
       mode: this.mode,
       detail: this.apiKey
         ? "Connected — read contacts, write notes/tasks/appointments."
-        : "Mock mode — add FOLLOWUPBOSS_API_KEY to go live.",
+        : this.mockWritesEnabled
+          ? "Local mock mode — add FOLLOWUPBOSS_API_KEY to go live."
+          : "Setup required — add FOLLOWUPBOSS_API_KEY; production mock writes are disabled.",
       capabilities: this.capabilities,
     };
   }

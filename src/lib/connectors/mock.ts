@@ -40,10 +40,23 @@ export class MockConnector implements Connector {
     "syncContacts",
   ];
 
-  constructor(public readonly provider: ConnectorProvider = "google") {}
+  constructor(
+    public readonly provider: ConnectorProvider = "google",
+    private readonly writesEnabled = true,
+  ) {}
 
   private write(kind: string, payload: unknown, meta: ConnectorWriteMeta): Promise<ConnectorResult> {
     return once(meta.idempotencyKey, async () => {
+      if (!this.writesEnabled) {
+        return {
+          ok: false,
+          provider: this.provider,
+          idempotencyKey: meta.idempotencyKey,
+          deduped: false,
+          mode: "mock",
+          error: `${this.provider} is not configured. Add live credentials before approving this action.`,
+        };
+      }
       const externalId = `mock_${kind}_${meta.idempotencyKey}`;
       store.push({ kind, externalId, payload });
       return {
@@ -77,14 +90,16 @@ export class MockConnector implements Connector {
     return this.write("sms", payload, meta);
   }
   async syncContacts() {
-    return { imported: 12, mode: "mock" as const };
+    return { imported: this.writesEnabled ? 12 : 0, mode: "mock" as const };
   }
   async healthCheck(): Promise<HealthStatus> {
     return {
       provider: this.provider,
-      healthy: true,
+      healthy: this.writesEnabled,
       mode: "mock",
-      detail: "Mock connector — no credentials required. All writes are local.",
+      detail: this.writesEnabled
+        ? "Local mock connector — writes stay on this machine."
+        : "Setup required — production mock writes are disabled.",
       capabilities: this.capabilities,
     };
   }
