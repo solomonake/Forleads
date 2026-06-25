@@ -81,6 +81,7 @@ export interface Repository {
   // memories (lead-scoped recall)
   saveMemory(m: Memory): Promise<Memory>;
   recallMemories(leadId: string, query: number[], k: number): Promise<MemoryHit[]>;
+  listOutcomeMemories(leadId: string): Promise<Memory[]>;
 }
 
 interface Store {
@@ -241,6 +242,11 @@ export class InMemoryRepository implements Repository {
       .map((memory) => ({ memory, similarity: cosineSimilarity(memory.embedding, query) }))
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, Math.max(1, k));
+  }
+  async listOutcomeMemories(leadId: string) {
+    return (this.s.memories.get(leadId) ?? [])
+      .filter((m) => m.kind === "outcome")
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   }
 }
 

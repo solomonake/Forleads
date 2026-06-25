@@ -164,11 +164,11 @@ export function compose(input: ComposeInput): ComposeOutput {
       let body = baseBody;
       let versionTag = PROMPT_VERSION;
       const po = input.priorOutcomes;
-      if (po?.rejected && po.rejected > 0) {
-        subject = `Last time I overstepped — quick note about ${input.address}`;
-        body = `Last note didn't land the way I hoped — I'll keep this short and won't be a pest. If a quiet check-in once a quarter is useful, just say the word; otherwise I'll back off entirely.\n\n${baseBody}`;
+      if (po?.latestVerdict === "rejected") {
+        subject = `A brief check-in about ${input.address}`;
+        body = `Hi ${input.recipientLabel},\n\nI'll keep this brief and low-pressure. If an occasional, factual property update about ${input.address} would be useful, I'm happy to send one; otherwise no need to respond and I'll leave it there.\n\n${input.agent.name}`;
         versionTag = `${PROMPT_VERSION}-postreject`;
-      } else if (po && (po.approved + po.edited) > 0) {
+      } else if (po?.latestVerdict === "approved" || po?.latestVerdict === "edited") {
         // We've already talked. Don't reintroduce — pick up the thread.
         body = `Following up on my last note — no pressure if the timing's off, just wanted to keep the line open.\n\n${baseBody}`;
         versionTag = `${PROMPT_VERSION}-followup`;
@@ -244,9 +244,9 @@ function evidenceBlock(cards: EvidenceCard[]): string {
 function liveSystem(input: ComposeInput): string {
   const po = input.priorOutcomes;
   const priorLine = po
-    ? po.rejected > 0
-      ? `- PRIOR OUTCOME: a previous draft to this lead was REJECTED by the agent. Soften tone, acknowledge the prior misstep without re-pitching the same angle, and offer to step back. Do NOT re-pitch.`
-      : po.approved + po.edited > 0
+    ? po.latestVerdict === "rejected"
+      ? `- INTERNAL PRIOR OUTCOME: the agent rejected an earlier UNSENT draft. Choose a lower-pressure angle and avoid the rejected approach. Never mention, imply, or apologize for prior recipient contact because that draft was not sent.`
+      : po.latestVerdict === "approved" || po.latestVerdict === "edited"
         ? `- PRIOR OUTCOME: a previous draft to this lead was ALREADY sent (approved/edited). Write as a follow-up that picks up the thread, not as a first touch.`
         : ""
     : "";

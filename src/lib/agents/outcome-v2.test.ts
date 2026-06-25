@@ -58,6 +58,8 @@ describe("summarizeOutcomes", () => {
       approved: 1,
       edited: 1,
       rejected: 2,
+      latestVerdict: "rejected",
+      latestAt: later.toISOString(),
       lastRejectedAt: later.toISOString(),
     });
   });
@@ -96,7 +98,10 @@ describe("composer reads outcomes (deterministic path)", () => {
     expect(second.model_trace.promptVersion).toMatch(/-postreject$/);
     const secondSubject = (second.payload as { subject: string }).subject;
     expect(secondSubject).not.toBe(firstSubject);
-    expect(secondSubject).toMatch(/last time i overstepped/i);
+    expect(secondSubject).toMatch(/brief check-in/i);
+    const secondBody = (second.payload as { body: string }).body;
+    expect(secondBody).toMatch(/low-pressure/i);
+    expect(secondBody).not.toMatch(/last note|didn't land|overstepped/i);
   });
 
   it("tags promptVersion -followup after an approval (no rejection)", async () => {
@@ -124,6 +129,42 @@ describe("composer reads outcomes (deterministic path)", () => {
     expect(second.model_trace.promptVersion).toMatch(/-followup$/);
     const body = (second.payload as { body: string }).body;
     expect(body).toMatch(/following up on my last note/i);
+  });
+
+  it("uses the latest verdict so an old rejection does not dominate a later approval", async () => {
+    const { lead, evidence } = await groundedLead("36 Latest Verdict Way");
+    const rejected = await draftArtifact({
+      agent: DEMO_AGENT,
+      lead,
+      situation: "no_contact",
+      situationConfidence: 0.9,
+      actionType: "email",
+      evidence,
+      trigger: "test",
+    });
+    await rejectArtifact(rejected.id, "Wrong angle");
+
+    const replacement = await draftArtifact({
+      agent: DEMO_AGENT,
+      lead,
+      situation: "no_contact",
+      situationConfidence: 0.9,
+      actionType: "email",
+      evidence,
+      trigger: "test",
+    });
+    await approveArtifact(replacement.id);
+
+    const next = await draftArtifact({
+      agent: DEMO_AGENT,
+      lead,
+      situation: "no_contact",
+      situationConfidence: 0.9,
+      actionType: "email",
+      evidence,
+      trigger: "test",
+    });
+    expect(next.model_trace.promptVersion).toMatch(/-followup$/);
   });
 });
 
@@ -157,6 +198,7 @@ describe("agent trace surfaces priorOutcomes", () => {
     expect(trace?.priorOutcomes).toBeDefined();
     expect(trace!.priorOutcomes!.rejected).toBe(1);
     expect(trace!.priorOutcomes!.approved).toBe(0);
+    expect(trace!.priorOutcomes!.latestVerdict).toBe("rejected");
     expect(trace!.priorOutcomes!.lastRejectedAt).toBeDefined();
   });
 

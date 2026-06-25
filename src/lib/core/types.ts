@@ -120,6 +120,8 @@ export interface PriorOutcomeSummary {
   approved: number;
   edited: number;
   rejected: number;
+  latestVerdict: OutcomeVerdict;
+  latestAt: ISODate;
   /** ISO timestamp of the most recent rejected outcome — used by the composer
    *  to soften tone when the previous attempt was refused recently. */
   lastRejectedAt?: ISODate;
