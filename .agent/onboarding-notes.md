@@ -8,9 +8,15 @@
   historical note; inspect the current worktree and follow `AGENTS.md`.
 - **Host:** Vercel (web) at https://forleads.vercel.app + Supabase project
   `vszyarwkjujvicilylqr` (micro RAM tier). **Schema + RLS + geo helpers ARE NOW APPLIED**
-  (migrations 0002_rls, 0003_geo_helpers, 0004_function_hardening tracked; 0001 schema applied
-  earlier out-of-band). All 14 app tables have RLS on; service-role key bypasses it (only path the
+  (migrations 0002_rls, 0003_geo_helpers, 0004_function_hardening, 0005_memories,
+  0006_artifact_revisions, 0007_runtime_idempotency, 0008_connector_credentials,
+  0009_outcome_memory, 0010_neighborhood_memory tracked; 0001 schema applied
+  earlier out-of-band). 0005 was applied alongside 0006-0010 on 2026-06-25 — it had been
+  skipped previously, which caused `fl_recall_memories` schema-cache misses in prod until
+  the back-fill. All 15 app tables have RLS on; service-role key bypasses it (only path the
   app uses). `spatial_ref_sys` RLS + postgis/vector-in-public are accepted PostGIS exceptions.
+  `fl_recall_memories` has explicit `set search_path = public, pg_temp` to silence the
+  Supabase mutable-search-path advisor.
 - **Persistence:** `SupabaseRepository` (src/lib/db/supabase-repo.ts) is a wired drop-in for the
   Repository interface; activates when `FORLEADS_PERSIST=supabase` AND `NEXT_PUBLIC_SUPABASE_URL` +
   `SUPABASE_SERVICE_ROLE_KEY` are present, else falls back to in-memory (logs a warning). Geo:

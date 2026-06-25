@@ -35,7 +35,7 @@ export const GET = withRoute("health", async () => {
           agent: config.agentMode,
         },
       },
-      { status: 503 },
+      { status: 503, headers: { "Retry-After": "30" } },
     );
   }
 });
