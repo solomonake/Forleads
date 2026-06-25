@@ -21,7 +21,8 @@ export class TwilioConnector implements Connector {
   constructor(
     private accountSid?: string,
     private authToken?: string,
-    private fromNumber?: string
+    private fromNumber?: string,
+    private readonly mockWritesEnabled = true,
   ) {
     this.mode = accountSid && authToken && fromNumber ? "live" : "mock";
   }
@@ -29,6 +30,16 @@ export class TwilioConnector implements Connector {
   async sendSms(payload: SmsPayload, meta: ConnectorWriteMeta): Promise<ConnectorResult> {
     return once(meta.idempotencyKey, async () => {
       if (this.mode === "mock") {
+        if (!this.mockWritesEnabled) {
+          return {
+            ok: false,
+            provider: "twilio",
+            idempotencyKey: meta.idempotencyKey,
+            deduped: false,
+            mode: "mock",
+            error: "Twilio is not configured. Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER.",
+          };
+        }
         return {
           ok: true,
           provider: "twilio",
@@ -96,9 +107,14 @@ export class TwilioConnector implements Connector {
   async healthCheck(): Promise<HealthStatus> {
     return {
       provider: "twilio",
-      healthy: this.mode === "live",
+      healthy: this.mode === "live" || this.mockWritesEnabled,
       mode: this.mode,
-      detail: this.mode === "live" ? "Connected — SMS (approved sends only)." : "Needs setup — add Twilio SID/token/from number.",
+      detail:
+        this.mode === "live"
+          ? "Connected — SMS (approved sends only)."
+          : this.mockWritesEnabled
+            ? "Local mock mode — add Twilio SID/token/from number."
+            : "Setup required — add Twilio SID/token/from number; production mock writes are disabled.",
       capabilities: this.capabilities,
     };
   }

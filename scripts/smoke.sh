@@ -29,12 +29,12 @@ STATUS=$(echo "$DRAFT" | j "d['artifact']['status']")
 echo "   artifact=$ART_ID · status=$STATUS · compliance.pass=$PASS"
 
 echo "▶ 4. Approve (human gate → idempotent connector write)"
-A1=$(curl -s -X POST "$BASE/api/approve" -H 'content-type: application/json' -d "{\"artifactId\":\"$ART_ID\"}")
+A1=$(curl -s -X POST "$BASE/api/approve" -H 'content-type: application/json' -d "{\"artifactId\":\"$ART_ID\",\"expectedRevision\":1}")
 PROV=$(echo "$A1" | j "d['connector']['provider']")
 MODE=$(echo "$A1" | j "d['connector']['mode']")
 echo "   wrote to $PROV ($MODE)"
 echo "▶ 4b. Approve AGAIN → must be deduped (idempotency)"
-A2=$(curl -s -X POST "$BASE/api/approve" -H 'content-type: application/json' -d "{\"artifactId\":\"$ART_ID\"}")
+A2=$(curl -s -X POST "$BASE/api/approve" -H 'content-type: application/json' -d "{\"artifactId\":\"$ART_ID\",\"expectedRevision\":1}")
 DEDUP=$(echo "$A2" | j "d['connector']['deduped']")
 echo "   deduped=$DEDUP"
 

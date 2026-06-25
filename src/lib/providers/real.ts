@@ -39,7 +39,7 @@ export class PublicNominatimGeocodeProvider implements GeocodeProvider {
       display_name: string;
       address?: Record<string, string>;
     }>;
-    return data.map((r) => {
+    const results = data.map((r) => {
       const a = r.address ?? {};
       const headline =
         [a.house_number, a.road].filter(Boolean).join(" ") ||
@@ -55,6 +55,19 @@ export class PublicNominatimGeocodeProvider implements GeocodeProvider {
         lat: parseFloat(r.lat),
       };
     });
+    return Array.from(
+      new Map(
+        results.map((result) => [
+          [
+            result.address.toLowerCase(),
+            result.locality?.toLowerCase() ?? "",
+            result.lng.toFixed(6),
+            result.lat.toFixed(6),
+          ].join("|"),
+          result,
+        ]),
+      ).values(),
+    );
   }
 
   async reverse(lng: number, lat: number): Promise<GeoResult | null> {

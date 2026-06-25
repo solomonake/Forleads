@@ -1,6 +1,8 @@
 # Forleads — Hosting & Setup Playbook
 
-Everything here is **optional** — the app runs fully locally in mock mode with `npm install && npm run dev`. Follow these to put it online and turn on real providers.
+Local development runs in deterministic mock mode with `npm install && npm run dev`.
+Production is different: mock connector writes are disabled by default, so an
+unconfigured integration is shown as **setup required** and fails closed.
 
 Order I recommend: **1) Git/GitHub → 2) Vercel (web is live) → 3) Supabase (real persistence) → 4) Google OAuth (real Gmail drafts) → 5) other connectors as needed.**
 
@@ -76,11 +78,16 @@ gh pr create --fill        # open a PR; Vercel auto-builds a preview URL
 1. Push to GitHub (step 1).
 2. Go to **vercel.com → Add New → Project → Import** your `forleads` repo.
 3. Framework preset: **Next.js** (auto-detected). Build command `next build`, output auto. No changes needed.
-4. **Environment Variables** (Project → Settings → Environment Variables): you can deploy with **none** (mock mode works in prod too). Add keys from `.env.example` as you enable providers. At minimum later:
+4. **Environment Variables** (Project → Settings → Environment Variables):
+   configure the live persistence and provider values from `.env.example`.
+   Production does not treat missing connector credentials as successful writes.
+   At minimum:
    - `NEXT_PUBLIC_APP_URL=https://<your-app>.vercel.app`
 5. **Deploy.** Every push to `main` redeploys; every PR gets a preview URL.
 
-That's it — the living map is online in mock mode.
+The deployment can now start, but it is client-ready only when `/api/health`
+returns `ok:true` and the Connector Hub shows the integrations needed by that
+client as `connected · live`.
 
 ---
 
@@ -121,15 +128,18 @@ This is the "ready in my drafts" magic. The MIME/base64url + `drafts.create` cal
    - `https://www.googleapis.com/auth/gmail.compose` (drafts only — not full mailbox)
    - `https://www.googleapis.com/auth/calendar.events`
 4. **Credentials → Create OAuth client ID → Web application**. Authorized redirect URI:
-   - `http://localhost:3000/api/connectors/google/callback` (local)
-   - `https://<your-app>.vercel.app/api/connectors/google/callback` (prod)
+   - `http://localhost:3000/api/auth/google/callback` (local)
+   - `https://<your-app>.vercel.app/api/auth/google/callback` (prod)
 5. Put the client id/secret in env:
    ```
    GOOGLE_CLIENT_ID=...
    GOOGLE_CLIENT_SECRET=...
-   GOOGLE_REDIRECT_URI=https://<your-app>.vercel.app/api/connectors/google/callback
+   GOOGLE_REDIRECT_URI=https://<your-app>.vercel.app/api/auth/google/callback
    ```
-6. For a quick live test you can paste a short-lived access token as `GOOGLE_ACCESS_TOKEN` (the connector reads it). For production, the full OAuth callback handler stores the token in the vaulted `connector_account` row — that's the one remaining piece to wire when you go to real multi-user auth.
+6. Complete the OAuth flow from the Account bar. The callback encrypts Google
+   tokens into the server-side `connector_credential` store; the browser cookie
+   carries only an opaque credential reference. Refreshes rotate the encrypted
+   record in place.
 
 Connector Hub will then show **Google · connected · live** and approvals create real Gmail drafts.
 
@@ -150,7 +160,8 @@ Connector Hub will then show **Google · connected · live** and approvals creat
 1. **Does the fly-to → streaming-cards moment feel magical or laggy?** (timing is in `MapWorkspace.tsx`.)
 2. **Grade honesty:** confirm Market shows **D** with an honest gap, not a fake number. Find any naked number → that's a bug.
 3. **Compliance fail-closed:** draft something with "great for families" or "near churches" → must be **blocked**, not just warned. Confirm "kids' bikes" is stripped (see Agent Trace → Excluded).
-4. **Idempotency:** approve the same artifact twice → second is `deduped`.
+4. **Idempotency:** approve the same artifact revision twice → second is
+   `deduped`, including after an application cold start.
 5. **Auditability:** every draft has a "Why this happened" trace; every loop run shows its planner steps.
 
 **Feedback that moves the product most:**

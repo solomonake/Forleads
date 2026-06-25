@@ -11,15 +11,21 @@ import type {
   AgentTrace,
   Artifact,
   ConnectorAccount,
+  ConnectorWrite,
+  ConnectorCredential,
   DomainEvent,
   EvidenceCard,
   LeadSurface,
   LoopDefinition,
   LoopRun,
+  Memory,
+  MemoryHit,
   Note,
   Watcher,
   WeeklyReport,
 } from "@/lib/core/types";
+
+import { cosineSimilarity } from "@/lib/agents/embedder";
 
 export interface Repository {
   // agents
@@ -44,11 +50,17 @@ export interface Repository {
   saveArtifact(a: Artifact): Promise<Artifact>;
   getArtifact(id: string): Promise<Artifact | null>;
   updateArtifact(id: string, patch: Partial<Artifact>): Promise<Artifact | null>;
+  updateArtifactAtRevision(
+    id: string,
+    expectedRevision: number,
+    patch: Partial<Artifact>
+  ): Promise<Artifact | null>;
   listArtifacts(agentId: string): Promise<Artifact[]>;
 
   // domain events
   appendEvent(e: DomainEvent): Promise<DomainEvent>;
   listEvents(agentId: string): Promise<DomainEvent[]>;
+  getEventByIdempotencyKey(agentId: string, key: string): Promise<DomainEvent | null>;
 
   // loops
   listLoopDefs(agentId: string): Promise<LoopDefinition[]>;
@@ -73,6 +85,22 @@ export interface Repository {
   // connector accounts
   listConnectorAccounts(agentId: string): Promise<ConnectorAccount[]>;
   upsertConnectorAccount(a: ConnectorAccount): Promise<ConnectorAccount>;
+  getConnectorCredential(id: string): Promise<ConnectorCredential | null>;
+  upsertConnectorCredential(credential: ConnectorCredential): Promise<ConnectorCredential>;
+  getConnectorWrite(key: string): Promise<ConnectorWrite | null>;
+  saveConnectorWrite(write: ConnectorWrite): Promise<ConnectorWrite>;
+
+  // memories (lead-scoped recall)
+  saveMemory(m: Memory): Promise<Memory>;
+  recallMemories(leadId: string, query: number[], k: number): Promise<MemoryHit[]>;
+  listOutcomeMemories(leadId: string): Promise<Memory[]>;
+  /** Cross-lead recall scoped to an area cell. The writer accepts only
+   * provider-backed A/B market facts. Agent scope must never be crossed. */
+  recallNeighborhood(
+    agentId: string,
+    h3Index: string,
+    k: number,
+  ): Promise<MemoryHit[]>;
 }
 
 interface Store {
@@ -82,12 +110,15 @@ interface Store {
   notes: Map<string, Note[]>;
   artifacts: Map<string, Artifact>;
   events: DomainEvent[];
+  connectorWrites: Map<string, ConnectorWrite>;
   loopDefs: Map<string, LoopDefinition>;
   loopRuns: LoopRun[];
   watchers: Map<string, Watcher>;
   traces: Map<string, AgentTrace>;
   reports: WeeklyReport[];
   connectorAccounts: Map<string, ConnectorAccount>;
+  connectorCredentials: Map<string, ConnectorCredential>;
+  memories: Map<string, Memory[]>; // keyed by lead_surface_id
 }
 
 export class InMemoryRepository implements Repository {
@@ -151,6 +182,13 @@ export class InMemoryRepository implements Repository {
     this.s.artifacts.set(id, next);
     return next;
   }
+  async updateArtifactAtRevision(id: string, expectedRevision: number, patch: Partial<Artifact>) {
+    const cur = this.s.artifacts.get(id);
+    if (!cur || cur.revision !== expectedRevision) return null;
+    const next = { ...cur, ...patch };
+    this.s.artifacts.set(id, next);
+    return next;
+  }
   async listArtifacts(agentId: string) {
     return [...this.s.artifacts.values()]
       .filter((a) => a.agent_id === agentId)
@@ -163,6 +201,11 @@ export class InMemoryRepository implements Repository {
   }
   async listEvents(agentId: string) {
     return this.s.events.filter((e) => e.agent_id === agentId);
+  }
+  async getEventByIdempotencyKey(agentId: string, key: string) {
+    return this.s.events.find(
+      (event) => event.agent_id === agentId && event.idempotency_key === key,
+    ) ?? null;
   }
 
   async listLoopDefs(agentId: string) {
@@ -216,8 +259,58 @@ export class InMemoryRepository implements Repository {
     return [...this.s.connectorAccounts.values()].filter((a) => a.agent_id === agentId);
   }
   async upsertConnectorAccount(a: ConnectorAccount) {
-    this.s.connectorAccounts.set(a.provider, a);
+    this.s.connectorAccounts.set(`${a.agent_id}:${a.provider}`, a);
     return a;
+  }
+  async getConnectorCredential(id: string) {
+    const credential = this.s.connectorCredentials.get(id) ?? null;
+    return credential?.revoked_at ? null : credential;
+  }
+  async upsertConnectorCredential(credential: ConnectorCredential) {
+    this.s.connectorCredentials.set(credential.id, credential);
+    return credential;
+  }
+  async getConnectorWrite(key: string) {
+    return this.s.connectorWrites.get(key) ?? null;
+  }
+  async saveConnectorWrite(write: ConnectorWrite) {
+    this.s.connectorWrites.set(write.idempotency_key, write);
+    return write;
+  }
+
+  async saveMemory(m: Memory) {
+    const arr = this.s.memories.get(m.lead_surface_id) ?? [];
+    arr.push(m);
+    this.s.memories.set(m.lead_surface_id, arr);
+    return m;
+  }
+  async recallMemories(leadId: string, query: number[], k: number) {
+    const rows = this.s.memories.get(leadId) ?? [];
+    return rows
+      .map((memory) => ({ memory, similarity: cosineSimilarity(memory.embedding, query) }))
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, Math.max(1, k));
+  }
+  async listOutcomeMemories(leadId: string) {
+    return (this.s.memories.get(leadId) ?? [])
+      .filter((m) => m.kind === "outcome")
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  }
+  async recallNeighborhood(agentId: string, h3Index: string, k: number) {
+    // The in-memory store keys by lead_surface_id; neighborhood priors are
+    // sprinkled across leads. Walk every bucket, filter by (agent, h3, kind),
+    // sort by recency (no query embedding — every match is on-cell, score = 1).
+    const matches: Memory[] = [];
+    for (const arr of this.s.memories.values()) {
+      for (const m of arr) {
+        if (m.kind !== "neighborhood") continue;
+        if (m.agent_id !== agentId) continue;
+        if (m.h3_index !== h3Index) continue;
+        matches.push(m);
+      }
+    }
+    matches.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    return matches.slice(0, Math.max(1, k)).map((m) => ({ memory: m, similarity: 1 }));
   }
 }
 
@@ -235,5 +328,8 @@ export function emptyStore(): Store {
     traces: new Map(),
     reports: [],
     connectorAccounts: new Map(),
+    connectorCredentials: new Map(),
+    connectorWrites: new Map(),
+    memories: new Map(),
   };
 }

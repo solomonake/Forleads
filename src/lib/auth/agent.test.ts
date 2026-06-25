@@ -1,13 +1,32 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEMO_AGENT_ID } from "@/lib/core/config";
 
 // Steer getSession without a Next request context.
-const session = { value: null as null | { sub: string } };
+const session = { value: null as null | { sub: string; name?: string; email?: string } };
 vi.mock("./session", () => ({
   getSession: () => session.value,
 }));
 
-import { agentIdForSub, currentAgentId, readAgentId, requireAgentId } from "./agent";
+import {
+  agentIdForSub,
+  currentAgentId,
+  ensureCurrentAgent,
+  readAgentId,
+  readAgentIdEnsured,
+  requireAgentId,
+} from "./agent";
+import { getRepo } from "@/lib/db";
+
+interface RepoGlobal {
+  __forleadsRepo?: unknown;
+  __forleadsSeeded?: unknown;
+}
+const g = globalThis as unknown as RepoGlobal;
+
+beforeEach(() => {
+  g.__forleadsRepo = undefined;
+  g.__forleadsSeeded = undefined;
+});
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,26 +56,78 @@ describe("agentIdForSub", () => {
 });
 
 describe("currentAgentId / requireAgentId", () => {
-  it("is null when unauthenticated (mutating routes must 401)", () => {
+  it("is null when unauthenticated (mutating routes must 401)", async () => {
     session.value = null;
-    expect(currentAgentId()).toBeNull();
-    expect(requireAgentId()).toBeNull();
+    expect(await currentAgentId()).toBeNull();
+    expect(await requireAgentId()).toBeNull();
   });
 
-  it("is the per-user id when authenticated, never client-controlled", () => {
+  it("is the per-user id when authenticated, never client-controlled", async () => {
     session.value = { sub: "google|abc" };
-    expect(currentAgentId()).toBe(agentIdForSub("google|abc"));
+    expect(await currentAgentId()).toBe(agentIdForSub("google|abc"));
   });
 });
 
 describe("readAgentId", () => {
-  it("falls back to the read-only demo workspace when logged out", () => {
+  it("falls back to the read-only demo workspace when logged out", async () => {
     session.value = null;
-    expect(readAgentId()).toBe(DEMO_AGENT_ID);
+    expect(await readAgentId()).toBe(DEMO_AGENT_ID);
   });
 
-  it("is the user's own workspace when logged in", () => {
+  it("is the user's own workspace when logged in", async () => {
     session.value = { sub: "google|xyz" };
-    expect(readAgentId()).toBe(agentIdForSub("google|xyz"));
+    expect(await readAgentId()).toBe(agentIdForSub("google|xyz"));
+  });
+});
+
+// Production fix (2026-06-24): JIT-provision the agent row from session data
+// so writes never FK-violate after a Supabase reset / fresh deploy.
+describe("ensureCurrentAgent", () => {
+  it("returns null when unauthenticated (no row created)", async () => {
+    session.value = null;
+    const id = await ensureCurrentAgent();
+    expect(id).toBeNull();
+  });
+
+  it("creates the agent row on first call for a new session", async () => {
+    session.value = { sub: "google|new", name: "New User", email: "new@example.com" };
+    const repo = await getRepo();
+    const id = agentIdForSub("google|new");
+    expect(await repo.getAgent(id)).toBeNull();
+
+    const returned = await ensureCurrentAgent();
+    expect(returned).toBe(id);
+
+    const row = await repo.getAgent(id);
+    expect(row).not.toBeNull();
+    expect(row?.name).toBe("New User");
+    expect(row?.email).toBe("new@example.com");
+    expect(await repo.listLoopDefs(id)).toHaveLength(4);
+    expect((await repo.listConnectorAccounts(id)).length).toBeGreaterThan(0);
+  });
+
+  it("is idempotent — repeat calls do not create duplicate rows", async () => {
+    session.value = { sub: "google|repeat", name: "R", email: "r@example.com" };
+    const a = await ensureCurrentAgent();
+    const b = await ensureCurrentAgent();
+    expect(a).toBe(b);
+  });
+});
+
+describe("readAgentIdEnsured", () => {
+  it("falls back to the seeded demo workspace when logged out", async () => {
+    session.value = null;
+    expect(await readAgentIdEnsured()).toBe(DEMO_AGENT_ID);
+  });
+
+  it("ensures the user's row exists before returning the id", async () => {
+    session.value = { sub: "google|read", name: "Reader", email: "r@x.com" };
+    const repo = await getRepo();
+    const id = agentIdForSub("google|read");
+    expect(await repo.getAgent(id)).toBeNull();
+
+    const returned = await readAgentIdEnsured();
+    expect(returned).toBe(id);
+    expect(await repo.getAgent(id)).not.toBeNull();
   });
 });

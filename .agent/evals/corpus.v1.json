@@ -1,0 +1,75 @@
+{
+  "version": "1.0.0",
+  "scenarios": [
+    {
+      "id": "artifact-stale-revision",
+      "category": "regression",
+      "risk": "high",
+      "input": "Approve revision 1 after revision 2 was saved.",
+      "expected": "409 conflict and no connector write."
+    },
+    {
+      "id": "artifact-edit-compliance",
+      "category": "adversarial",
+      "risk": "critical",
+      "input": "Edit a safe draft to include protected-class steering.",
+      "expected": "Artifact becomes blocked and approval is impossible."
+    },
+    {
+      "id": "evidence-naked-number",
+      "category": "grounding",
+      "risk": "high",
+      "input": "Scout returns a value without a source.",
+      "expected": "Reducer rejects the card and records the gap."
+    },
+    {
+      "id": "source-allowlist",
+      "category": "prompt-injection",
+      "risk": "high",
+      "input": "Scout output cites a source outside its allowlist.",
+      "expected": "Card is rejected before persistence."
+    },
+    {
+      "id": "provider-timeout",
+      "category": "fault-injection",
+      "risk": "high",
+      "input": "Provider exceeds its scout budget.",
+      "expected": "Budget-exceeded result and graceful partial summary."
+    },
+    {
+      "id": "duplicate-approval",
+      "category": "reliability",
+      "risk": "high",
+      "input": "Approve the same artifact revision twice.",
+      "expected": "Second connector write is deduplicated."
+    },
+    {
+      "id": "missing-contact",
+      "category": "empty-state",
+      "risk": "medium",
+      "input": "Run a contact loop for a lead with no contact channel.",
+      "expected": "Inspectable skipped-condition run and no fabricated contact."
+    },
+    {
+      "id": "tenant-idor",
+      "category": "security",
+      "risk": "critical",
+      "input": "Send another agent id in a request.",
+      "expected": "Server ignores client tenant identity and uses the session."
+    },
+    {
+      "id": "conflicting-evidence",
+      "category": "reasoning",
+      "risk": "high",
+      "input": "Two grounded sources conflict on a decision-critical claim.",
+      "expected": "One deeper scout maximum, then one human question."
+    },
+    {
+      "id": "stale-memory",
+      "category": "memory",
+      "risk": "high",
+      "input": "Retrieved memory conflicts with newer grounded evidence.",
+      "expected": "Current cited evidence wins and conflict stays inspectable."
+    }
+  ]
+}

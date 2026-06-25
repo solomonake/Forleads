@@ -19,17 +19,31 @@ import type {
   LeadSurface,
   ReduceSummary,
   ScoutResult,
+  ScoutType,
   Situation,
 } from "@/lib/core/types";
 import { planDispatch } from "@/lib/agents/dispatcher";
-import { runScoutCached } from "@/lib/agents/scouts";
+import { runScout, runScoutCached } from "@/lib/agents/scouts";
 import { reduce } from "@/lib/agents/reducer";
+import {
+  persistEvidenceMemory,
+  persistEventMemory,
+  persistNeighborhoodMemory,
+  persistOutcomeMemory,
+  recallForLead,
+  recallNeighborhood,
+  renderNeighborhoodNote,
+  recallOutcomes,
+  renderRecallNote,
+  summarizeOutcomes,
+} from "@/lib/agents/memory";
 import { composeBest } from "@/lib/agents/composer";
 import { config } from "@/lib/core/config";
 import { lintArtifactText } from "@/lib/agents/compliance";
 import { buildTrace } from "@/lib/agents/trace";
 import { connectorForAction } from "@/lib/connectors";
 import { getRepo } from "@/lib/db";
+import { log } from "@/lib/observability";
 
 // ---- Events -----------------------------------------------------------------
 
@@ -38,18 +52,28 @@ export async function emit(
   type: DomainEventType,
   payload: Record<string, unknown>,
   source: string,
-  leadId?: string
+  leadId?: string,
+  idempotencyKeyValue?: string,
 ): Promise<DomainEvent> {
   const repo = await getRepo();
-  return repo.appendEvent({
+  if (idempotencyKeyValue) {
+    const prior = await repo.getEventByIdempotencyKey(agentId, idempotencyKeyValue);
+    if (prior) return prior;
+  }
+  const event = await repo.appendEvent({
     id: uuid(),
     agent_id: agentId,
     lead_surface_id: leadId,
     type,
     payload,
     source,
+    idempotency_key: idempotencyKeyValue,
     created_at: nowISO(),
   });
+  if (["artifact.edited", "artifact.approved", "artifact.sent", "email.reply"].includes(type)) {
+    await persistEventMemory(event).catch(() => null);
+  }
+  return event;
 }
 
 // ---- Lead creation / lookup -------------------------------------------------
@@ -70,7 +94,6 @@ export async function ensureLead(
     lat: input.lat,
     h3_index: h3Key(input.lng, input.lat),
     status: "researching",
-    contact: { email: "owner@example.com" }, // mock contact channel so the loop runs
     first_seen_at: nowISO(),
     last_worked_at: nowISO(),
   };
@@ -130,25 +153,180 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
   const started = Date.now();
   await emit(lead.agent_id, "lead.tapped", { address: lead.address, status: lead.status }, "pipeline", lead.id);
 
+  // Lead-scoped recall BEFORE we spend any scout budget. The address +
+  // locality is a stable, scope-faithful query string for the property/risk
+  // facts the dispatcher would otherwise re-research.
+  const recall = await recallForLead(
+    lead,
+    `${lead.address}${lead.locality ? ", " + lead.locality : ""}`,
+  );
+
+  // Observability: a silent recall is an unverifiable recall. Emit a structured
+  // log AND a domain event whenever recall returns hits, so prod traffic proves
+  // the path actually fires and the Agent Trace shows it for any tap.
+  if (recall.hits.length > 0) {
+    log("info", "recall.fired", {
+      leadId: lead.id,
+      hits: recall.hits.length,
+      priorGrounded: recall.priorGroundedCount,
+      sufficient: recall.sufficient,
+    });
+    await emit(
+      lead.agent_id,
+      "memory.recalled",
+      {
+        hits: recall.hits.length,
+        priorGrounded: recall.priorGroundedCount,
+        sufficient: recall.sufficient,
+        refs: recall.refs,
+      },
+      "memory",
+      lead.id,
+    );
+  }
+
+  // Cross-lead H3-cell recall — compute the SET of scout types that already
+  // have an A/B-grade fact on this block from a sibling lead. The dispatcher
+  // uses it to skip redundant scouts. We do this BEFORE the swarm so the
+  // skipped scouts never run.
+  const neighborhoodHits = lead.h3_index
+    ? await recallNeighborhood(lead.agent_id, lead.h3_index)
+    : [];
+  const siblingHits = neighborhoodHits.filter(
+    (h) => h.memory.lead_surface_id !== lead.id,
+  );
+  const neighborhoodCoveredScouts: ScoutType[] = [];
+  for (const h of siblingHits) {
+    // Parse the scout tag from the stored surface form ("[<scout>/<grade>] …").
+    const m = /^\[([a-z]+)\/([A-D])\]/.exec(h.memory.text);
+    if (!m) continue;
+    if (m[2] !== "A" && m[2] !== "B") continue;
+    const scoutType = m[1] as ScoutType;
+    if (!neighborhoodCoveredScouts.includes(scoutType)) {
+      neighborhoodCoveredScouts.push(scoutType);
+    }
+  }
+
   const plan = await planDispatch({
     lng: lead.lng,
     lat: lead.lat,
     address: lead.address,
     status: lead.status,
+    priorMemoryRefs: recall.refs,
+    priorGroundedCount: recall.priorGroundedCount,
+    neighborhoodCoveredScouts,
   });
 
-  // Fan out in parallel — bounded by the dispatcher to <= 5.
-  const scoutResults = await Promise.all(
+  // Fan out in parallel — bounded by the dispatcher to <= 5. Promise.allSettled
+  // (NOT Promise.all) so one provider's exception cannot 500 the whole tap:
+  // each failing scout becomes a status="error" result with the message in
+  // gaps, and the reducer keeps composing whatever did succeed.
+  const settled = await Promise.allSettled(
     plan.scouts.map((job) => runScoutCached({ lng: lead.lng, lat: lead.lat, address: lead.address, job }))
   );
+  const scoutResults: ScoutResult[] = settled.map((s, i) => {
+    if (s.status === "fulfilled") return s.value;
+    const job = plan.scouts[i]!;
+    const message = s.reason instanceof Error ? s.reason.message : String(s.reason);
+    log("warn", "scout.degraded", { leadId: lead.id, scout: job.type, error: message });
+    return {
+      scout: job.type,
+      cards: [],
+      gaps: [`scout failed: ${message}`],
+      cost: { ms: 0, tokens: 0, calls: 0 },
+      status: "error" as const,
+    };
+  });
 
-  const { summary, rejected } = reduce(scoutResults, Date.now() - started);
+  let reduced = reduce(scoutResults, Date.now() - started);
+  if (reduced.summary.breakout?.kind === "deeper_scout") {
+    const target = reduced.summary.breakout.target;
+    const targetCard = reduced.summary.cards.find((card) => card.claim === target);
+    const originalJob = plan.scouts.find((job) => job.type === targetCard?.scout);
+    if (originalJob) {
+      // Same degrade-gracefully envelope as the main fanout: the breakout
+      // is best-effort and must never 500 the tap.
+      let deeper: ScoutResult;
+      try {
+        deeper = await runScout({
+          lng: lead.lng,
+          lat: lead.lat,
+          address: lead.address,
+          job: {
+            ...originalJob,
+            why: `Single depth-one breakout for conflicting claim: ${target}`,
+            budget: {
+              maxCalls: originalJob.budget.maxCalls + 1,
+              maxMs: Math.round(originalJob.budget.maxMs * 1.5),
+              maxTokens: Math.round(originalJob.budget.maxTokens * 1.5),
+            },
+          },
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        log("warn", "scout.degraded", { leadId: lead.id, scout: originalJob.type, error: message, breakout: true });
+        deeper = {
+          scout: originalJob.type,
+          cards: [],
+          gaps: [`breakout scout failed: ${message}`],
+          cost: { ms: 0, tokens: 0, calls: 0 },
+          status: "error",
+        };
+      }
+      scoutResults.push(deeper);
+      reduced = reduce(scoutResults, Date.now() - started);
+      if (reduced.summary.breakout?.kind === "deeper_scout") {
+        reduced.summary.breakout = {
+          kind: "ask_human",
+          target,
+          question: `Sources still conflict on "${target}". Can you confirm the correct value?`,
+          reason: "The single permitted deeper scout did not resolve the conflict.",
+        };
+      }
+    }
+  }
+  const { summary, rejected } = reduced;
   await repo.saveEvidence(lead.id, summary.cards);
+
+  // Persist every reduced card for lead-scoped recall. The neighborhood writer
+  // independently accepts only transferable A/B area facts.
+  for (const card of summary.cards) {
+    await persistEvidenceMemory(lead.agent_id, lead, card);
+    await persistNeighborhoodMemory(lead.agent_id, lead, card);
+  }
+
+  // Reuse the cross-lead hits we already pulled at the top of runSwarm — same
+  // privacy guarantees (agent-scoped, neighborhood-kind only).
+  const neighborhoodCount = siblingHits.length;
+  const neighborhoodNote = renderNeighborhoodNote(neighborhoodCount);
+
+  const recallNote = renderRecallNote(recall);
+  // Project hits into a UI-safe shape (no embeddings) and sort newest-first
+  // so the rail's expanded list reads top-down as "most recent prior signal".
+  const recalledHits = recall.hits.length
+    ? recall.hits
+        .map((h) => ({
+          memoryId: h.memory.id,
+          kind: h.memory.kind,
+          text: h.memory.text,
+          confidence: h.memory.confidence,
+          ref: h.memory.ref,
+          createdAt: h.memory.created_at,
+        }))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    : undefined;
+  const summaryWithRecall: ReduceSummary = {
+    ...summary,
+    ...(recallNote ? { recallNote } : {}),
+    ...(recalledHits ? { recalledHits } : {}),
+    ...(neighborhoodCount > 0 ? { neighborhoodPriors: neighborhoodCount } : {}),
+    ...(neighborhoodNote ? { neighborhoodNote } : {}),
+  };
 
   const updated = { ...lead, status: lead.status === "new" ? "researching" : lead.status, last_worked_at: nowISO() } as LeadSurface;
   await repo.upsertLead(updated);
 
-  return { lead: updated, summary, rejected, scoutResults };
+  return { lead: updated, summary: summaryWithRecall, rejected, scoutResults };
 }
 
 // ---- Draft ------------------------------------------------------------------
@@ -168,6 +346,17 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
   const repo = await getRepo();
   const { agent, lead } = input;
 
+  // Outcome recall — what did the human ALREADY do with prior drafts for this
+  // lead+actionType? Best-effort: if recall fails, draft with no prior context
+  // rather than block. Composer takes the base template path when undefined.
+  let priorOutcomes: import("@/lib/core/types").PriorOutcomeSummary | undefined;
+  try {
+    const memos = await recallOutcomes(lead, input.actionType);
+    if (memos.length > 0) priorOutcomes = summarizeOutcomes(memos);
+  } catch {
+    priorOutcomes = undefined;
+  }
+
   const composed = await composeBest({
     agent,
     situation: input.situation,
@@ -177,6 +366,7 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
     recipientEmail: lead.contact?.email,
     recipientPhone: lead.contact?.phone,
     evidence: input.evidence,
+    priorOutcomes,
   });
 
   // Compliance lint the human-visible text (fail-closed).
@@ -208,9 +398,14 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
       model: isLive ? config.claudeModel : "deterministic-composer",
       promptVersion: composed.promptVersion,
       mode: isLive ? "live" : "mock",
+      tokens: composed.modelUsage
+        ? composed.modelUsage.inputTokens + composed.modelUsage.outputTokens
+        : undefined,
     },
     trace_id: traceId,
+    revision: 1,
     created_at: nowISO(),
+    updated_at: nowISO(),
   };
   await repo.saveArtifact(artifact);
 
@@ -224,7 +419,17 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
     evidenceUsed: composed.evidenceUsed,
     excluded: composed.excluded,
     compliance,
-    cost: { claudeCalls: isLive ? 1 : 0, paidDataCalls: 0, ms: 0 },
+    cost: {
+      claudeCalls: isLive ? 1 : 0,
+      paidDataCalls: 0,
+      ms: 0,
+      inputTokens: composed.modelUsage?.inputTokens,
+      outputTokens: composed.modelUsage?.outputTokens,
+      cacheReadTokens: composed.modelUsage?.cacheReadTokens,
+      cacheWriteTokens: composed.modelUsage?.cacheWriteTokens,
+      fallbackReason: composed.fallbackReason,
+    },
+    priorOutcomes,
   });
   // Bind the trace's id to the one referenced by the artifact.
   trace.id = traceId;
@@ -250,11 +455,17 @@ export interface ApproveResult {
 
 export async function approveArtifact(
   artifactId: string,
+  expectedRevision: number,
   opts?: { googleAccessToken?: string }
 ): Promise<ApproveResult | null> {
   const repo = await getRepo();
   const artifact = await repo.getArtifact(artifactId);
   if (!artifact) return null;
+  if (artifact.revision !== expectedRevision) {
+    throw new Error(
+      `Artifact changed since review (expected revision ${expectedRevision}, current ${artifact.revision}).`
+    );
+  }
 
   // Fail-closed: a blocked artifact can never be approved/sent.
   if (artifact.status === "blocked" || !artifact.compliance_result.pass) {
@@ -262,8 +473,25 @@ export async function approveArtifact(
   }
 
   const connector = connectorForAction(artifact.type, opts);
-  const key = idempotencyKey([artifact.id, artifact.type, connector.provider]);
+  const key = idempotencyKey([
+    artifact.id,
+    String(artifact.revision),
+    artifact.type,
+    connector.provider,
+  ]);
   const meta = { idempotencyKey: key, agentId: artifact.agent_id, leadSurfaceId: artifact.lead_surface_id };
+
+  const durablePrior = await repo.getConnectorWrite(key);
+  if (durablePrior) {
+    return {
+      artifact,
+      connector: {
+        provider: durablePrior.provider,
+        ...durablePrior.result,
+        deduped: true,
+      },
+    };
+  }
 
   // Route to the right connector method by action type.
   let result;
@@ -287,12 +515,38 @@ export async function approveArtifact(
       result = await connector.writeCrmNote(artifact.payload as never, meta);
       break;
   }
+  if (result.ok) {
+    await repo.saveConnectorWrite({
+      id: uuid(),
+      agent_id: artifact.agent_id,
+      artifact_id: artifact.id,
+      provider: result.provider,
+      idempotency_key: key,
+      result: {
+        ok: result.ok,
+        externalId: result.externalId,
+        url: result.url,
+        deduped: result.deduped,
+        mode: result.mode,
+        error: result.error,
+      },
+      created_at: nowISO(),
+    });
+  }
+
+  if (!result.ok) {
+    throw new Error(
+      `Connector write failed: ${result.error ?? `${result.provider} returned an unsuccessful result`}`,
+    );
+  }
 
   // Email drafts are "drafted in the user's tool" (sent=false); others are written.
   const isEmailDraft = artifact.type === "email";
   const updated = await repo.updateArtifact(artifact.id, {
     status: isEmailDraft ? "approved" : "sent",
     approved_at: nowISO(),
+    approved_revision: artifact.revision,
+    updated_at: nowISO(),
     sent_at: isEmailDraft ? undefined : nowISO(),
     external_draft_ref: result.externalId
       ? { provider: result.provider, externalId: result.externalId, url: result.url, idempotencyKey: key }
@@ -320,6 +574,34 @@ export async function approveArtifact(
   );
   await emit(artifact.agent_id, "connector.write", { provider: result.provider, idempotencyKey: key, ok: result.ok }, "connector", artifact.lead_surface_id);
 
+  // Outcome memory — best-effort. The composer next time can warn before
+  // drafting a duplicate offer to this same lead.
+  const latestEdit = artifact.edit_history?.at(-1);
+  const editedExcerpt =
+    latestEdit?.field === "body" ? latestEdit.after.slice(0, 240) : undefined;
+  const verdict = editedExcerpt ? "edited" : "approved";
+  const outcomeMem = await persistOutcomeMemory(
+    updated!,
+    verdict,
+    editedExcerpt,
+  );
+  // Always emit the verdict event, even if the memory write fell back to
+  // null. The verdict IS the human gate signal — prod observability needs
+  // the count to match real approvals/rejections, not just the ones we
+  // happened to persist.
+  await emit(
+    artifact.agent_id,
+    "outcome.recorded",
+    {
+      verdict,
+      artifactId: artifact.id,
+      persisted: outcomeMem !== null,
+      ...(outcomeMem ? { memoryId: outcomeMem.id } : {}),
+    },
+    "memory",
+    artifact.lead_surface_id,
+  );
+
   // Advance the lead's status to contacted.
   if (artifact.lead_surface_id) {
     const lead = await repo.getLead(artifact.lead_surface_id);
@@ -338,6 +620,60 @@ export async function approveArtifact(
       error: result.error,
     },
   };
+}
+
+// ---- Reject (the OTHER human gate) ------------------------------------------
+
+export interface RejectResult {
+  artifact: Artifact;
+  memoryId?: string;
+}
+
+/** The human's "no" — write a `cancelled` artifact + outcome memory so the
+ *  composer can adjust next time. Reason is free-text and optional. */
+export async function rejectArtifact(
+  artifactId: string,
+  reason?: string,
+): Promise<RejectResult | null> {
+  const repo = await getRepo();
+  const artifact = await repo.getArtifact(artifactId);
+  if (!artifact) return null;
+  // Idempotent: rejecting an already-cancelled artifact is a no-op.
+  if (artifact.status === "cancelled") return { artifact };
+
+  const updated = await repo.updateArtifact(artifact.id, {
+    status: "cancelled",
+  });
+
+  await emit(
+    artifact.agent_id,
+    "artifact.cancelled",
+    { artifactId: artifact.id, reason: reason ?? null },
+    "pipeline",
+    artifact.lead_surface_id,
+  );
+
+  const outcomeMem = await persistOutcomeMemory(
+    updated!,
+    "rejected",
+    reason,
+  );
+  // Always emit — see approve path for the rationale.
+  await emit(
+    artifact.agent_id,
+    "outcome.recorded",
+    {
+      verdict: "rejected",
+      artifactId: artifact.id,
+      persisted: outcomeMem !== null,
+      reason: reason ?? null,
+      ...(outcomeMem ? { memoryId: outcomeMem.id } : {}),
+    },
+    "memory",
+    artifact.lead_surface_id,
+  );
+
+  return { artifact: updated!, memoryId: outcomeMem?.id };
 }
 
 function nextStatus(s: LeadStatus): LeadStatus {

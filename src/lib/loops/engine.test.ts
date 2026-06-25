@@ -17,7 +17,9 @@ describe("Action Loop Engine", () => {
 
   it("no-contact loop produces an inspectable artifact and logs the run", async () => {
     const repo = await getRepo();
-    const lead = await groundedLead("12 Oak Street", -122.4469, 37.7694);
+    const grounded = await groundedLead("12 Oak Street", -122.4469, 37.7694);
+    await repo.upsertLead({ ...grounded, contact: { email: "owner@example.test" } });
+    const lead = (await repo.getLead(grounded.id))!;
     const def = await repo.getLoopDef("loop-no-contact");
     expect(def).toBeTruthy();
 
@@ -63,6 +65,20 @@ describe("Action Loop Engine", () => {
     expect(run.planner_trace.some((s) => s.outcome === "fail")).toBe(true);
     expect(run.artifact_ids).toHaveLength(0);
   });
+
+  it("skips honestly when no contact channel exists", async () => {
+    const repo = await getRepo();
+    const lead = await groundedLead("4 Honest Gap Way", -71.1, 42.3);
+    const def = await repo.getLoopDef("loop-no-contact");
+    const run = await runLoop(def!, {
+      lead,
+      situation: "no_contact",
+      evidence: await repo.listEvidence(lead.id),
+      triggerSource: "test",
+    });
+    expect(run.status).toBe("skipped_condition");
+    expect(run.planner_trace.some((step) => step.detail.includes("No contact channel"))).toBe(true);
+  });
 });
 
 describe("draft state transitions + human gate", () => {
@@ -83,7 +99,7 @@ describe("draft state transitions + human gate", () => {
     });
     expect(artifact.status).toBe("drafted");
 
-    const result = await approveArtifact(artifact.id);
+    const result = await approveArtifact(artifact.id, artifact.revision);
     expect(result).toBeTruthy();
     expect(result!.artifact.status).toBe("approved");
     expect(result!.artifact.external_draft_ref).toBeTruthy();
@@ -102,8 +118,9 @@ describe("draft state transitions + human gate", () => {
       evidence: await repo.listEvidence(lead.id),
       trigger: "test",
     });
-    const a = await approveArtifact(artifact.id);
-    const b = await approveArtifact(artifact.id);
+    const a = await approveArtifact(artifact.id, artifact.revision);
+    resetIdempotencyLedger(); // simulate a cold server instance
+    const b = await approveArtifact(artifact.id, artifact.revision);
     expect(b!.connector.deduped).toBe(true);
     expect(a!.connector.externalId).toBe(b!.connector.externalId);
   });

@@ -1,7 +1,7 @@
 // POST /api/lead — ensure a lead surface, run the scout swarm, return graded,
 // cited evidence cards + the reduce summary (the "fly-to" loading window).
 import { NextRequest, NextResponse } from "next/server";
-import { requireAgentId } from "@/lib/auth/agent";
+import { ensureCurrentAgent } from "@/lib/auth/agent";
 import { log, withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { num, optStr, str, validateBody } from "@/lib/validation";
@@ -14,7 +14,7 @@ export const POST = withRoute("lead", async (req: NextRequest) => {
     lat: num(b, "lat"),
     locality: optStr(b, "locality", { max: 200 }),
   }));
-  const agentId = requireAgentId();
+  const agentId = await ensureCurrentAgent();
   if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
   // Discovery fans out to the external (Overpass) budget — the binding
   // constraint. Tightest limit of any route. (.agent/audits/…capacity-envelope.md)

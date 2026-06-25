@@ -37,16 +37,12 @@ Other scripts:
 ```bash
 npm run typecheck   # tsc --noEmit
 npm run lint        # next lint
-npm test            # vitest (87 tests)
+npm test            # deterministic Vitest suite
 npm run build       # next production build
-npm run agent:scorecard # production policy + typecheck + lint + tests + atomic handoff
+npm run agent:doctor
+npm run agent:check -- --risk=high
+npm run agent:scorecard
 ```
-
-Agent/model handoffs are machine-backed in `.agent/`: edit
-`session-state.json` when the objective changes, then run
-`npm run agent:scorecard`. The generated `CHECKPOINT.json`, `SCORECARD.json`,
-and `SESSION_HANDOFF.md` preserve exact progress across crashes and
-Claude/Codex switches.
 
 ---
 
@@ -72,6 +68,7 @@ Claude/Codex switches.
 - **EvidenceCard contract:** if `confidence !== 'D'` then `sources ≥ 1` and `value != null`; `'D'` means `value: null` + honest gap. (`src/lib/evidence/validate.ts`, DB `evidence_contract` check)
 - **Fail-closed compliance:** every outbound artifact is screened; a blocking flag makes it un-approvable. (`src/lib/agents/compliance.ts`, DB `compliance_gate` check)
 - **Human gate:** nothing sends without explicit approve. Email = draft-first.
+- **Revision-safe review:** edits persist, rerun compliance, and invalidate stale approvals.
 - **Idempotent connector writes:** retries never duplicate side effects. (`src/lib/connectors/idempotency.ts`, DB `connector_write.idempotency_key UNIQUE`)
 - **Auditability:** every artifact has an Agent Trace; every loop run is logged.
 - **No protected attributes stored; no secrets client-side.**
@@ -98,6 +95,14 @@ See `.env.example` for every key. The **Connector Hub** screen shows mock/live s
 ## Hosting setup (Vercel + Supabase)
 
 See **[docs/SETUP.md](docs/SETUP.md)** for the full step-by-step (git/GitHub, Vercel deploy, Supabase schema + RLS, Google OAuth for real Gmail drafts, and the recommended test plan).
+
+## Product Engineering OS
+
+`AGENTS.md` is the model-neutral operating contract for Codex and Claude.
+`.agent/` holds plans, decisions, learned failures, source provenance,
+evaluations, stress baselines, and historical handoffs. The commands under
+`agent:*` produce narrow context packs and select proof gates by risk instead of
+depending on a model to remember a giant prompt.
 
 ---
 

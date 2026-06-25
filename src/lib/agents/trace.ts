@@ -10,6 +10,7 @@ import type {
   Artifact,
   ComplianceResult,
   EvidenceCard,
+  PriorOutcomeSummary,
 } from "@/lib/core/types";
 
 export interface BuildTraceInput {
@@ -28,7 +29,8 @@ export interface BuildTraceInput {
     idempotencyKey: string;
     sent: boolean;
   };
-  cost: { claudeCalls: number; paidDataCalls: number; ms: number };
+  cost: AgentTrace["cost"];
+  priorOutcomes?: PriorOutcomeSummary;
 }
 
 export function buildTrace(input: BuildTraceInput): AgentTrace {
@@ -60,6 +62,7 @@ export function buildTrace(input: BuildTraceInput): AgentTrace {
     })),
     excluded: input.excluded,
     policy,
+    priorOutcomes: input.priorOutcomes,
     connector: input.connector,
     cost: input.cost,
     created_at: nowISO(),

@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
 import { buildAuthUrl, googleConfigured } from "@/lib/auth/google";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   if (!googleConfigured()) {
     // No creds yet → bounce home with a flag the UI explains.

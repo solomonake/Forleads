@@ -2,21 +2,27 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
-import { addressKey } from "@/lib/core/geo";
 import type {
   Artifact,
   Confidence,
   EvidenceCard,
   LeadSurface,
   NoteClassification,
+  RecalledHit,
   ReduceSummary,
   ScoutType,
   SuggestedAction,
 } from "@/lib/core/types";
-import { synthesizeGeoResult } from "@/lib/providers/mock";
 import type { GeoResult } from "@/lib/providers/types";
+import { apiGet, apiPost, ApiError, ConfidenceLegend, GradeChip } from "./ui";
+
+// Toast model: success path is a green pill; failure path is a red, actionable
+// pill that exposes the server's request id (so the user can paste it in a
+// support reply) and a Retry CTA closure. Honest failures over silent ones.
+type ToastValue =
+  | { kind: "ok"; text: string }
+  | { kind: "err"; text: string; requestId?: string; retry?: () => void };
 import { ReviewTray } from "./ReviewTray";
-import { apiGet, apiPost, ConfidenceLegend, GradeChip } from "./ui";
 
 const SCOUT_GROUPS: { key: ScoutType; label: string }[] = [
   { key: "property", label: "Property" },
@@ -38,40 +44,6 @@ const SAMPLE_SEARCHES = [
   "Karen Road, Nairobi",
 ];
 
-function clientFallbackSummary(target: GeoResult, reason: string): ReduceSummary {
-  return {
-    cards: [
-      {
-        scout: "property",
-        claim: "Lead surface",
-        value: target.locality ?? target.address,
-        sources: [{ name: "Operator search" }],
-        confidence: "B",
-        reasoning:
-          "Forleads kept the lead open from the typed search so the operator can keep moving while the scout pass is retried.",
-      },
-      {
-        scout: "market",
-        claim: "Scout pass",
-        value: null,
-        sources: [],
-        confidence: "D",
-        reasoning: reason,
-      },
-    ],
-    grade: "D",
-    gaps: [reason],
-    breakout: {
-      kind: "ask_human",
-      target: "Scout pass",
-      question: "Retry the scout pass, or continue with a manual note while the lead stays open?",
-      reason: "The address resolved, but the scouting pass did not complete cleanly.",
-    },
-    scoutCount: 0,
-    elapsedMs: 0,
-  };
-}
-
 export function MapWorkspace({
   onOpenTrace,
   onNavigate,
@@ -87,6 +59,9 @@ export function MapWorkspace({
   const [query, setQuery] = useState("");
   const [suggest, setSuggest] = useState<GeoResult[]>([]);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [searchState, setSearchState] = useState<
+    "idle" | "loading" | "empty" | "error"
+  >("idle");
   const [lead, setLead] = useState<LeadSurface | null>(null);
   const [summary, setSummary] = useState<ReduceSummary | null>(null);
   const [cards, setCards] = useState<EvidenceCard[]>([]);
@@ -101,13 +76,7 @@ export function MapWorkspace({
 
   const [draft, setDraft] = useState<Artifact | null>(null);
   const [sat, setSat] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-
-  const freeform = synthesizeGeoResult(query);
-  const suggestionList =
-    freeform && !suggest.some((result) => addressKey(result.address) === addressKey(freeform.address))
-      ? [freeform, ...suggest].slice(0, 6)
-      : suggest;
+  const [toast, setToast] = useState<ToastValue | null>(null);
 
   // ---- Map init -----------------------------------------------------------
   useEffect(() => {
@@ -163,14 +132,29 @@ export function MapWorkspace({
   // ---- Geocode autocomplete ----------------------------------------------
   useEffect(() => {
     let active = true;
+    const normalized = query.trim();
+    if (normalized.length < 2) {
+      setSuggest([]);
+      setSearchState("idle");
+      return () => {
+        active = false;
+      };
+    }
+    setSearchState("loading");
     const t = setTimeout(async () => {
       try {
         const d = await apiGet<{ results: GeoResult[] }>(
           `/api/geocode?q=${encodeURIComponent(query)}`
         );
-        if (active) setSuggest(d.results);
+        if (active) {
+          setSuggest(d.results);
+          setSearchState(d.results.length > 0 ? "idle" : "empty");
+        }
       } catch {
-        if (active) setSuggest([]);
+        if (active) {
+          setSuggest([]);
+          setSearchState("error");
+        }
       }
     }, 120);
     return () => {
@@ -210,7 +194,7 @@ export function MapWorkspace({
   }, []);
 
   const pulseToast = useCallback((message: string, ms = 3200) => {
-    setToast(message);
+    setToast({ kind: "ok", text: message });
     setTimeout(() => setToast(null), ms);
   }, []);
 
@@ -292,22 +276,26 @@ export function MapWorkspace({
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : "The scout pass paused.";
-        const authenticationFailed = /401|authentication required|unauthor/i.test(message);
         setWorking(false);
         makeBeacon(target.lng, target.lat, false);
-        if (authenticationFailed) {
-          setLead(null);
-          setLeadOpen(false);
-          pulseToast("Sign in to research this address.");
-          return;
+        setLead(null); // clear the optimistic placeholder so the UI isn't stuck
+        setLeadOpen(false);
+        const requestId = error instanceof ApiError ? error.requestId : undefined;
+        const status = error instanceof ApiError ? error.status : 0;
+        const auth = status === 401 || /authentication required|unauthor/i.test(message);
+        if (auth) {
+          setToast({ kind: "err", text: "Sign in to research this address" });
+          setTimeout(() => setToast(null), 3500);
+        } else {
+          setToast({
+            kind: "err",
+            text: `Couldn't load this address — ${message}`,
+            requestId,
+            retry: () => goTo(target),
+          });
+          // Failure toast sticks until the user clicks Retry or dismisses
+          // (auto-hide hides the retry CTA before they can use it).
         }
-        const degraded = clientFallbackSummary(
-          target,
-          `The scout pass paused before full evidence loaded. ${message}.`
-        );
-        setCards(degraded.cards);
-        setSummary(degraded);
-        pulseToast("Lead opened in degraded mode — retry scouts or continue manually.");
       }
     },
     [makeBeacon, pulseToast, reduceMotion]
@@ -336,9 +324,20 @@ export function MapWorkspace({
       } catch (e) {
         setThinking(null);
         const msg = e instanceof Error ? e.message : String(e);
-        const auth = /401|authentication required|unauthor/i.test(msg);
-        setToast(auth ? "Sign in to add notes" : `Couldn't classify — ${msg}`);
-        setTimeout(() => setToast(null), 3500);
+        const requestId = e instanceof ApiError ? e.requestId : undefined;
+        const status = e instanceof ApiError ? e.status : 0;
+        const auth = status === 401 || /authentication required|unauthor/i.test(msg);
+        if (auth) {
+          setToast({ kind: "err", text: "Sign in to add notes" });
+          setTimeout(() => setToast(null), 3500);
+        } else {
+          setToast({
+            kind: "err",
+            text: `Couldn't classify the note — ${msg}`,
+            requestId,
+            retry: () => submitNote(text),
+          });
+        }
       }
     },
     [lead, pulseToast]
@@ -355,11 +354,18 @@ export function MapWorkspace({
           situationConfidence: classification.confidence,
         });
         setDraft(d.artifact);
-      } catch (error) {
-        pulseToast(error instanceof Error ? error.message : String(error));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const requestId = e instanceof ApiError ? e.requestId : undefined;
+        setToast({
+          kind: "err",
+          text: `Couldn't draft this action — ${msg}`,
+          requestId,
+          retry: () => draftIt(action),
+        });
       }
     },
-    [classification, lead, pulseToast]
+    [classification, lead]
   );
 
   const grouped = SCOUT_GROUPS.map((group) => ({
@@ -422,8 +428,9 @@ export function MapWorkspace({
                 key={sample}
                 className="launch-chip"
                 onClick={() => {
-                  const result = synthesizeGeoResult(sample);
-                  if (result) void goTo(result);
+                  setQuery(sample);
+                  setSuggestOpen(true);
+                  document.getElementById("search-input")?.focus();
                 }}
               >
                 {sample}
@@ -490,27 +497,45 @@ export function MapWorkspace({
             }}
             onFocus={() => setSuggestOpen(true)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && suggestionList[0]) void goTo(suggestionList[0]);
+              if (e.key === "Enter" && suggest[0]) void goTo(suggest[0]);
               if (e.key === "Escape") setSuggestOpen(false);
             }}
           />
           <span className="kbd">⌘K</span>
         </div>
-        <div className={`${suggestOpen && suggestionList.length ? "open" : ""}`} id="suggest">
-          {suggestionList.map((result, index) => (
+        <div
+          className={`${
+            suggestOpen && (suggest.length > 0 || searchState !== "idle") ? "open" : ""
+          }`}
+          id="suggest"
+          role="listbox"
+          aria-label="Address suggestions"
+        >
+          {searchState === "loading" && (
+            <div className="suggest-state">Searching the live address index…</div>
+          )}
+          {searchState === "empty" && (
+            <div className="suggest-state">
+              No address matches. Try a street, city, and country.
+            </div>
+          )}
+          {searchState === "error" && (
+            <div className="suggest-state error">
+              Address search is unavailable. Check your connection and retry.
+            </div>
+          )}
+          {suggest.map((p, i) => (
             <div
-              className={`sug ${index === 0 ? "active" : ""}`}
-              key={`${result.address}-${index}`}
-              onClick={() => void goTo(result)}
+              className={`sug ${i === 0 ? "active" : ""}`}
+              key={`${p.address}-${i}`}
+              onClick={() => void goTo(p)}
+              role="option"
+              aria-selected={i === 0}
             >
-              <span className="ico">{result.mode === "synthetic" ? "↗" : "⌖"}</span>
+              <span className="ico">⌖</span>
               <div>
-                <div className="t">{result.address}</div>
-                <div className="s">
-                  {result.mode === "synthetic"
-                    ? `Search exact address${result.locality ? ` · ${result.locality}` : ""}`
-                    : result.locality}
-                </div>
+                <div className="t">{p.address}</div>
+                <div className="s">{p.locality}</div>
               </div>
             </div>
           ))}
@@ -554,6 +579,33 @@ export function MapWorkspace({
               {summary ? `overall grade ${summary.grade} · ${summary.scoutCount} scouts` : ""}
             </span>
           </div>
+          {summary?.recallNote ? (
+            <div className="recall-note" data-testid="recall-note">{summary.recallNote}</div>
+          ) : null}
+          {summary?.neighborhoodNote ? (
+            <div
+              className="neighborhood-note"
+              data-testid="neighborhood-note"
+              title="Cross-lead area priors from grounded market sources; parcel and personal facts stay lead-scoped"
+            >
+              ⌖ {summary.neighborhoodNote}
+            </div>
+          ) : null}
+          {summary?.recalledHits && summary.recalledHits.length > 0 ? (
+            <RecalledMemoriesChip
+              hits={summary.recalledHits}
+              onJumpToCard={(ref) => {
+                // Scroll the matching evidence card into view if it exists in
+                // the current rail. Best-effort; not all recalled hits map to
+                // currently rendered cards (e.g. older grounded facts).
+                const idx = cards.findIndex((c) => c.id === ref);
+                if (idx < 0) return;
+                document
+                  .getElementById(`card-${idx}`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+            />
+          ) : null}
           <ConfidenceLegend />
         </div>
 
@@ -610,7 +662,11 @@ export function MapWorkspace({
                 const globalIdx = cards.indexOf(card);
                 const isOpen = expanded.has(globalIdx);
                 return (
-                  <div className={`card ${card.confidence === "D" ? "gradeD" : ""}`} key={`${group.key}-${index}`}>
+                  <div
+                    id={`card-${globalIdx}`}
+                    className={`card ${card.confidence === "D" ? "gradeD" : ""}`}
+                    key={`${group.key}-${index}`}
+                  >
                     <div className="row1">
                       <span className="claim">{card.claim}</span>
                       <span
@@ -737,9 +793,121 @@ export function MapWorkspace({
         />
       )}
 
-      <div id="toast" className={toast ? "show" : ""}>
-        ✓ <span>{toast}</span>
+      <div
+        id="toast"
+        className={`${toast ? "show " : ""}${toast?.kind === "err" ? "err" : ""}`}
+        role={toast?.kind === "err" ? "alert" : undefined}
+      >
+        {toast?.kind === "err" ? (
+          <>
+            <span>⚠</span>
+            <span>{toast.text}</span>
+            {toast.requestId ? (
+              <span className="req" title="request id — paste in support replies">
+                {toast.requestId.slice(0, 8)}
+              </span>
+            ) : null}
+            {toast.retry ? (
+              <button
+                type="button"
+                className="retry"
+                onClick={() => {
+                  const r = toast.retry!;
+                  setToast(null);
+                  r();
+                }}
+              >
+                Retry
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="retry"
+              aria-label="dismiss"
+              onClick={() => setToast(null)}
+              style={{ background: "transparent", padding: "4px 6px" }}
+            >
+              ✕
+            </button>
+          </>
+        ) : (
+          <>
+            ✓ <span>{toast?.text}</span>
+          </>
+        )}
       </div>
     </>
+  );
+}
+
+// Expandable chip rendered under the FOMO recall note. Default = collapsed
+// (just the "▸ 8 prior signals" pill). Click → expands the list so the agent
+// can SEE what shortcut was taken. Clicking an evidence-kind hit jumps to the
+// matching card in the current rail (when it's currently rendered).
+function RecalledMemoriesChip({
+  hits,
+  onJumpToCard,
+}: {
+  hits: RecalledHit[];
+  onJumpToCard: (ref: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const fmtDate = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    } catch {
+      return "";
+    }
+  };
+  return (
+    <div className="recalled-chip" data-testid="recalled-chip">
+      <button
+        type="button"
+        className="recalled-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="caret">{open ? "▾" : "▸"}</span>
+        <span>
+          {hits.length} prior signal{hits.length === 1 ? "" : "s"}
+        </span>
+      </button>
+      {open ? (
+        <ul className="recalled-list">
+          {hits.map((h) => {
+            const isClickable = h.kind === "evidence" && !!h.ref;
+            return (
+              <li
+                key={h.memoryId}
+                className={`recalled-row ${isClickable ? "clickable" : ""}`}
+                onClick={isClickable ? () => onJumpToCard(h.ref!) : undefined}
+                onKeyDown={
+                  isClickable
+                    ? (event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        onJumpToCard(h.ref!);
+                      }
+                    : undefined
+                }
+                role={isClickable ? "button" : undefined}
+                tabIndex={isClickable ? 0 : undefined}
+              >
+                {h.kind === "evidence" && h.confidence ? (
+                  <span className={`mini-chip g${h.confidence}`}>{h.confidence}</span>
+                ) : (
+                  <span className="mini-chip note">note</span>
+                )}
+                <span className="recalled-text" title={h.text}>
+                  {h.text}
+                </span>
+                <span className="recalled-date">{fmtDate(h.createdAt)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
   );
 }

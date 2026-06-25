@@ -43,6 +43,12 @@ export interface ClaudeJSONInput {
   schemaHint: string;
   /** Hard output cap. Keep low — these are short drafts/classifications. */
   maxTokens?: number;
+  onUsage?: (usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+  }) => void;
 }
 
 /** Tolerant JSON extraction — strips code fences / stray prose, then parses. */
@@ -79,6 +85,12 @@ export async function claudeJSON<T>(input: ClaudeJSONInput): Promise<T> {
         },
       ],
       messages: [{ role: "user", content: input.user }],
+    });
+    input.onUsage?.({
+      inputTokens: msg.usage.input_tokens,
+      outputTokens: msg.usage.output_tokens,
+      cacheReadTokens: msg.usage.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: msg.usage.cache_creation_input_tokens ?? 0,
     });
 
     if (msg.stop_reason === "refusal") {

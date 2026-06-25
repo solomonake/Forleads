@@ -12,21 +12,33 @@ const input = (type: ScoutType, address = "1 Test St"): ScoutInput => ({
   lng: -73.985,
   lat: 40.748,
   address,
-  job: { type, budget: { maxCalls: 1, maxMs: 1500, maxTokens: 0 }, why: "test", allowlist: [] },
+  job: {
+    type,
+    budget: { maxCalls: 3, maxMs: 1500, maxTokens: 0 },
+    why: "test",
+    allowlist:
+      type === "property"
+        ? ["OpenStreetMap", "OSM"]
+        : type === "imagery"
+          ? ["Mapillary", "Esri", "Imagery Scout"]
+          : [],
+  },
 });
 
 describe("runScoutCached", () => {
-  it("serves a repeat property lookup from cache (same address → same result object)", async () => {
+  it("serves a repeat property lookup from cache without another provider call", async () => {
     const first = await runScoutCached(input("property"));
     const second = await runScoutCached(input("property"));
     expect(first.status).toBe("ok"); // mock provider grounds the cell → cacheable
-    expect(second).toBe(first); // identical reference = served from cache, no re-scout
+    expect(second.cost.cacheHit).toBe(true);
+    expect(second.cost.calls).toBe(0);
   });
 
-  it("caches area-level risk by H3 cell (shared across addresses in the cell)", async () => {
+  it("does not cache honest insufficient-evidence risk gaps", async () => {
     const a = await runScoutCached(input("risk", "10 A St"));
     const b = await runScoutCached(input("risk", "12 B St")); // different address, same coords/cell
-    expect(b).toBe(a);
+    expect(a.status).toBe("insufficient_evidence");
+    expect(b.cost.cacheHit).not.toBe(true);
   });
 
   it("NEVER caches the people scout (personal signals must not leak across leads)", async () => {

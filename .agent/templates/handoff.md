@@ -6,6 +6,17 @@ the next agent acts in minutes, not after 20 minutes of rediscovery.
 
 Keep it tight. A good handoff is ~40 lines, not a novel.
 
+Prefer generating the live checkpoint with:
+
+```bash
+npm run agent:checkpoint -- \
+  --goal="<observable done state>" \
+  --completed="<verified work>" \
+  --next="<one exact action>" \
+  --blockers="<known blocker or none>" \
+  --proof="<commands, PR, deploy, request IDs>"
+```
+
 ---
 
 ## STATE

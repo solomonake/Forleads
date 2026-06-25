@@ -1,7 +1,3 @@
-// /api/auth/session
-//   GET    → current user (safe fields only; tokens never leave the server)
-//   PATCH  → collect/update user info (phone, brand voice) — onboarding
-//   DELETE → logout
 import { NextRequest, NextResponse } from "next/server";
 import { agentIdForSub } from "@/lib/auth/agent";
 import {
@@ -11,45 +7,65 @@ import {
   sessionCookieOptions,
 } from "@/lib/auth/session";
 import { getRepo } from "@/lib/db";
+import { withRoute } from "@/lib/observability";
 
-export async function GET() {
-  const s = getSession();
-  if (!s) return NextResponse.json({ user: null });
+export const dynamic = "force-dynamic";
+
+export const GET = withRoute("auth.session.get", async () => {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ user: null });
   return NextResponse.json({
     user: {
-      sub: s.sub,
-      name: s.name,
-      email: s.email,
-      picture: s.picture,
-      phone: s.phone ?? null,
-      brandVoice: s.brandVoice ?? "warm_local",
-      gmailConnected: Boolean(s.google?.refresh_token || s.google?.access_token),
-      scopes: s.google?.scope ?? "",
+      sub: session.sub,
+      name: session.name,
+      email: session.email,
+      picture: session.picture,
+      phone: session.phone ?? null,
+      brandVoice: session.brandVoice ?? "warm_local",
+      gmailConnected: Boolean(
+        session.googleCredentialRef ||
+        session.google?.refresh_token ||
+        session.google?.access_token,
+      ),
+      scopes: session.google?.scope ?? "",
     },
   });
-}
+});
 
-export async function PATCH(req: NextRequest) {
-  const s = getSession();
-  if (!s) return NextResponse.json({ error: "not authenticated" }, { status: 401 });
+export const PATCH = withRoute("auth.session.patch", async (req: NextRequest) => {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "not authenticated" }, { status: 401 });
+  }
   const body = (await req.json()) as { phone?: string; brandVoice?: string };
-  if (typeof body.phone === "string") s.phone = body.phone.trim();
-  if (body.brandVoice === "warm_local" || body.brandVoice === "crisp_pro" || body.brandVoice === "luxury") {
-    s.brandVoice = body.brandVoice;
+  if (typeof body.phone === "string") session.phone = body.phone.trim();
+  if (
+    body.brandVoice === "warm_local" ||
+    body.brandVoice === "crisp_pro" ||
+    body.brandVoice === "luxury"
+  ) {
+    session.brandVoice = body.brandVoice;
   }
 
-  // Persist the collected info onto the agent record too.
   const repo = await getRepo();
-  const agent = await repo.getAgent(agentIdForSub(s.sub));
-  if (agent) await repo.upsertAgent({ ...agent, brandVoice: s.brandVoice ?? agent.brandVoice });
+  const agent = await repo.getAgent(agentIdForSub(session.sub));
+  if (agent) {
+    await repo.upsertAgent({
+      ...agent,
+      brandVoice: session.brandVoice ?? agent.brandVoice,
+    });
+  }
 
-  const res = NextResponse.json({ ok: true, user: { phone: s.phone, brandVoice: s.brandVoice } });
-  res.cookies.set(SESSION_COOKIE, seal(s), sessionCookieOptions());
-  return res;
-}
+  const response = NextResponse.json({
+    ok: true,
+    user: { phone: session.phone, brandVoice: session.brandVoice },
+  });
+  response.cookies.set(SESSION_COOKIE, seal(session), sessionCookieOptions());
+  return response;
+});
 
-export async function DELETE() {
-  const res = NextResponse.json({ ok: true });
-  res.cookies.delete(SESSION_COOKIE);
-  return res;
-}
+export const DELETE = withRoute("auth.session.delete", async () => {
+  const response = NextResponse.json({ ok: true });
+  response.cookies.delete(SESSION_COOKIE);
+  return response;
+});

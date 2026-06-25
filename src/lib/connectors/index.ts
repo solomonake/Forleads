@@ -30,28 +30,37 @@ export interface ConnectorRouteOpts {
 export function getConnector(provider: ConnectorProvider): Connector {
   switch (provider) {
     case "google":
-      return new GmailDraftConnector(googleToken());
+      return new GmailDraftConnector(googleToken(), config.allowMockConnectorWrites);
     case "microsoft":
       // Outlook draft connector shares the email shape; mock until wired.
-      return new MockConnector("microsoft");
+      return new MockConnector("microsoft", config.allowMockConnectorWrites);
     case "followupboss":
-      return new FollowUpBossConnector(config.followupboss.apiKey, config.followupboss.baseUrl);
+      return new FollowUpBossConnector(
+        config.followupboss.apiKey,
+        config.followupboss.baseUrl,
+        config.allowMockConnectorWrites,
+      );
     case "gohighlevel":
       return new GoHighLevelConnector(
         config.gohighlevel.apiKey,
         config.gohighlevel.locationId,
-        config.gohighlevel.baseUrl
+        config.gohighlevel.baseUrl,
+        config.allowMockConnectorWrites,
       );
     case "twilio":
       return new TwilioConnector(
         config.twilio.accountSid,
         config.twilio.authToken,
-        config.twilio.fromNumber
+        config.twilio.fromNumber,
+        config.allowMockConnectorWrites,
       );
     case "zapier":
-      return new ZapierWebhookConnector(process.env.ZAPIER_WEBHOOK_URL);
+      return new ZapierWebhookConnector(
+        process.env.ZAPIER_WEBHOOK_URL,
+        config.allowMockConnectorWrites,
+      );
     default:
-      return new MockConnector(provider);
+      return new MockConnector(provider, config.allowMockConnectorWrites);
   }
 }
 
@@ -59,21 +68,27 @@ export function getConnector(provider: ConnectorProvider): Connector {
 export function connectorForAction(type: ActionType, opts?: ConnectorRouteOpts): Connector {
   switch (type) {
     case "email":
-      return new GmailDraftConnector(googleToken(opts?.googleAccessToken)); // Gmail drafts — the hero path
+      return new GmailDraftConnector(
+        googleToken(opts?.googleAccessToken),
+        config.allowMockConnectorWrites,
+      ); // Gmail drafts — the hero path
     case "calendar":
-      return new GoogleCalendarConnector(googleToken(opts?.googleAccessToken));
+      return new GoogleCalendarConnector(
+        googleToken(opts?.googleAccessToken),
+        config.allowMockConnectorWrites,
+      );
     case "sms":
       return getConnector("twilio");
     case "crm_note":
     case "task":
-      // Prefer a connected CRM; fall back to mock so the loop always completes.
+      // Prefer a connected CRM. Production fails closed when none is configured.
       return config.followupboss.apiKey
         ? getConnector("followupboss")
         : config.gohighlevel.apiKey
           ? getConnector("gohighlevel")
-          : new MockConnector("followupboss");
+          : new MockConnector("followupboss", config.allowMockConnectorWrites);
     default:
-      return new MockConnector();
+      return new MockConnector("google", config.allowMockConnectorWrites);
   }
 }
 

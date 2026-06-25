@@ -9,6 +9,7 @@ import type { Agent, ConnectorAccount } from "@/lib/core/types";
 import { ALL_PROVIDERS, getConnector } from "@/lib/connectors";
 import { defaultLoops } from "@/lib/loops/definitions";
 import type { Repository } from "./repository";
+import { workspaceSeedId } from "./seed-id";
 
 export const DEMO_AGENT: Agent = {
   id: DEMO_AGENT_ID,
@@ -20,18 +21,24 @@ export const DEMO_AGENT: Agent = {
   mode: "crm",
 };
 
-export async function seed(repo: Repository): Promise<void> {
-  await repo.upsertAgent(DEMO_AGENT);
+export async function provisionWorkspace(repo: Repository, agent: Agent): Promise<void> {
+  await repo.upsertAgent(agent);
 
-  for (const loop of defaultLoops(DEMO_AGENT_ID, nowISO())) {
-    await repo.upsertLoopDef(loop);
+  const existingLoops = await repo.listLoopDefs(agent.id);
+  if (existingLoops.length === 0) {
+    for (const loop of defaultLoops(agent.id, nowISO())) {
+      await repo.upsertLoopDef(loop);
+    }
   }
 
+  const existingConnectors = await repo.listConnectorAccounts(agent.id);
+  const connected = new Set(existingConnectors.map((account) => account.provider));
   for (const provider of ALL_PROVIDERS) {
+    if (connected.has(provider)) continue;
     const health = await getConnector(provider).healthCheck();
     const account: ConnectorAccount = {
-      id: `conn-${provider}`,
-      agent_id: DEMO_AGENT_ID,
+      id: workspaceSeedId(agent.id, `conn-${provider}`),
+      agent_id: agent.id,
       provider,
       scopes:
         provider === "google"
@@ -39,12 +46,21 @@ export async function seed(repo: Repository): Promise<void> {
           : provider === "followupboss"
             ? ["people:read", "notes:write", "tasks:write"]
             : [],
-      status: health.mode === "live" ? "connected" : provider === "twilio" ? "needs_setup" : "mock",
-      credentials_ref: `vault://${provider}/${DEMO_AGENT_ID}`,
+      status:
+        health.mode === "live"
+          ? "connected"
+          : health.healthy
+            ? "mock"
+            : "needs_setup",
+      credentials_ref: `vault://${provider}/${agent.id}`,
       capabilities: health.capabilities,
       last_healthcheck_at: nowISO(),
       created_at: nowISO(),
     };
     await repo.upsertConnectorAccount(account);
   }
+}
+
+export async function seed(repo: Repository): Promise<void> {
+  await provisionWorkspace(repo, DEMO_AGENT);
 }

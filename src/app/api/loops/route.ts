@@ -1,21 +1,25 @@
 // GET  /api/loops  — list loop definitions + recent runs (Loop Studio)
 // POST /api/loops  — run a loop now against a lead (manual trigger / demo)
 import { NextRequest, NextResponse } from "next/server";
-import { readAgentId, requireAgentId } from "@/lib/auth/agent";
+import { ensureCurrentAgent, readAgentIdEnsured } from "@/lib/auth/agent";
 import { withRoute } from "@/lib/observability";
 import { optStr, str, validateBody } from "@/lib/validation";
 import { SITUATIONS, type Situation } from "@/lib/core/types";
 import { getRepo } from "@/lib/db";
 import { runLoop } from "@/lib/loops/engine";
+import { deriveLoopAnalytics } from "@/lib/loops/analytics";
 
 export const GET = withRoute("loops.list", async () => {
-  const agentId = readAgentId();
+  const agentId = await readAgentIdEnsured();
   const repo = await getRepo();
-  const [definitions, runs] = await Promise.all([
+  const [definitions, runs, artifacts, events] = await Promise.all([
     repo.listLoopDefs(agentId),
     repo.listLoopRuns(agentId),
+    repo.listArtifacts(agentId),
+    repo.listEvents(agentId),
   ]);
-  return NextResponse.json({ definitions, runs });
+  const analytics = deriveLoopAnalytics({ definitions, runs, artifacts, events });
+  return NextResponse.json({ definitions, runs, analytics });
 });
 
 export const POST = withRoute("loops.run", async (req: NextRequest) => {
@@ -24,7 +28,7 @@ export const POST = withRoute("loops.run", async (req: NextRequest) => {
     leadId: str(b, "leadId", { max: 100 }),
     situation: optStr<Situation>(b, "situation", { allowed: SITUATIONS }),
   }));
-  const agentId = requireAgentId();
+  const agentId = await ensureCurrentAgent();
   if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
   const repo = await getRepo();
   const def = await repo.getLoopDef(body.loopId);

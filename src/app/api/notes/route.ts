@@ -1,12 +1,13 @@
 // POST /api/notes — record a note, classify the situation, return suggested
 // next-best-actions. Emits note.created so matching loops can fire.
 import { NextRequest, NextResponse } from "next/server";
-import { requireAgentId } from "@/lib/auth/agent";
+import { ensureCurrentAgent } from "@/lib/auth/agent";
 import { withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { optStr, str, validateBody } from "@/lib/validation";
 import { nowISO, uuid } from "@/lib/core/ids";
 import { classifyNoteBest } from "@/lib/agents/notes";
+import { persistNoteMemory } from "@/lib/agents/memory";
 import { getRepo } from "@/lib/db";
 import { emit } from "@/lib/pipeline";
 
@@ -16,7 +17,7 @@ export const POST = withRoute("notes", async (req: NextRequest) => {
     body: str(b, "body", { max: 8000 }),
     modality: optStr(b, "modality", { allowed: ["text", "voice"] as const }),
   }));
-  const agentId = requireAgentId();
+  const agentId = await ensureCurrentAgent();
   if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
   const limited = enforceRateLimit(req, { name: "compose", agentId, perAgent: 30, perIp: 45 });
   if (limited) return limited;
@@ -40,6 +41,14 @@ export const POST = withRoute("notes", async (req: NextRequest) => {
     "notes",
     body.leadId
   );
+
+  // Persist the note as a memory row so the dispatcher can recall it next tap.
+  // Failure is non-fatal — the loop must still complete even if embedding fails.
+  try {
+    await persistNoteMemory(note);
+  } catch {
+    /* memory persistence is best-effort */
+  }
 
   return NextResponse.json({ note, classification });
 });

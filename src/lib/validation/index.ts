@@ -57,11 +57,17 @@ export function str(
   return v;
 }
 
-export function num(body: Record<string, unknown>, field: string): number {
+export function num(
+  body: Record<string, unknown>,
+  field: string,
+  opts: { min?: number; max?: number } = {},
+): number {
   const v = body[field];
   if (typeof v !== "number" || !Number.isFinite(v)) {
     throw new ValidationError(`${field} is required and must be a finite number`);
   }
+  if (opts.min !== undefined && v < opts.min) throw new ValidationError(`${field} must be >= ${opts.min}`);
+  if (opts.max !== undefined && v > opts.max) throw new ValidationError(`${field} must be <= ${opts.max}`);
   return v;
 }
 

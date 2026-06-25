@@ -19,13 +19,26 @@ export class ZapierWebhookConnector implements Connector {
   readonly provider = "zapier" as const;
   readonly capabilities = ["createTask", "writeCrmNote", "createCalendarEvent"];
   readonly mode: "mock" | "live";
-  constructor(private webhookUrl?: string) {
+  constructor(
+    private webhookUrl?: string,
+    private readonly mockWritesEnabled = true,
+  ) {
     this.mode = webhookUrl ? "live" : "mock";
   }
 
   private async post(kind: string, payload: unknown, meta: ConnectorWriteMeta): Promise<ConnectorResult> {
     return once(meta.idempotencyKey, async () => {
       if (!this.webhookUrl) {
+        if (!this.mockWritesEnabled) {
+          return {
+            ok: false,
+            provider: "zapier",
+            idempotencyKey: meta.idempotencyKey,
+            deduped: false,
+            mode: "mock",
+            error: "Zapier is not configured. Add ZAPIER_WEBHOOK_URL.",
+          };
+        }
         return {
           ok: true,
           provider: "zapier",
@@ -75,9 +88,13 @@ export class ZapierWebhookConnector implements Connector {
   async healthCheck(): Promise<HealthStatus> {
     return {
       provider: "zapier",
-      healthy: true,
+      healthy: Boolean(this.webhookUrl) || this.mockWritesEnabled,
       mode: this.mode,
-      detail: this.webhookUrl ? "Connected — posting to your Zap." : "Copy endpoint — paste your Zapier Catch Hook URL.",
+      detail: this.webhookUrl
+        ? "Connected — posting to your Zap."
+        : this.mockWritesEnabled
+          ? "Local mock mode — paste a Zapier Catch Hook URL to go live."
+          : "Setup required — add ZAPIER_WEBHOOK_URL; production mock writes are disabled.",
       capabilities: this.capabilities,
     };
   }

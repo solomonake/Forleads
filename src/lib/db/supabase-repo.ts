@@ -29,11 +29,17 @@ import type {
   Artifact,
   ConnectorAccount,
   ConnectorProvider,
+  ConnectorWrite,
+  ConnectorCredential,
+  Confidence,
   DomainEvent,
   EvidenceCard,
   LeadSurface,
   LoopDefinition,
   LoopRun,
+  Memory,
+  MemoryHit,
+  MemoryKind,
   Note,
   Watcher,
   WeeklyReport,
@@ -107,6 +113,18 @@ const evidenceFromRow = (r: Row): EvidenceCard => ({
   created_at: r.created_at,
 });
 
+export const evidenceToRow = (leadId: string, c: EvidenceCard): Row => ({
+  ...(c.id ? { id: c.id } : {}),
+  lead_surface_id: leadId,
+  scout: c.scout,
+  claim: c.claim,
+  value_json: c.value ?? null,
+  source_json: c.sources ?? [],
+  confidence: c.confidence,
+  reasoning: c.reasoning ?? null,
+  ...(c.created_at ? { created_at: c.created_at } : {}),
+});
+
 const noteFromRow = (r: Row): Note => ({
   id: r.id,
   lead_surface_id: r.lead_surface_id,
@@ -130,8 +148,11 @@ const artifactToRow = (a: Artifact): Row => ({
   model_trace: a.model_trace,
   external_draft_ref: a.external_draft_ref ?? null,
   trace_id: a.trace_id ?? null,
+  revision: a.revision,
   created_at: a.created_at,
+  updated_at: a.updated_at,
   approved_at: a.approved_at ?? null,
+  approved_revision: a.approved_revision ?? null,
   sent_at: a.sent_at ?? null,
   snooze_until: a.snooze_until ?? null,
   edit_history: a.edit_history ?? [],
@@ -149,8 +170,11 @@ const artifactFromRow = (r: Row): Artifact => ({
   model_trace: r.model_trace,
   external_draft_ref: r.external_draft_ref ?? undefined,
   trace_id: r.trace_id ?? undefined,
+  revision: Number(r.revision ?? 1),
   created_at: r.created_at,
+  updated_at: r.updated_at ?? r.created_at,
   approved_at: r.approved_at ?? undefined,
+  approved_revision: r.approved_revision ?? undefined,
   sent_at: r.sent_at ?? undefined,
   snooze_until: r.snooze_until ?? undefined,
   edit_history: r.edit_history ?? undefined,
@@ -164,10 +188,13 @@ const artifactPatchToRow = (p: Partial<Artifact>): Row => {
   if (p.evidence_used !== undefined) row.evidence_used = p.evidence_used;
   if (p.compliance_result !== undefined) row.compliance_result = p.compliance_result;
   if (p.model_trace !== undefined) row.model_trace = p.model_trace;
-  if (p.external_draft_ref !== undefined) row.external_draft_ref = p.external_draft_ref;
+  if ("external_draft_ref" in p) row.external_draft_ref = p.external_draft_ref ?? null;
   if (p.trace_id !== undefined) row.trace_id = p.trace_id;
-  if (p.approved_at !== undefined) row.approved_at = p.approved_at;
-  if (p.sent_at !== undefined) row.sent_at = p.sent_at;
+  if (p.revision !== undefined) row.revision = p.revision;
+  if (p.updated_at !== undefined) row.updated_at = p.updated_at;
+  if ("approved_at" in p) row.approved_at = p.approved_at ?? null;
+  if ("approved_revision" in p) row.approved_revision = p.approved_revision ?? null;
+  if ("sent_at" in p) row.sent_at = p.sent_at ?? null;
   if (p.snooze_until !== undefined) row.snooze_until = p.snooze_until;
   if (p.edit_history !== undefined) row.edit_history = p.edit_history;
   return row;
@@ -180,6 +207,7 @@ const eventToRow = (e: DomainEvent): Row => ({
   type: e.type,
   payload: e.payload,
   source: e.source,
+  idempotency_key: e.idempotency_key ?? null,
   created_at: e.created_at,
 });
 const eventFromRow = (r: Row): DomainEvent => ({
@@ -189,6 +217,7 @@ const eventFromRow = (r: Row): DomainEvent => ({
   type: r.type,
   payload: r.payload ?? {},
   source: r.source,
+  idempotency_key: r.idempotency_key ?? undefined,
   created_at: r.created_at,
 });
 
@@ -410,15 +439,7 @@ export class SupabaseRepository implements Repository {
     // Replace semantics, matching the in-memory repo.
     unwrap(await this.sb.from("evidence_card").delete().eq("lead_surface_id", leadId).select());
     if (!cards.length) return;
-    const rows = cards.map((c) => ({
-      lead_surface_id: leadId,
-      scout: c.scout,
-      claim: c.claim,
-      value_json: c.value ?? null,
-      source_json: c.sources ?? [],
-      confidence: c.confidence,
-      reasoning: c.reasoning ?? null,
-    }));
+    const rows = cards.map((c) => evidenceToRow(leadId, c));
     unwrap(await this.sb.from("evidence_card").insert(rows).select());
   }
   async listEvidence(leadId: string) {
@@ -480,6 +501,20 @@ export class SupabaseRepository implements Repository {
     );
     return data ? artifactFromRow(data) : null;
   }
+  async updateArtifactAtRevision(id: string, expectedRevision: number, patch: Partial<Artifact>) {
+    const row = artifactPatchToRow(patch);
+    if (Object.keys(row).length === 0) return this.getArtifact(id);
+    const data = unwrap(
+      await this.sb
+        .from("artifact")
+        .update(row)
+        .eq("id", id)
+        .eq("revision", expectedRevision)
+        .select()
+        .maybeSingle(),
+    );
+    return data ? artifactFromRow(data) : null;
+  }
   async listArtifacts(agentId: string) {
     const data = unwrap(
       await this.sb
@@ -505,6 +540,17 @@ export class SupabaseRepository implements Repository {
         .order("created_at", { ascending: true }),
     );
     return (data ?? []).map(eventFromRow);
+  }
+  async getEventByIdempotencyKey(agentId: string, key: string) {
+    const data = unwrap(
+      await this.sb
+        .from("domain_event")
+        .select("*")
+        .eq("agent_id", agentId)
+        .eq("idempotency_key", key)
+        .maybeSingle(),
+    );
+    return data ? eventFromRow(data) : null;
   }
 
   // loops
@@ -593,6 +639,106 @@ export class SupabaseRepository implements Repository {
     return (data ?? []).map(reportFromRow);
   }
 
+  // memories (lead-scoped recall)
+  async saveMemory(m: Memory) {
+    const row: Row = {
+      id: m.id,
+      agent_id: m.agent_id,
+      lead_surface_id: m.lead_surface_id,
+      kind: m.kind,
+      text: m.text,
+      ref: m.ref ?? null,
+      confidence: m.confidence ?? null,
+      embedding: m.embedding,
+      created_at: m.created_at,
+    };
+    // Keep ordinary lead-scoped memory compatible while the optional
+    // neighborhood migration rolls out. Neighborhood writes still require it.
+    if (m.h3_index !== undefined) row.h3_index = m.h3_index;
+    unwrap(
+      await this.sb
+        .from("memory")
+        .insert(row)
+        .select(),
+    );
+    return m;
+  }
+  async listOutcomeMemories(leadId: string) {
+    const data = unwrap(
+      await this.sb
+        .from("memory")
+        .select("*")
+        .eq("lead_surface_id", leadId)
+        .eq("kind", "outcome")
+        .order("created_at", { ascending: false }),
+    );
+    return ((data ?? []) as Row[]).map<Memory>((r) => ({
+      id: r.id,
+      agent_id: r.agent_id,
+      lead_surface_id: r.lead_surface_id,
+      kind: "outcome",
+      text: r.text,
+      ref: r.ref ?? undefined,
+      confidence: (r.confidence as Confidence) ?? undefined,
+      embedding: Array.isArray(r.embedding) ? r.embedding : [],
+      created_at: r.created_at,
+    }));
+  }
+  async recallNeighborhood(agentId: string, h3Index: string, k: number) {
+    // Neighborhood recall is a simple table scan filtered by (agent, h3, kind).
+    // No similarity score needed — every match is on-cell by definition. RLS
+    // gates by agent at the DB layer; we double-check on the .eq() chain.
+    const data = unwrap(
+      await this.sb
+        .from("memory")
+        .select("*")
+        .eq("agent_id", agentId)
+        .eq("kind", "neighborhood")
+        .eq("h3_index", h3Index)
+        .order("created_at", { ascending: false })
+        .limit(Math.max(1, k)),
+    );
+    return ((data ?? []) as Row[]).map<MemoryHit>((r) => ({
+      memory: {
+        id: r.id,
+        agent_id: r.agent_id,
+        lead_surface_id: r.lead_surface_id,
+        kind: r.kind as MemoryKind,
+        text: r.text,
+        ref: r.ref ?? undefined,
+        confidence: (r.confidence as Confidence) ?? undefined,
+        h3_index: r.h3_index ?? undefined,
+        embedding: Array.isArray(r.embedding) ? r.embedding : [],
+        created_at: r.created_at,
+      },
+      similarity: 1,
+    }));
+  }
+  async recallMemories(leadId: string, query: number[], k: number) {
+    const data = unwrap(
+      await this.sb.rpc("fl_recall_memories", {
+        p_lead_id: leadId,
+        p_query: query,
+        p_k: k,
+      }),
+    );
+    return ((data ?? []) as Row[]).map<MemoryHit>((r) => ({
+      memory: {
+        id: r.id,
+        agent_id: r.agent_id,
+        lead_surface_id: r.lead_surface_id,
+        kind: r.kind as MemoryKind,
+        text: r.text,
+        ref: r.ref ?? undefined,
+        confidence: (r.confidence as Confidence) ?? undefined,
+        h3_index: r.h3_index ?? undefined,
+        embedding: Array.isArray(r.embedding) ? r.embedding : [],
+        created_at: r.created_at,
+      },
+      similarity: Number(r.similarity ?? 0),
+    }));
+  }
+
   // connector accounts
   async listConnectorAccounts(agentId: string) {
     const data = unwrap(
@@ -608,5 +754,76 @@ export class SupabaseRepository implements Repository {
         .select(),
     );
     return a;
+  }
+  async getConnectorCredential(id: string) {
+    const data = unwrap(
+      await this.sb
+        .from("connector_credential")
+        .select("*")
+        .eq("id", id)
+        .is("revoked_at", null)
+        .maybeSingle(),
+    );
+    if (!data) return null;
+    return {
+      id: data.id,
+      agent_id: data.agent_id,
+      provider: data.provider,
+      encrypted_payload: data.encrypted_payload,
+      version: data.version,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      revoked_at: data.revoked_at ?? undefined,
+    } satisfies ConnectorCredential;
+  }
+  async upsertConnectorCredential(credential: ConnectorCredential) {
+    unwrap(
+      await this.sb.from("connector_credential").upsert({
+        id: credential.id,
+        agent_id: credential.agent_id,
+        provider: credential.provider,
+        encrypted_payload: credential.encrypted_payload,
+        version: credential.version,
+        created_at: credential.created_at,
+        updated_at: credential.updated_at,
+        revoked_at: credential.revoked_at ?? null,
+      }).select(),
+    );
+    return credential;
+  }
+  async getConnectorWrite(key: string) {
+    const data = unwrap(
+      await this.sb
+        .from("connector_write")
+        .select("*")
+        .eq("idempotency_key", key)
+        .maybeSingle(),
+    );
+    if (!data) return null;
+    return {
+      id: data.id,
+      agent_id: data.agent_id,
+      artifact_id: data.artifact_id ?? undefined,
+      provider: data.provider,
+      idempotency_key: data.idempotency_key,
+      result: data.result_json,
+      created_at: data.created_at,
+    } satisfies ConnectorWrite;
+  }
+  async saveConnectorWrite(write: ConnectorWrite) {
+    unwrap(
+      await this.sb.from("connector_write").upsert({
+        id: write.id,
+        agent_id: write.agent_id,
+        artifact_id: write.artifact_id ?? null,
+        provider: write.provider,
+        idempotency_key: write.idempotency_key,
+        external_id: write.result.externalId ?? null,
+        status: write.result.ok ? "ok" : "error",
+        result_json: write.result,
+        created_at: write.created_at,
+      }).select(),
+    );
+    return write;
   }
 }
