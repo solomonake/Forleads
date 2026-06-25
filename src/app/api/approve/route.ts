@@ -6,13 +6,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { freshAccessToken } from "@/lib/auth/google";
 import { getSession, seal, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth/session";
 import { withRoute } from "@/lib/observability";
-import { optStr, str, validateBody } from "@/lib/validation";
+import { str, validateBody } from "@/lib/validation";
 import { approveArtifact } from "@/lib/pipeline";
 
 export const POST = withRoute("approve", async (req: NextRequest) => {
   const body = await validateBody(req, (b) => ({
     artifactId: str(b, "artifactId", { max: 100 }),
-    editedBody: optStr(b, "editedBody", { max: 10_000 }),
+    editedBody:
+      b.editedBody === undefined || b.editedBody === null
+        ? undefined
+        : str(b, "editedBody", { max: 10_000 }),
   }));
 
   // The human gate is a mutating, outward-facing action (it can write a real

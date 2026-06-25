@@ -96,7 +96,10 @@ export async function persistOutcomeMemory(
   try {
     const repo = await getRepo();
     const embedder = getEmbedder();
-    const tail = editedExcerpt ? ` · edited="${editedExcerpt.slice(0, 100)}…"` : "";
+    const detailLabel = verdict === "rejected" ? "reason" : "edited";
+    const tail = editedExcerpt
+      ? ` · ${detailLabel}="${editedExcerpt.slice(0, 100)}${editedExcerpt.length > 100 ? "…" : ""}"`
+      : "";
     const text = `[${verdict}] ${artifact.type}: ${outcomeExcerpt(artifact)}${tail}`;
     const embedding = await embedder.embed(text);
     const mem: Memory = {
