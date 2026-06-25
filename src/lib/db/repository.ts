@@ -82,6 +82,13 @@ export interface Repository {
   saveMemory(m: Memory): Promise<Memory>;
   recallMemories(leadId: string, query: number[], k: number): Promise<MemoryHit[]>;
   listOutcomeMemories(leadId: string): Promise<Memory[]>;
+  /** Cross-lead recall scoped to an area cell. The writer accepts only
+   * provider-backed A/B market facts. Agent scope must never be crossed. */
+  recallNeighborhood(
+    agentId: string,
+    h3Index: string,
+    k: number,
+  ): Promise<MemoryHit[]>;
 }
 
 interface Store {
@@ -247,6 +254,22 @@ export class InMemoryRepository implements Repository {
     return (this.s.memories.get(leadId) ?? [])
       .filter((m) => m.kind === "outcome")
       .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  }
+  async recallNeighborhood(agentId: string, h3Index: string, k: number) {
+    // The in-memory store keys by lead_surface_id; neighborhood priors are
+    // sprinkled across leads. Walk every bucket, filter by (agent, h3, kind),
+    // sort by recency (no query embedding — every match is on-cell, score = 1).
+    const matches: Memory[] = [];
+    for (const arr of this.s.memories.values()) {
+      for (const m of arr) {
+        if (m.kind !== "neighborhood") continue;
+        if (m.agent_id !== agentId) continue;
+        if (m.h3_index !== h3Index) continue;
+        matches.push(m);
+      }
+    }
+    matches.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    return matches.slice(0, Math.max(1, k)).map((m) => ({ memory: m, similarity: 1 }));
   }
 }
 

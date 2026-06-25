@@ -415,6 +415,15 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
           {summary?.recallNote ? (
             <div className="recall-note" data-testid="recall-note">{summary.recallNote}</div>
           ) : null}
+          {summary?.neighborhoodNote ? (
+            <div
+              className="neighborhood-note"
+              data-testid="neighborhood-note"
+              title="Cross-lead area priors from grounded market sources; parcel and personal facts stay lead-scoped"
+            >
+              ⌖ {summary.neighborhoodNote}
+            </div>
+          ) : null}
           {summary?.recalledHits && summary.recalledHits.length > 0 ? (
             <RecalledMemoriesChip
               hits={summary.recalledHits}

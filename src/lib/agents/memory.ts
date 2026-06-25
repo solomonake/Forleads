@@ -67,6 +67,65 @@ export async function persistEvidenceMemory(
   return repo.saveMemory(mem);
 }
 
+// Only scouts already keyed by an area cell may cross leads. Property and
+// imagery facts are parcel-specific, while people facts must never cross leads.
+const NEIGHBORHOOD_SAFE_SCOUTS: ReadonlySet<EvidenceCard["scout"]> = new Set([
+  "market",
+]);
+
+function neighborhoodSurfaceForm(card: EvidenceCard): string {
+  const v = String(card.value);
+  return `[${card.scout}/${card.confidence}] ${card.claim}: ${v}`;
+}
+
+/** Persist only transferable, grounded area facts. Always best-effort. */
+export async function persistNeighborhoodMemory(
+  agentId: string,
+  lead: LeadSurface,
+  card: EvidenceCard,
+): Promise<Memory | null> {
+  if (!NEIGHBORHOOD_SAFE_SCOUTS.has(card.scout)) return null;
+  if (card.confidence !== "A" && card.confidence !== "B") return null;
+  if (card.value === null) return null;
+  if (!lead.h3_index) return null;
+  try {
+    const repo = await getRepo();
+    const embedder = getEmbedder();
+    const text = neighborhoodSurfaceForm(card);
+    const embedding = await embedder.embed(text);
+    const mem: Memory = {
+      id: uuid(),
+      agent_id: agentId,
+      lead_surface_id: lead.id,
+      kind: "neighborhood",
+      text,
+      ref: card.id,
+      confidence: card.confidence,
+      h3_index: lead.h3_index,
+      embedding,
+      created_at: nowISO(),
+    };
+    return await repo.saveMemory(mem);
+  } catch {
+    return null;
+  }
+}
+
+/** How many cross-lead area facts do we already know about this cell? */
+export async function recallNeighborhood(
+  agentId: string,
+  h3Index: string,
+  k = 16,
+): Promise<MemoryHit[]> {
+  const repo = await getRepo();
+  return repo.recallNeighborhood(agentId, h3Index, k);
+}
+
+export function renderNeighborhoodNote(n: number): string | null {
+  if (n <= 0) return null;
+  return `${n} area fact${n === 1 ? "" : "s"} known near this location`;
+}
+
 /** Strip an artifact payload down to a short human-readable excerpt for the
  * outcome memory text. Different action types have different "important" fields;
  * the excerpt is what surfaces to the agent later as "you already sent X here". */

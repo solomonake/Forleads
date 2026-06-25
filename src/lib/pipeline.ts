@@ -26,8 +26,11 @@ import { runScoutCached } from "@/lib/agents/scouts";
 import { reduce } from "@/lib/agents/reducer";
 import {
   persistEvidenceMemory,
+  persistNeighborhoodMemory,
   persistOutcomeMemory,
   recallForLead,
+  recallNeighborhood,
+  renderNeighborhoodNote,
   recallOutcomes,
   renderRecallNote,
   summarizeOutcomes,
@@ -151,10 +154,23 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
   const { summary, rejected } = reduce(scoutResults, Date.now() - started);
   await repo.saveEvidence(lead.id, summary.cards);
 
-  // Persist every reduced card so the NEXT tap can recall it.
+  // Persist every reduced card for lead-scoped recall. The neighborhood writer
+  // independently accepts only transferable A/B area facts.
   for (const card of summary.cards) {
     await persistEvidenceMemory(lead.agent_id, lead, card);
+    await persistNeighborhoodMemory(lead.agent_id, lead, card);
   }
+
+  // Cross-lead area recall. Privacy: agent-scoped and market-only.
+  const neighborhood = lead.h3_index
+    ? await recallNeighborhood(lead.agent_id, lead.h3_index)
+    : [];
+  // Drop priors that came from this lead; this note is cross-lead context.
+  const crossLeadPriors = neighborhood.filter(
+    (h) => h.memory.lead_surface_id !== lead.id,
+  );
+  const neighborhoodCount = crossLeadPriors.length;
+  const neighborhoodNote = renderNeighborhoodNote(neighborhoodCount);
 
   const recallNote = renderRecallNote(recall);
   // Project hits into a UI-safe shape (no embeddings) and sort newest-first
@@ -175,6 +191,8 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
     ...summary,
     ...(recallNote ? { recallNote } : {}),
     ...(recalledHits ? { recalledHits } : {}),
+    ...(neighborhoodCount > 0 ? { neighborhoodPriors: neighborhoodCount } : {}),
+    ...(neighborhoodNote ? { neighborhoodNote } : {}),
   };
 
   const updated = { ...lead, status: lead.status === "new" ? "researching" : lead.status, last_worked_at: nowISO() } as LeadSurface;

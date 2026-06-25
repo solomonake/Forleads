@@ -88,6 +88,13 @@ export interface ReduceSummary {
   elapsedMs: number;
   /** FOMO-style copy describing recall hits — null when no prior memory was used. */
   recallNote?: string;
+  /** Count of cross-lead area-cell priors the dispatcher saw for
+   *  this location. Surfaced in the lead rail as an area-facts note.
+   *  Undefined when there are no priors. */
+  neighborhoodPriors?: number;
+  /** A short line — "5 area facts known near this location" — when
+   *  neighborhoodPriors > 0; null otherwise. */
+  neighborhoodNote?: string;
   /** When recall fired, a compact projection of the hits so the rail can render
    * an expandable chip ("8 prior signals" → list of [A] Building footprint…).
    * Excludes the embedding vector — only the surface form, kind, grade, ref,
@@ -109,7 +116,7 @@ export interface RecalledHit {
 // event — that the dispatcher can recall before spending scout budget. Scoped
 // to a single lead surface; cross-lead leakage would defeat the privacy floor.
 
-export type MemoryKind = "evidence" | "note" | "event" | "outcome";
+export type MemoryKind = "evidence" | "note" | "event" | "outcome" | "neighborhood";
 
 // Persisted whenever the human gate fires (approve / edit / reject). Lets the
 // composer answer "what did the agent ALREADY send to this lead?" and warn
@@ -135,6 +142,9 @@ export interface Memory {
   text: string;                 // the embedded surface form (what was hashed)
   ref?: string;                 // optional pointer to the source row id
   confidence?: Confidence;      // mirrored from the source card when kind=evidence
+  /** Set ONLY for kind="neighborhood" — the area cell this fact aggregates over.
+   *  Only grounded provider-backed market facts may be written here. */
+  h3_index?: string;
   embedding: number[];          // 1024-dim (bge-m3 / Qwen3-Embedding-0.6B)
   created_at: ISODate;
 }
