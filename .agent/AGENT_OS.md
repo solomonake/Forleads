@@ -14,6 +14,8 @@ Claude. `AGENTS.md` is the root contract. Chat history is disposable.
 | `knowledge/catalog.json` | Source provenance, freshness, trust, and actionable rules |
 | `evals/corpus.v1.json` | Versioned product, adversarial, and regression scenarios |
 | `handoffs/` | Historical continuation state |
+| `handoffs/current.md` | Crash-resistant latest checkpoint for the next agent |
+| `metrics/` | Versioned task scorecards for model and workflow evaluation |
 
 ## Operating loop
 
@@ -40,6 +42,10 @@ Claude. `AGENTS.md` is the root contract. Chat history is disposable.
 - Track exact runtime tokens when exposed. Otherwise report context bytes/files,
   repeated reads, command count, elapsed time, and verification cost as proxies.
 - Stop uncontrolled exploration and write a handoff when context becomes noisy.
+- Checkpoint after ORIENT, PLAN, IMPLEMENT, VERIFY, and SHIP. Do not wait until
+  the last tokens: `npm run agent:checkpoint -- --goal="..." --completed="..." --next="..."`.
+- A new model trusts the checkpoint enough to start, then verifies its cheapest
+  risky claim against Git, CI, or production before editing.
 
 ## Human boundary
 
@@ -47,8 +53,20 @@ Agents may create a branch, implement, verify, commit, push, and open a draft PR
 only after mandatory gates pass. Merge, deployment, spending, production
 mutation, destructive action, and external communication require approval.
 
+Within an authorized task, agents should execute ordinary reversible commands
+without asking the user to supervise each step. Human attention is reserved for
+secrets, spending, destructive actions, material scope changes, production
+mutation, and outward communication.
+
 ## Learning promotion
 
 Product-specific facts stay local. Promote a lesson into the future shared OS
 only when it is generalizable, evidence-backed, tested, non-secret, and not
 coupled to Forleads' accidental architecture.
+
+## Performance measurement
+
+Record substantial runs with `npm run agent:scorecard`. Compare models only on
+matched task classes and risk tiers. The zero-tolerance constraints are tenant
+or security breaches, fabricated external success, and required gates skipped
+before merge. See `docs/Agentic_Systems_Evaluation_v1.md`.

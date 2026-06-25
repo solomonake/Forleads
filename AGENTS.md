@@ -11,6 +11,9 @@ in `docs/`; operating truth lives in `.agent/`.
 3. Search before reading large files. Generate a task context pack with
    `npm run agent:context -- --intent="<task>" --risk=<tier> --paths=<paths>`.
 4. For substantial work, fill `.agent/plans/TEMPLATE.md` before editing.
+5. Read `.agent/handoffs/current.md` before repeating discovery. Refresh it with
+   `npm run agent:checkpoint` after each meaningful lifecycle phase and before
+   long operations where context or token exhaustion could interrupt the task.
 
 ## Lifecycle
 
@@ -21,6 +24,9 @@ in `docs/`; operating truth lives in `.agent/`.
 - Models reason over grounded evidence; they are never the source of facts.
 - Every outward side effect is human-gated and idempotent.
 - If a mandatory gate cannot pass, stop, preserve evidence, and write a handoff.
+- At task completion, append a model-neutral run record with
+  `npm run agent:scorecard`; judge agents by verified outcomes, intervention,
+  defects, recovery time, and cost rather than persuasive prose.
 
 ## Risk tiers
 
