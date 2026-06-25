@@ -18,6 +18,8 @@
     "agent:eval": "node scripts/agent-eval.mjs",
     "agent:stress": "node scripts/agent-stress.mjs",
     "agent:handoff": "node scripts/agent-handoff.mjs",
+    "agent:checkpoint": "node scripts/agent-checkpoint.mjs",
+    "agent:scorecard": "node scripts/agent-scorecard.mjs",
     "agent:knowledge-audit": "node scripts/agent-knowledge-audit.mjs",
     "agent:check": "node scripts/agent-check.mjs",
     "demo:record": "node scripts/record-pr-demo.mjs",

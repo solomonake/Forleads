@@ -11,6 +11,8 @@ const required = [
   ".agent/decisions.md",
   ".agent/knowledge/catalog.json",
   ".agent/evals/corpus.v1.json",
+  ".agent/handoffs/current.md",
+  ".agent/metrics/schema.v1.json",
 ];
 for (const file of required) {
   checks.push({ ok: exists(file), label: `required:${file}` });
