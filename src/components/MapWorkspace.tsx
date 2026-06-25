@@ -53,6 +53,9 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
   const [query, setQuery] = useState("");
   const [suggest, setSuggest] = useState<GeoResult[]>([]);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [searchState, setSearchState] = useState<
+    "idle" | "loading" | "empty" | "error"
+  >("idle");
   const [lead, setLead] = useState<LeadSurface | null>(null);
   const [summary, setSummary] = useState<ReduceSummary | null>(null);
   const [cards, setCards] = useState<EvidenceCard[]>([]);
@@ -123,14 +126,29 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
   // ---- Geocode autocomplete ----------------------------------------------
   useEffect(() => {
     let active = true;
+    const normalized = query.trim();
+    if (normalized.length < 2) {
+      setSuggest([]);
+      setSearchState("idle");
+      return () => {
+        active = false;
+      };
+    }
+    setSearchState("loading");
     const t = setTimeout(async () => {
       try {
         const d = await apiGet<{ results: GeoResult[] }>(
           `/api/geocode?q=${encodeURIComponent(query)}`
         );
-        if (active) setSuggest(d.results);
+        if (active) {
+          setSuggest(d.results);
+          setSearchState(d.results.length > 0 ? "idle" : "empty");
+        }
       } catch {
-        /* ignore */
+        if (active) {
+          setSuggest([]);
+          setSearchState("error");
+        }
       }
     }, 120);
     return () => {
@@ -357,12 +375,34 @@ export function MapWorkspace({ onOpenTrace }: { onOpenTrace: (ref: string) => vo
           />
           <span className="kbd">⌘K</span>
         </div>
-        <div className={`${suggestOpen && suggest.length ? "open" : ""}`} id="suggest">
+        <div
+          className={`${
+            suggestOpen && (suggest.length > 0 || searchState !== "idle") ? "open" : ""
+          }`}
+          id="suggest"
+          role="listbox"
+          aria-label="Address suggestions"
+        >
+          {searchState === "loading" && (
+            <div className="suggest-state">Searching the live address index…</div>
+          )}
+          {searchState === "empty" && (
+            <div className="suggest-state">
+              No address matches. Try a street, city, and country.
+            </div>
+          )}
+          {searchState === "error" && (
+            <div className="suggest-state error">
+              Address search is unavailable. Check your connection and retry.
+            </div>
+          )}
           {suggest.map((p, i) => (
             <div
               className={`sug ${i === 0 ? "active" : ""}`}
               key={`${p.address}-${i}`}
               onClick={() => goTo(p)}
+              role="option"
+              aria-selected={i === 0}
             >
               <span className="ico">⌖</span>
               <div>

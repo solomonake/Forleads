@@ -272,6 +272,14 @@ button {
 #suggest.open {
   display: block;
 }
+.suggest-state {
+  padding: 13px 16px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.suggest-state.error {
+  color: var(--danger);
+}
 .sug {
   display: flex;
   align-items: center;

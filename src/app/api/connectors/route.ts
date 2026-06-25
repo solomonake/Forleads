@@ -5,6 +5,8 @@ import { withRoute } from "@/lib/observability";
 import { allHealth } from "@/lib/connectors";
 import { getRepo } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export const GET = withRoute("connectors", async () => {
   const agentId = await readAgentIdEnsured();
   const repo = await getRepo();

@@ -603,21 +603,24 @@ export class SupabaseRepository implements Repository {
 
   // memories (lead-scoped recall)
   async saveMemory(m: Memory) {
+    const row: Row = {
+      id: m.id,
+      agent_id: m.agent_id,
+      lead_surface_id: m.lead_surface_id,
+      kind: m.kind,
+      text: m.text,
+      ref: m.ref ?? null,
+      confidence: m.confidence ?? null,
+      embedding: m.embedding,
+      created_at: m.created_at,
+    };
+    // Keep ordinary lead-scoped memory compatible while the optional
+    // neighborhood migration rolls out. Neighborhood writes still require it.
+    if (m.h3_index !== undefined) row.h3_index = m.h3_index;
     unwrap(
       await this.sb
         .from("memory")
-        .insert({
-          id: m.id,
-          agent_id: m.agent_id,
-          lead_surface_id: m.lead_surface_id,
-          kind: m.kind,
-          text: m.text,
-          ref: m.ref ?? null,
-          confidence: m.confidence ?? null,
-          h3_index: m.h3_index ?? null,
-          embedding: m.embedding,
-          created_at: m.created_at,
-        })
+        .insert(row)
         .select(),
     );
     return m;
