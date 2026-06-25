@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { withRoute } from "@/lib/observability";
 import { getGeocodeProvider } from "@/lib/providers";
 
+export const dynamic = "force-dynamic";
+
 export const GET = withRoute("geocode", async (req: NextRequest) => {
   const q = req.nextUrl.searchParams.get("q") ?? "";
   const provider = getGeocodeProvider();

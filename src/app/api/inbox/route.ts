@@ -5,6 +5,8 @@ import { readAgentIdEnsured } from "@/lib/auth/agent";
 import { withRoute } from "@/lib/observability";
 import { getRepo } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export const GET = withRoute("inbox", async () => {
   const agentId = await readAgentIdEnsured();
   const repo = await getRepo();

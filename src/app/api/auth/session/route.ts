@@ -12,6 +12,8 @@ import {
 } from "@/lib/auth/session";
 import { getRepo } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const s = getSession();
   if (!s) return NextResponse.json({ user: null });
