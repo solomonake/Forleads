@@ -2,27 +2,40 @@ import { test, expect } from "@playwright/test";
 
 // Canonical Forleads first-flow demo. Records video for PR handoff.
 // Selectors mirror src/components/MapWorkspace.tsx — keep in sync if that file moves.
+const COLD_API_TIMEOUT = 60_000;
 
 test("Forleads first flow: address → fly-to → grade chips → knocked → draft", async ({ page }) => {
-  const sessionReady = page.waitForResponse((response) =>
-    response.url().includes("/api/auth/session"),
+  const sessionReady = page.waitForResponse(
+    (response) => response.url().includes("/api/auth/session"),
+    { timeout: COLD_API_TIMEOUT },
   );
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await sessionReady;
+  expect((await sessionReady).ok()).toBe(true);
 
   const search = page.locator("#search-input");
   await expect(search).toBeEditable();
 
   // Type an address after hydration and prove the API request completed.
   await search.click();
-  const geocodeReady = page.waitForResponse((response) =>
-    response.url().includes("/api/geocode?q=12"),
+  const geocodeReady = page.waitForResponse(
+    (response) => response.url().includes("/api/geocode?q=12"),
+    { timeout: COLD_API_TIMEOUT },
   );
   await search.fill("12");
   expect((await geocodeReady).ok()).toBe(true);
   const firstSuggestion = page.locator("#suggest .sug").first();
   await expect(firstSuggestion).toBeVisible();
-  await firstSuggestion.click();
+  const [leadResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) => response.url().includes("/api/lead"),
+      { timeout: COLD_API_TIMEOUT },
+    ),
+    firstSuggestion.click(),
+  ]);
+  expect(
+    leadResponse.status(),
+    `lead API failed: ${await leadResponse.text()}`,
+  ).toBe(200);
 
   // Fly-to + scouts run; lead rail opens and at least one grade chip appears.
   const leadRail = page.locator("#lead.open");
@@ -34,7 +47,10 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
   const knocked = page.locator(".quick button", { hasText: "Knocked, no answer" });
   await expect(knocked).toBeVisible();
   const [noteResponse] = await Promise.all([
-    page.waitForResponse((response) => response.url().includes("/api/notes")),
+    page.waitForResponse(
+      (response) => response.url().includes("/api/notes"),
+      { timeout: COLD_API_TIMEOUT },
+    ),
     knocked.click(),
   ]);
   expect(
@@ -48,7 +64,17 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
 
   // Click "Draft it →" to surface the Review Tray draft artifact.
   const draftBtn = page.locator("button.draftbtn", { hasText: "Draft it" });
-  await draftBtn.click();
+  const [draftResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) => response.url().includes("/api/draft"),
+      { timeout: COLD_API_TIMEOUT },
+    ),
+    draftBtn.click(),
+  ]);
+  expect(
+    draftResponse.status(),
+    `draft API failed: ${await draftResponse.text()}`,
+  ).toBe(200);
 
   // ReviewTray opens with the compliant draft.
   await expect(page.locator(".overlay .draft")).toBeVisible({ timeout: 30_000 });

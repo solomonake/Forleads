@@ -259,7 +259,7 @@ export class InMemoryRepository implements Repository {
     return [...this.s.connectorAccounts.values()].filter((a) => a.agent_id === agentId);
   }
   async upsertConnectorAccount(a: ConnectorAccount) {
-    this.s.connectorAccounts.set(a.provider, a);
+    this.s.connectorAccounts.set(`${a.agent_id}:${a.provider}`, a);
     return a;
   }
   async getConnectorCredential(id: string) {
