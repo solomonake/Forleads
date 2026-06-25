@@ -55,15 +55,42 @@ export function ReviewTray({
     setBusy(true);
     setError(null);
     try {
-      const d = await apiPost<{ connector: { provider: string; deduped: boolean; mode: string; url?: string } }>(
-        "/api/approve",
-        { artifactId: current.id, expectedRevision: current.revision }
-      );
+      const d = await apiPost<{
+        connector: { provider: string; deduped: boolean; mode: string; url?: string };
+      }>("/api/approve", {
+        artifactId: current.id,
+        expectedRevision: current.revision,
+      });
       const c = d.connector;
       onApproved(
         isEmail
           ? `Draft created in ${c.provider} (${c.mode})${c.deduped ? " · deduped" : ""} — logged to memory`
-          : `${current.type} written to ${c.provider} (${c.mode}) — logged to memory`
+          : `${current.type} written to ${c.provider} (${c.mode}) — logged to memory`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reject = async () => {
+    const reason = window.prompt(
+      "Why is this draft wrong? (optional — helps the composer next time)",
+      "",
+    );
+    if (reason === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiPost<{ memoryId: string | null }>("/api/reject", {
+        artifactId: current.id,
+        ...(reason.trim() ? { reason: reason.trim() } : {}),
+      });
+      onApproved(
+        reason.trim()
+          ? `Marked rejected · "${reason.trim().slice(0, 60)}" — logged to memory`
+          : "Marked rejected — logged to memory",
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -110,7 +137,7 @@ export function ReviewTray({
             </>
           ) : (
             <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--sans)", fontSize: 14 }}>
-              {JSON.stringify(artifact.payload, null, 2)}
+              {JSON.stringify(current.payload, null, 2)}
             </pre>
           )}
 
@@ -137,12 +164,24 @@ export function ReviewTray({
             </div>
           )}
 
-          {error && <div className="flagbox" style={{ marginTop: 12 }}>{error}</div>}
+          {error && (
+            <div className="flagbox" style={{ marginTop: 12 }}>
+              {error}
+            </div>
+          )}
         </div>
 
         <div className="draft-foot">
           <button className="btn" onClick={onClose}>
             Discard
+          </button>
+          <button
+            className="btn"
+            disabled={busy || current.status === "cancelled"}
+            onClick={reject}
+            title="Mark this draft wrong — the composer will learn from it"
+          >
+            Reject
           </button>
           {current.trace_id && (
             <button className="btn" onClick={() => onOpenTrace(current.trace_id!)}>
@@ -150,12 +189,26 @@ export function ReviewTray({
             </button>
           )}
           {isEmail && (
-            <button className="btn" disabled={busy} onClick={editing ? saveEdit : () => setEditing(true)}>
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={editing ? saveEdit : () => setEditing(true)}
+            >
               {editing ? "Save & recheck" : "Edit"}
             </button>
           )}
-          <button className="btn primary" disabled={blocked || busy || editing} onClick={approve}>
-            {busy ? "Working…" : blocked ? "Blocked" : isEmail ? "Approve & Create Draft" : "Approve & Write"}
+          <button
+            className="btn primary"
+            disabled={blocked || busy || editing}
+            onClick={approve}
+          >
+            {busy
+              ? "Working…"
+              : blocked
+                ? "Blocked"
+                : isEmail
+                  ? "Approve & Create Draft"
+                  : "Approve & Write"}
           </button>
         </div>
       </div>

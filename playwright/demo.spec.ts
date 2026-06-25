@@ -4,14 +4,22 @@ import { test, expect } from "@playwright/test";
 // Selectors mirror src/components/MapWorkspace.tsx — keep in sync if that file moves.
 
 test("Forleads first flow: address → fly-to → grade chips → knocked → draft", async ({ page }) => {
+  const sessionReady = page.waitForResponse((response) =>
+    response.url().includes("/api/auth/session"),
+  );
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await sessionReady;
 
   const search = page.locator("#search-input");
-  await expect(search).toBeVisible();
+  await expect(search).toBeEditable();
 
-  // Type an address; suggestions are seeded client-side, so first suggestion appears fast.
+  // Type an address after hydration and prove the API request completed.
   await search.click();
-  await search.fill("1");
+  const geocodeReady = page.waitForResponse((response) =>
+    response.url().includes("/api/geocode?q=12"),
+  );
+  await search.fill("12");
+  expect((await geocodeReady).ok()).toBe(true);
   const firstSuggestion = page.locator("#suggest .sug").first();
   await expect(firstSuggestion).toBeVisible();
   await firstSuggestion.click();

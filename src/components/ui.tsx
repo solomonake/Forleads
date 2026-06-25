@@ -2,6 +2,8 @@
 
 import type { Confidence } from "@/lib/core/types";
 
+export { ApiError, apiGet, apiPatch, apiPost } from "./api";
+
 export function GradeChip({ grade }: { grade: Confidence }) {
   return (
     <span className={`chip g${grade}`}>
@@ -28,29 +30,4 @@ export function ConfidenceLegend() {
       ))}
     </div>
   );
-}
-
-export async function apiGet<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`GET ${url} → ${res.status}`);
-  return (await res.json()) as T;
-}
-
-export async function apiPost<T>(url: string, body: unknown): Promise<T> {
-  return apiWrite<T>("POST", url, body);
-}
-
-export async function apiPatch<T>(url: string, body: unknown): Promise<T> {
-  return apiWrite<T>("PATCH", url, body);
-}
-
-async function apiWrite<T>(method: "POST" | "PATCH", url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `${method} ${url} → ${res.status}`);
-  return data;
 }

@@ -13,6 +13,7 @@
 
 import { nowISO, uuid } from "@/lib/core/ids";
 import type {
+  Artifact,
   Confidence,
   EvidenceCard,
   LeadSurface,
@@ -20,6 +21,8 @@ import type {
   MemoryHit,
   Note,
   DomainEvent,
+  PriorOutcomeSummary,
+  OutcomeVerdict,
 } from "@/lib/core/types";
 import { getRepo } from "@/lib/db";
 import { getEmbedder } from "./embedder";
@@ -63,6 +66,168 @@ export async function persistEvidenceMemory(
     created_at: nowISO(),
   };
   return repo.saveMemory(mem);
+}
+
+// Only scouts already keyed by an area cell may cross leads. Property and
+// imagery facts are parcel-specific, while people facts must never cross leads.
+const NEIGHBORHOOD_SAFE_SCOUTS: ReadonlySet<EvidenceCard["scout"]> = new Set([
+  "market",
+]);
+
+function neighborhoodSurfaceForm(card: EvidenceCard): string {
+  const v = String(card.value);
+  return `[${card.scout}/${card.confidence}] ${card.claim}: ${v}`;
+}
+
+/** Persist only transferable, grounded area facts. Always best-effort. */
+export async function persistNeighborhoodMemory(
+  agentId: string,
+  lead: LeadSurface,
+  card: EvidenceCard,
+): Promise<Memory | null> {
+  if (!NEIGHBORHOOD_SAFE_SCOUTS.has(card.scout)) return null;
+  if (card.confidence !== "A" && card.confidence !== "B") return null;
+  if (card.value === null) return null;
+  if (!lead.h3_index) return null;
+  try {
+    const repo = await getRepo();
+    const embedder = getEmbedder();
+    const text = neighborhoodSurfaceForm(card);
+    const embedding = await embedder.embed(text);
+    const mem: Memory = {
+      id: uuid(),
+      agent_id: agentId,
+      lead_surface_id: lead.id,
+      kind: "neighborhood",
+      text,
+      ref: card.id,
+      confidence: card.confidence,
+      h3_index: lead.h3_index,
+      embedding,
+      created_at: nowISO(),
+    };
+    return await repo.saveMemory(mem);
+  } catch {
+    return null;
+  }
+}
+
+/** How many cross-lead area facts do we already know about this cell? */
+export async function recallNeighborhood(
+  agentId: string,
+  h3Index: string,
+  k = 16,
+): Promise<MemoryHit[]> {
+  const repo = await getRepo();
+  return repo.recallNeighborhood(agentId, h3Index, k);
+}
+
+export function renderNeighborhoodNote(n: number): string | null {
+  if (n <= 0) return null;
+  return `${n} area fact${n === 1 ? "" : "s"} known near this location`;
+}
+
+/** Strip an artifact payload down to a short human-readable excerpt for the
+ * outcome memory text. Different action types have different "important" fields;
+ * the excerpt is what surfaces to the agent later as "you already sent X here". */
+function outcomeExcerpt(artifact: Artifact): string {
+  const p = artifact.payload as unknown as Record<string, unknown>;
+  const pick = (k: string): string | undefined => {
+    const v = p[k];
+    return typeof v === "string" && v.trim() ? v.trim() : undefined;
+  };
+  const subject = pick("subject") ?? pick("title");
+  const body = pick("body") ?? pick("notes");
+  const parts: string[] = [];
+  if (subject) parts.push(subject);
+  if (body) parts.push(body);
+  const text = parts.join(" — ") || JSON.stringify(p).slice(0, 200);
+  return text.length > 240 ? `${text.slice(0, 237)}…` : text;
+}
+
+/** Embed + persist the human's verdict on a drafted artifact so the composer
+ *  can warn before drafting a duplicate next time. Always best-effort: an
+ *  outcome write must NEVER block the approve / reject flow. */
+export async function persistOutcomeMemory(
+  artifact: Artifact,
+  verdict: OutcomeVerdict,
+  editedExcerpt?: string,
+): Promise<Memory | null> {
+  if (!artifact.lead_surface_id) return null;
+  try {
+    const repo = await getRepo();
+    const embedder = getEmbedder();
+    const detailLabel = verdict === "rejected" ? "reason" : "edited";
+    const tail = editedExcerpt
+      ? ` · ${detailLabel}="${editedExcerpt.slice(0, 100)}${editedExcerpt.length > 100 ? "…" : ""}"`
+      : "";
+    const text = `[${verdict}] ${artifact.type}: ${outcomeExcerpt(artifact)}${tail}`;
+    const embedding = await embedder.embed(text);
+    const mem: Memory = {
+      id: uuid(),
+      agent_id: artifact.agent_id,
+      lead_surface_id: artifact.lead_surface_id,
+      kind: "outcome",
+      text,
+      ref: artifact.id,
+      embedding,
+      created_at: nowISO(),
+    };
+    return await repo.saveMemory(mem);
+  } catch {
+    // The embedder or DB hiccup must not break the human-gate flow.
+    return null;
+  }
+}
+
+/** Bucket a list of outcome-kind memories into approved/edited/rejected counts
+ *  + the timestamp of the most recent rejection. Used by the composer + trace. */
+export function summarizeOutcomes(memos: Memory[]): PriorOutcomeSummary {
+  let approved = 0;
+  let edited = 0;
+  let rejected = 0;
+  let lastRejectedAt: string | undefined;
+  let latestVerdict: OutcomeVerdict | undefined;
+  let latestAt: string | undefined;
+  for (const m of memos) {
+    if (m.kind !== "outcome") continue;
+    let verdict: OutcomeVerdict | undefined;
+    if (m.text.startsWith("[approved]")) {
+      approved++;
+      verdict = "approved";
+    } else if (m.text.startsWith("[edited]")) {
+      edited++;
+      verdict = "edited";
+    } else if (m.text.startsWith("[rejected]")) {
+      rejected++;
+      verdict = "rejected";
+      if (!lastRejectedAt || m.created_at > lastRejectedAt) {
+        lastRejectedAt = m.created_at;
+      }
+    }
+    if (verdict && (!latestAt || m.created_at > latestAt)) {
+      latestAt = m.created_at;
+      latestVerdict = verdict;
+    }
+  }
+  if (!latestAt || !latestVerdict) {
+    throw new Error("summarizeOutcomes requires at least one valid outcome memory");
+  }
+  return { approved, edited, rejected, latestVerdict, latestAt, lastRejectedAt };
+}
+
+/** Recall prior outcomes for this lead, optionally filtered by action type.
+ * Used by the composer-trace to surface "you already approved 2 emails here". */
+export async function recallOutcomes(
+  lead: LeadSurface,
+  actionType?: string,
+): Promise<Memory[]> {
+  const repo = await getRepo();
+  let memos = await repo.listOutcomeMemories(lead.id);
+  if (actionType) {
+    memos = memos.filter((m) => m.text.startsWith("[") && m.text.includes(`] ${actionType}:`));
+  }
+  return memos;
 }
 
 /** Embed + persist a free-text note as a memory row. */

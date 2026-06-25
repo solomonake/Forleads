@@ -113,6 +113,18 @@ const evidenceFromRow = (r: Row): EvidenceCard => ({
   created_at: r.created_at,
 });
 
+export const evidenceToRow = (leadId: string, c: EvidenceCard): Row => ({
+  ...(c.id ? { id: c.id } : {}),
+  lead_surface_id: leadId,
+  scout: c.scout,
+  claim: c.claim,
+  value_json: c.value ?? null,
+  source_json: c.sources ?? [],
+  confidence: c.confidence,
+  reasoning: c.reasoning ?? null,
+  ...(c.created_at ? { created_at: c.created_at } : {}),
+});
+
 const noteFromRow = (r: Row): Note => ({
   id: r.id,
   lead_surface_id: r.lead_surface_id,
@@ -427,15 +439,7 @@ export class SupabaseRepository implements Repository {
     // Replace semantics, matching the in-memory repo.
     unwrap(await this.sb.from("evidence_card").delete().eq("lead_surface_id", leadId).select());
     if (!cards.length) return;
-    const rows = cards.map((c) => ({
-      lead_surface_id: leadId,
-      scout: c.scout,
-      claim: c.claim,
-      value_json: c.value ?? null,
-      source_json: c.sources ?? [],
-      confidence: c.confidence,
-      reasoning: c.reasoning ?? null,
-    }));
+    const rows = cards.map((c) => evidenceToRow(leadId, c));
     unwrap(await this.sb.from("evidence_card").insert(rows).select());
   }
   async listEvidence(leadId: string) {
@@ -637,23 +641,78 @@ export class SupabaseRepository implements Repository {
 
   // memories (lead-scoped recall)
   async saveMemory(m: Memory) {
+    const row: Row = {
+      id: m.id,
+      agent_id: m.agent_id,
+      lead_surface_id: m.lead_surface_id,
+      kind: m.kind,
+      text: m.text,
+      ref: m.ref ?? null,
+      confidence: m.confidence ?? null,
+      embedding: m.embedding,
+      created_at: m.created_at,
+    };
+    // Keep ordinary lead-scoped memory compatible while the optional
+    // neighborhood migration rolls out. Neighborhood writes still require it.
+    if (m.h3_index !== undefined) row.h3_index = m.h3_index;
     unwrap(
       await this.sb
         .from("memory")
-        .insert({
-          id: m.id,
-          agent_id: m.agent_id,
-          lead_surface_id: m.lead_surface_id,
-          kind: m.kind,
-          text: m.text,
-          ref: m.ref ?? null,
-          confidence: m.confidence ?? null,
-          embedding: m.embedding,
-          created_at: m.created_at,
-        })
+        .insert(row)
         .select(),
     );
     return m;
+  }
+  async listOutcomeMemories(leadId: string) {
+    const data = unwrap(
+      await this.sb
+        .from("memory")
+        .select("*")
+        .eq("lead_surface_id", leadId)
+        .eq("kind", "outcome")
+        .order("created_at", { ascending: false }),
+    );
+    return ((data ?? []) as Row[]).map<Memory>((r) => ({
+      id: r.id,
+      agent_id: r.agent_id,
+      lead_surface_id: r.lead_surface_id,
+      kind: "outcome",
+      text: r.text,
+      ref: r.ref ?? undefined,
+      confidence: (r.confidence as Confidence) ?? undefined,
+      embedding: Array.isArray(r.embedding) ? r.embedding : [],
+      created_at: r.created_at,
+    }));
+  }
+  async recallNeighborhood(agentId: string, h3Index: string, k: number) {
+    // Neighborhood recall is a simple table scan filtered by (agent, h3, kind).
+    // No similarity score needed — every match is on-cell by definition. RLS
+    // gates by agent at the DB layer; we double-check on the .eq() chain.
+    const data = unwrap(
+      await this.sb
+        .from("memory")
+        .select("*")
+        .eq("agent_id", agentId)
+        .eq("kind", "neighborhood")
+        .eq("h3_index", h3Index)
+        .order("created_at", { ascending: false })
+        .limit(Math.max(1, k)),
+    );
+    return ((data ?? []) as Row[]).map<MemoryHit>((r) => ({
+      memory: {
+        id: r.id,
+        agent_id: r.agent_id,
+        lead_surface_id: r.lead_surface_id,
+        kind: r.kind as MemoryKind,
+        text: r.text,
+        ref: r.ref ?? undefined,
+        confidence: (r.confidence as Confidence) ?? undefined,
+        h3_index: r.h3_index ?? undefined,
+        embedding: Array.isArray(r.embedding) ? r.embedding : [],
+        created_at: r.created_at,
+      },
+      similarity: 1,
+    }));
   }
   async recallMemories(leadId: string, query: number[], k: number) {
     const data = unwrap(
@@ -672,6 +731,7 @@ export class SupabaseRepository implements Repository {
         text: r.text,
         ref: r.ref ?? undefined,
         confidence: (r.confidence as Confidence) ?? undefined,
+        h3_index: r.h3_index ?? undefined,
         embedding: Array.isArray(r.embedding) ? r.embedding : [],
         created_at: r.created_at,
       },

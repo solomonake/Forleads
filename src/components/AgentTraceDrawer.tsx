@@ -71,6 +71,24 @@ export function AgentTraceDrawer({
                 </span>
               </div>
             )}
+            {trace.priorOutcomes && (
+              <div className="tline">
+                <span className="tk">Prior outcomes</span>
+                <span className="tv">
+                  {trace.priorOutcomes.approved} approved · {trace.priorOutcomes.edited} edited · {trace.priorOutcomes.rejected} rejected
+                  {trace.priorOutcomes.latestVerdict === "rejected" && trace.priorOutcomes.lastRejectedAt && (
+                    <em style={{ display: "block", color: "var(--danger)", marginTop: 4 }}>
+                      Latest outcome was a rejection on {new Date(trace.priorOutcomes.lastRejectedAt).toLocaleDateString()} — composer used a lower-pressure angle without claiming prior contact.
+                    </em>
+                  )}
+                  {(trace.priorOutcomes.latestVerdict === "approved" || trace.priorOutcomes.latestVerdict === "edited") && (
+                    <em style={{ display: "block", color: "var(--text-2)", marginTop: 4 }}>
+                      Already corresponded with this lead — composer wrote a follow-up, not a first touch.
+                    </em>
+                  )}
+                </span>
+              </div>
+            )}
             <div className="tline">
               <span className="tk">Policy</span>
               <span className="tv">

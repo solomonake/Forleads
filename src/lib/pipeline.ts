@@ -27,8 +27,14 @@ import { reduce } from "@/lib/agents/reducer";
 import {
   persistEvidenceMemory,
   persistEventMemory,
+  persistNeighborhoodMemory,
+  persistOutcomeMemory,
   recallForLead,
+  recallNeighborhood,
+  renderNeighborhoodNote,
+  recallOutcomes,
   renderRecallNote,
+  summarizeOutcomes,
 } from "@/lib/agents/memory";
 import { composeBest } from "@/lib/agents/composer";
 import { config } from "@/lib/core/config";
@@ -36,6 +42,7 @@ import { lintArtifactText } from "@/lib/agents/compliance";
 import { buildTrace } from "@/lib/agents/trace";
 import { connectorForAction } from "@/lib/connectors";
 import { getRepo } from "@/lib/db";
+import { log } from "@/lib/observability";
 
 // ---- Events -----------------------------------------------------------------
 
@@ -116,6 +123,30 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
     `${lead.address}${lead.locality ? ", " + lead.locality : ""}`,
   );
 
+  // Observability: a silent recall is an unverifiable recall. Emit a structured
+  // log AND a domain event whenever recall returns hits, so prod traffic proves
+  // the path actually fires and the Agent Trace shows it for any tap.
+  if (recall.hits.length > 0) {
+    log("info", "recall.fired", {
+      leadId: lead.id,
+      hits: recall.hits.length,
+      priorGrounded: recall.priorGroundedCount,
+      sufficient: recall.sufficient,
+    });
+    await emit(
+      lead.agent_id,
+      "memory.recalled",
+      {
+        hits: recall.hits.length,
+        priorGrounded: recall.priorGroundedCount,
+        sufficient: recall.sufficient,
+        refs: recall.refs,
+      },
+      "memory",
+      lead.id,
+    );
+  }
+
   const plan = await planDispatch({
     lng: lead.lng,
     lat: lead.lat,
@@ -165,15 +196,46 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
   const { summary, rejected } = reduced;
   await repo.saveEvidence(lead.id, summary.cards);
 
-  // Persist every reduced card so the NEXT tap can recall it.
+  // Persist every reduced card for lead-scoped recall. The neighborhood writer
+  // independently accepts only transferable A/B area facts.
   for (const card of summary.cards) {
     await persistEvidenceMemory(lead.agent_id, lead, card);
+    await persistNeighborhoodMemory(lead.agent_id, lead, card);
   }
 
+  // Cross-lead area recall. Privacy: agent-scoped and market-only.
+  const neighborhood = lead.h3_index
+    ? await recallNeighborhood(lead.agent_id, lead.h3_index)
+    : [];
+  // Drop priors that came from this lead; this note is cross-lead context.
+  const crossLeadPriors = neighborhood.filter(
+    (h) => h.memory.lead_surface_id !== lead.id,
+  );
+  const neighborhoodCount = crossLeadPriors.length;
+  const neighborhoodNote = renderNeighborhoodNote(neighborhoodCount);
+
   const recallNote = renderRecallNote(recall);
-  const summaryWithRecall: ReduceSummary = recallNote
-    ? { ...summary, recallNote }
-    : summary;
+  // Project hits into a UI-safe shape (no embeddings) and sort newest-first
+  // so the rail's expanded list reads top-down as "most recent prior signal".
+  const recalledHits = recall.hits.length
+    ? recall.hits
+        .map((h) => ({
+          memoryId: h.memory.id,
+          kind: h.memory.kind,
+          text: h.memory.text,
+          confidence: h.memory.confidence,
+          ref: h.memory.ref,
+          createdAt: h.memory.created_at,
+        }))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    : undefined;
+  const summaryWithRecall: ReduceSummary = {
+    ...summary,
+    ...(recallNote ? { recallNote } : {}),
+    ...(recalledHits ? { recalledHits } : {}),
+    ...(neighborhoodCount > 0 ? { neighborhoodPriors: neighborhoodCount } : {}),
+    ...(neighborhoodNote ? { neighborhoodNote } : {}),
+  };
 
   const updated = { ...lead, status: lead.status === "new" ? "researching" : lead.status, last_worked_at: nowISO() } as LeadSurface;
   await repo.upsertLead(updated);
@@ -198,6 +260,17 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
   const repo = await getRepo();
   const { agent, lead } = input;
 
+  // Outcome recall — what did the human ALREADY do with prior drafts for this
+  // lead+actionType? Best-effort: if recall fails, draft with no prior context
+  // rather than block. Composer takes the base template path when undefined.
+  let priorOutcomes: import("@/lib/core/types").PriorOutcomeSummary | undefined;
+  try {
+    const memos = await recallOutcomes(lead, input.actionType);
+    if (memos.length > 0) priorOutcomes = summarizeOutcomes(memos);
+  } catch {
+    priorOutcomes = undefined;
+  }
+
   const composed = await composeBest({
     agent,
     situation: input.situation,
@@ -207,6 +280,7 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
     recipientEmail: lead.contact?.email,
     recipientPhone: lead.contact?.phone,
     evidence: input.evidence,
+    priorOutcomes,
   });
 
   // Compliance lint the human-visible text (fail-closed).
@@ -269,6 +343,7 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
       cacheWriteTokens: composed.modelUsage?.cacheWriteTokens,
       fallbackReason: composed.fallbackReason,
     },
+    priorOutcomes,
   });
   // Bind the trace's id to the one referenced by the artifact.
   trace.id = traceId;
@@ -373,6 +448,12 @@ export async function approveArtifact(
     });
   }
 
+  if (!result.ok) {
+    throw new Error(
+      `Connector write failed: ${result.error ?? `${result.provider} returned an unsuccessful result`}`,
+    );
+  }
+
   // Email drafts are "drafted in the user's tool" (sent=false); others are written.
   const isEmailDraft = artifact.type === "email";
   const updated = await repo.updateArtifact(artifact.id, {
@@ -407,6 +488,27 @@ export async function approveArtifact(
   );
   await emit(artifact.agent_id, "connector.write", { provider: result.provider, idempotencyKey: key, ok: result.ok }, "connector", artifact.lead_surface_id);
 
+  // Outcome memory — best-effort. The composer next time can warn before
+  // drafting a duplicate offer to this same lead.
+  const latestEdit = artifact.edit_history?.at(-1);
+  const editedExcerpt =
+    latestEdit?.field === "body" ? latestEdit.after.slice(0, 240) : undefined;
+  const verdict = editedExcerpt ? "edited" : "approved";
+  const outcomeMem = await persistOutcomeMemory(
+    updated!,
+    verdict,
+    editedExcerpt,
+  );
+  if (outcomeMem) {
+    await emit(
+      artifact.agent_id,
+      "outcome.recorded",
+      { verdict, artifactId: artifact.id, memoryId: outcomeMem.id },
+      "memory",
+      artifact.lead_surface_id,
+    );
+  }
+
   // Advance the lead's status to contacted.
   if (artifact.lead_surface_id) {
     const lead = await repo.getLead(artifact.lead_surface_id);
@@ -425,6 +527,55 @@ export async function approveArtifact(
       error: result.error,
     },
   };
+}
+
+// ---- Reject (the OTHER human gate) ------------------------------------------
+
+export interface RejectResult {
+  artifact: Artifact;
+  memoryId?: string;
+}
+
+/** The human's "no" — write a `cancelled` artifact + outcome memory so the
+ *  composer can adjust next time. Reason is free-text and optional. */
+export async function rejectArtifact(
+  artifactId: string,
+  reason?: string,
+): Promise<RejectResult | null> {
+  const repo = await getRepo();
+  const artifact = await repo.getArtifact(artifactId);
+  if (!artifact) return null;
+  // Idempotent: rejecting an already-cancelled artifact is a no-op.
+  if (artifact.status === "cancelled") return { artifact };
+
+  const updated = await repo.updateArtifact(artifact.id, {
+    status: "cancelled",
+  });
+
+  await emit(
+    artifact.agent_id,
+    "artifact.cancelled",
+    { artifactId: artifact.id, reason: reason ?? null },
+    "pipeline",
+    artifact.lead_surface_id,
+  );
+
+  const outcomeMem = await persistOutcomeMemory(
+    updated!,
+    "rejected",
+    reason,
+  );
+  if (outcomeMem) {
+    await emit(
+      artifact.agent_id,
+      "outcome.recorded",
+      { verdict: "rejected", artifactId: artifact.id, memoryId: outcomeMem.id, reason: reason ?? null },
+      "memory",
+      artifact.lead_surface_id,
+    );
+  }
+
+  return { artifact: updated!, memoryId: outcomeMem?.id };
 }
 
 function nextStatus(s: LeadStatus): LeadStatus {

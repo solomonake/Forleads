@@ -9,6 +9,8 @@ import {
 import { getRepo } from "@/lib/db";
 import { withRoute } from "@/lib/observability";
 
+export const dynamic = "force-dynamic";
+
 export const GET = withRoute("auth.session.get", async () => {
   const session = await getSession();
   if (!session) return NextResponse.json({ user: null });

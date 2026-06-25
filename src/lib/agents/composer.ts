@@ -18,6 +18,7 @@ import type {
   SmsPayload,
   CrmNotePayload,
   ArtifactPayload,
+  PriorOutcomeSummary,
 } from "@/lib/core/types";
 import { nowISO } from "@/lib/core/ids";
 import { claudeLive } from "@/lib/core/config";
@@ -32,6 +33,11 @@ export interface ComposeInput {
   recipientEmail?: string;
   recipientPhone?: string;
   evidence: EvidenceCard[];
+  /** What the human has already done with prior drafts for this lead+action.
+   *  When `rejected > 0`, the composer softens the tone and switches signoff;
+   *  when `approved > 0`, the composer marks the prompt version with
+   *  `-followup` so the trace makes it obvious this isn't a first touch. */
+  priorOutcomes?: PriorOutcomeSummary;
 }
 
 export interface ComposeOutput {
@@ -156,7 +162,24 @@ export function compose(input: ComposeInput): ComposeOutput {
 
   switch (input.actionType) {
     case "email": {
-      const { subject, body } = emailFor(input);
+      const { subject: baseSubject, body: baseBody } = emailFor(input);
+      // Outcome-aware mutation: if a prior draft to this lead+actionType was
+      // rejected, lead with a respect-your-time line; mark promptVersion so
+      // the trace makes it obvious why the body differs from the base template.
+      // If a prior draft was approved, mark the prompt as a follow-up.
+      let subject = baseSubject;
+      let body = baseBody;
+      let versionTag = PROMPT_VERSION;
+      const po = input.priorOutcomes;
+      if (po?.latestVerdict === "rejected") {
+        subject = `A brief check-in about ${input.address}`;
+        body = `Hi ${input.recipientLabel},\n\nI'll keep this brief and low-pressure. If an occasional, factual property update about ${input.address} would be useful, I'm happy to send one; otherwise no need to respond and I'll leave it there.\n\n${input.agent.name}`;
+        versionTag = `${PROMPT_VERSION}-postreject`;
+      } else if (po?.latestVerdict === "approved" || po?.latestVerdict === "edited") {
+        // We've already talked. Don't reintroduce — pick up the thread.
+        body = `Following up on my last note — no pressure if the timing's off, just wanted to keep the line open.\n\n${baseBody}`;
+        versionTag = `${PROMPT_VERSION}-followup`;
+      }
       const clean = applyExclusions(body);
       raw = `${subject}\n${clean.text}`;
       payload = {
@@ -170,7 +193,7 @@ export function compose(input: ComposeInput): ComposeOutput {
         payload,
         evidenceUsed: usable,
         excluded: clean.excluded,
-        promptVersion: PROMPT_VERSION,
+        promptVersion: versionTag,
       };
     }
     case "sms": {
@@ -226,12 +249,21 @@ function evidenceBlock(cards: EvidenceCard[]): string {
 }
 
 function liveSystem(input: ComposeInput): string {
+  const po = input.priorOutcomes;
+  const priorLine = po
+    ? po.latestVerdict === "rejected"
+      ? `- INTERNAL PRIOR OUTCOME: the agent rejected an earlier UNSENT draft. Choose a lower-pressure angle and avoid the rejected approach. Never mention, imply, or apologize for prior recipient contact because that draft was not sent.`
+      : po.latestVerdict === "approved" || po.latestVerdict === "edited"
+        ? `- PRIOR OUTCOME: a previous draft to this lead was ALREADY sent (approved/edited). Write as a follow-up that picks up the thread, not as a first touch.`
+        : ""
+    : "";
   return [
     `You are ${input.agent.name}, a real-estate agent writing outreach in a "${input.agent.brandVoice}" brand voice.`,
     `Non-negotiable rules:`,
     `- Ground EVERY factual claim only in the EVIDENCE provided. Never invent numbers, comps, prices, or features. If evidence is thin, say so honestly and offer to gather it.`,
     `- FAIR HOUSING: never reference or imply race, color, religion, sex, disability, familial status (children/families), national origin, or age. Describe the home and the market, never who "should" live there.`,
     `- Honest, human, concise, no pressure. One or two short paragraphs. Sign off as ${input.agent.name}.`,
+    ...(priorLine ? [priorLine] : []),
   ].join("\n");
 }
 

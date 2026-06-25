@@ -272,6 +272,14 @@ button {
 #suggest.open {
   display: block;
 }
+.suggest-state {
+  padding: 13px 16px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.suggest-state.error {
+  color: var(--danger);
+}
 .sug {
   display: flex;
   align-items: center;
@@ -412,6 +420,106 @@ button {
   color: var(--signal);
   letter-spacing: 0.01em;
   font-style: italic;
+}
+.neighborhood-note {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--brand);
+  letter-spacing: 0.01em;
+  cursor: help;
+}
+/* ---- Recalled-memories chip (under the recall-note) -------------------- */
+.recalled-chip {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.recalled-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--signal-soft);
+  border: 1px solid transparent;
+  color: var(--signal);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 11px;
+  transition: border-color var(--dur-tap) ease, background var(--dur-tap) ease;
+}
+.recalled-toggle:hover {
+  border-color: var(--signal);
+}
+.recalled-toggle .caret {
+  font-size: 9px;
+  opacity: 0.85;
+}
+.recalled-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.recalled-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 11px;
+  color: var(--text-2);
+}
+.recalled-row:last-child {
+  border-bottom: 0;
+}
+.recalled-row.clickable {
+  cursor: pointer;
+  transition: background var(--dur-tap) ease;
+}
+.recalled-row.clickable:hover {
+  background: var(--signal-soft);
+  color: var(--text);
+}
+.recalled-row.clickable:focus-visible {
+  background: var(--signal-soft);
+  color: var(--text);
+  outline: 2px solid var(--signal);
+  outline-offset: -2px;
+}
+.recalled-row .recalled-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recalled-row .recalled-date {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.mini-chip {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--bg);
+}
+.mini-chip.gA { background: var(--grade-a); }
+.mini-chip.gB { background: var(--grade-b); }
+.mini-chip.gC { background: var(--grade-c); }
+.mini-chip.gD { background: var(--grade-d); color: #fff; }
+.mini-chip.note {
+  background: var(--hairline-strong);
+  color: var(--text);
+  width: auto;
+  padding: 0 6px;
+  font-weight: 600;
 }
 .lead-body {
   overflow-y: auto;
@@ -907,6 +1015,36 @@ button {
 #toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+/* Error variant — the toast is now actionable (Retry CTA + request-id chip)
+   so pointer-events must enable. Don't suppress the failure with a green pill. */
+#toast.err {
+  background: var(--danger);
+  color: #2a0606;
+  pointer-events: auto;
+  align-items: baseline;
+}
+#toast.err .req {
+  font-weight: 500;
+  font-size: 11px;
+  opacity: 0.78;
+  letter-spacing: 0.02em;
+  margin-left: 4px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+}
+#toast.err .retry {
+  background: rgba(255, 255, 255, 0.18);
+  color: inherit;
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  margin-left: 8px;
+}
+#toast.err .retry:hover {
+  background: rgba(255, 255, 255, 0.28);
 }
 
 /* ---- Beacon ------------------------------------------------------------- */
