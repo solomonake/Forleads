@@ -42,9 +42,9 @@ jobs:
           sha="${{ github.event.pull_request.head.sha }}"
           url=""
           for i in $(seq 1 30); do
-            url=$(gh api "repos/${{ github.repository }}/commits/${sha}/deployments" --jq '.[0].url' 2>/dev/null || true)
+            url=$(gh api "repos/${{ github.repository }}/deployments?sha=${sha}" --jq '.[0].statuses_url' 2>/dev/null || true)
             if [ -n "$url" ] && [ "$url" != "null" ]; then
-              target=$(gh api "$url/statuses" --jq '.[0].target_url' 2>/dev/null || true)
+              target=$(gh api "$url" --jq 'map(select(.state == "success"))[0].target_url // .[0].target_url' 2>/dev/null || true)
               if [ -n "$target" ] && [ "$target" != "null" ]; then
                 echo "url=$target" >> "$GITHUB_OUTPUT"
                 echo "[pr-demo] preview=$target"
