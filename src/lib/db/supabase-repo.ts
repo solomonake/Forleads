@@ -621,6 +621,27 @@ export class SupabaseRepository implements Repository {
     );
     return m;
   }
+  async listOutcomeMemories(leadId: string) {
+    const data = unwrap(
+      await this.sb
+        .from("memory")
+        .select("*")
+        .eq("lead_surface_id", leadId)
+        .eq("kind", "outcome")
+        .order("created_at", { ascending: false }),
+    );
+    return ((data ?? []) as Row[]).map<Memory>((r) => ({
+      id: r.id,
+      agent_id: r.agent_id,
+      lead_surface_id: r.lead_surface_id,
+      kind: "outcome",
+      text: r.text,
+      ref: r.ref ?? undefined,
+      confidence: (r.confidence as Confidence) ?? undefined,
+      embedding: Array.isArray(r.embedding) ? r.embedding : [],
+      created_at: r.created_at,
+    }));
+  }
   async recallMemories(leadId: string, query: number[], k: number) {
     const data = unwrap(
       await this.sb.rpc("fl_recall_memories", {

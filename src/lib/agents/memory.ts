@@ -20,6 +20,7 @@ import type {
   Memory,
   MemoryHit,
   Note,
+  PriorOutcomeSummary,
   OutcomeVerdict,
 } from "@/lib/core/types";
 import { getRepo } from "@/lib/db";
@@ -119,6 +120,42 @@ export async function persistOutcomeMemory(
   }
 }
 
+/** Bucket a list of outcome-kind memories into approved/edited/rejected counts
+ *  + the timestamp of the most recent rejection. Used by the composer + trace. */
+export function summarizeOutcomes(memos: Memory[]): PriorOutcomeSummary {
+  let approved = 0;
+  let edited = 0;
+  let rejected = 0;
+  let lastRejectedAt: string | undefined;
+  let latestVerdict: OutcomeVerdict | undefined;
+  let latestAt: string | undefined;
+  for (const m of memos) {
+    if (m.kind !== "outcome") continue;
+    let verdict: OutcomeVerdict | undefined;
+    if (m.text.startsWith("[approved]")) {
+      approved++;
+      verdict = "approved";
+    } else if (m.text.startsWith("[edited]")) {
+      edited++;
+      verdict = "edited";
+    } else if (m.text.startsWith("[rejected]")) {
+      rejected++;
+      verdict = "rejected";
+      if (!lastRejectedAt || m.created_at > lastRejectedAt) {
+        lastRejectedAt = m.created_at;
+      }
+    }
+    if (verdict && (!latestAt || m.created_at > latestAt)) {
+      latestAt = m.created_at;
+      latestVerdict = verdict;
+    }
+  }
+  if (!latestAt || !latestVerdict) {
+    throw new Error("summarizeOutcomes requires at least one valid outcome memory");
+  }
+  return { approved, edited, rejected, latestVerdict, latestAt, lastRejectedAt };
+}
+
 /** Recall prior outcomes for this lead, optionally filtered by action type.
  * Used by the composer-trace to surface "you already approved 2 emails here". */
 export async function recallOutcomes(
@@ -126,13 +163,7 @@ export async function recallOutcomes(
   actionType?: string,
 ): Promise<Memory[]> {
   const repo = await getRepo();
-  const embedder = getEmbedder();
-  // Query string is intentionally generic — recall is lead-scoped at the DB
-  // layer, so we just want every outcome row. We embed a short label so the
-  // similarity ordering keeps approved/edited near the top.
-  const q = await embedder.embed(`outcome ${actionType ?? ""}`);
-  const hits = await repo.recallMemories(lead.id, q, 32);
-  let memos = hits.map((h) => h.memory).filter((m) => m.kind === "outcome");
+  let memos = await repo.listOutcomeMemories(lead.id);
   if (actionType) {
     memos = memos.filter((m) => m.text.startsWith("[") && m.text.includes(`] ${actionType}:`));
   }

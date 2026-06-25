@@ -28,7 +28,9 @@ import {
   persistEvidenceMemory,
   persistOutcomeMemory,
   recallForLead,
+  recallOutcomes,
   renderRecallNote,
+  summarizeOutcomes,
 } from "@/lib/agents/memory";
 import { composeBest } from "@/lib/agents/composer";
 import { config } from "@/lib/core/config";
@@ -198,6 +200,17 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
   const repo = await getRepo();
   const { agent, lead } = input;
 
+  // Outcome recall — what did the human ALREADY do with prior drafts for this
+  // lead+actionType? Best-effort: if recall fails, draft with no prior context
+  // rather than block. Composer takes the base template path when undefined.
+  let priorOutcomes: import("@/lib/core/types").PriorOutcomeSummary | undefined;
+  try {
+    const memos = await recallOutcomes(lead, input.actionType);
+    if (memos.length > 0) priorOutcomes = summarizeOutcomes(memos);
+  } catch {
+    priorOutcomes = undefined;
+  }
+
   const composed = await composeBest({
     agent,
     situation: input.situation,
@@ -207,6 +220,7 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
     recipientEmail: lead.contact?.email,
     recipientPhone: lead.contact?.phone,
     evidence: input.evidence,
+    priorOutcomes,
   });
 
   // Compliance lint the human-visible text (fail-closed).
@@ -255,6 +269,7 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
     excluded: composed.excluded,
     compliance,
     cost: { claudeCalls: isLive ? 1 : 0, paidDataCalls: 0, ms: 0 },
+    priorOutcomes,
   });
   // Bind the trace's id to the one referenced by the artifact.
   trace.id = traceId;
