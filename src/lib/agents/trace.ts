@@ -29,7 +29,7 @@ export interface BuildTraceInput {
     idempotencyKey: string;
     sent: boolean;
   };
-  cost: { claudeCalls: number; paidDataCalls: number; ms: number };
+  cost: AgentTrace["cost"];
   priorOutcomes?: PriorOutcomeSummary;
 }
 

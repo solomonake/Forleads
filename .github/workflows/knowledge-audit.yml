@@ -1,0 +1,31 @@
+name: Knowledge freshness
+
+on:
+  schedule:
+    - cron: "0 14 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Generate audit proposal
+        run: npm run agent:knowledge-audit -- --report=.agent/knowledge/monthly-audit.md || true
+      - name: Open draft update proposal
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: automation/knowledge-freshness
+          title: "chore(agent-os): monthly knowledge freshness audit"
+          body: "Automated proposal only. Review stale or unsupported sources; no doctrine was silently changed."
+          draft: true
+          commit-message: "chore(agent-os): refresh knowledge audit"

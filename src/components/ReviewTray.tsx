@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Artifact, EmailPayload } from "@/lib/core/types";
-import { apiPost, GradeChip } from "./ui";
+import { apiPatch, apiPost, GradeChip } from "./ui";
 
 export function ReviewTray({
   artifact,
@@ -18,35 +18,54 @@ export function ReviewTray({
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [current, setCurrent] = useState(artifact);
 
-  const isEmail = artifact.type === "email";
-  const email = isEmail ? (artifact.payload as EmailPayload) : null;
+  const isEmail = current.type === "email";
+  const email = isEmail ? (current.payload as EmailPayload) : null;
   const [body, setBody] = useState(email?.body ?? "");
-  const compliance = artifact.compliance_result;
+  const compliance = current.compliance_result;
   const blocked = !compliance.pass;
 
-  // Send the edited body only when the user actually touched the textarea
-  // (different from the original) — keeps the unedited-approve path identical
-  // and avoids spurious "edit" outcome rows in memory.
-  const bodyEdited = !!email && body !== email.body;
+  const saveEdit = async () => {
+    if (!email || body === email.body) {
+      setEditing(false);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await apiPatch<{ artifact: Artifact }>(
+        `/api/artifacts/${current.id}`,
+        {
+          expectedRevision: current.revision,
+          payload: { ...email, body },
+        },
+      );
+      setCurrent(result.artifact);
+      setBody((result.artifact.payload as EmailPayload).body);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const approve = async () => {
     setBusy(true);
     setError(null);
     try {
-      const d = await apiPost<{ connector: { provider: string; deduped: boolean; mode: string; url?: string } }>(
-        "/api/approve",
-        {
-          artifactId: artifact.id,
-          ...(bodyEdited ? { editedBody: body } : {}),
-        },
-      );
+      const d = await apiPost<{
+        connector: { provider: string; deduped: boolean; mode: string; url?: string };
+      }>("/api/approve", {
+        artifactId: current.id,
+        expectedRevision: current.revision,
+      });
       const c = d.connector;
-      const editTag = bodyEdited ? " · with your edits" : "";
       onApproved(
         isEmail
-          ? `Draft created in ${c.provider} (${c.mode})${c.deduped ? " · deduped" : ""}${editTag} — logged to memory`
-          : `${artifact.type} written to ${c.provider} (${c.mode})${editTag} — logged to memory`,
+          ? `Draft created in ${c.provider} (${c.mode})${c.deduped ? " · deduped" : ""} — logged to memory`
+          : `${current.type} written to ${c.provider} (${c.mode}) — logged to memory`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -60,12 +79,12 @@ export function ReviewTray({
       "Why is this draft wrong? (optional — helps the composer next time)",
       "",
     );
-    if (reason === null) return; // user cancelled the prompt
+    if (reason === null) return;
     setBusy(true);
     setError(null);
     try {
       await apiPost<{ memoryId: string | null }>("/api/reject", {
-        artifactId: artifact.id,
+        artifactId: current.id,
         ...(reason.trim() ? { reason: reason.trim() } : {}),
       });
       onApproved(
@@ -118,15 +137,15 @@ export function ReviewTray({
             </>
           ) : (
             <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--sans)", fontSize: 14 }}>
-              {JSON.stringify(artifact.payload, null, 2)}
+              {JSON.stringify(current.payload, null, 2)}
             </pre>
           )}
 
-          {artifact.evidence_used.length > 0 && (
+          {current.evidence_used.length > 0 && (
             <div className="evidence-used">
               <b style={{ color: "var(--text-2)" }}>Evidence used:</b>
               <br />
-              {artifact.evidence_used.map((e, i) => (
+              {current.evidence_used.map((e, i) => (
                 <span key={i} className="chip" style={{ display: "inline-flex" }}>
                   <GradeChip grade={e.confidence} /> {e.claim}
                 </span>
@@ -145,7 +164,11 @@ export function ReviewTray({
             </div>
           )}
 
-          {error && <div className="flagbox" style={{ marginTop: 12 }}>{error}</div>}
+          {error && (
+            <div className="flagbox" style={{ marginTop: 12 }}>
+              {error}
+            </div>
+          )}
         </div>
 
         <div className="draft-foot">
@@ -154,31 +177,37 @@ export function ReviewTray({
           </button>
           <button
             className="btn"
-            disabled={busy || artifact.status === "cancelled"}
+            disabled={busy || current.status === "cancelled"}
             onClick={reject}
             title="Mark this draft wrong — the composer will learn from it"
           >
             Reject
           </button>
-          {artifact.trace_id && (
-            <button className="btn" onClick={() => onOpenTrace(artifact.trace_id!)}>
+          {current.trace_id && (
+            <button className="btn" onClick={() => onOpenTrace(current.trace_id!)}>
               Why?
             </button>
           )}
           {isEmail && (
-            <button className="btn" onClick={() => setEditing((v) => !v)}>
-              {editing ? "Done" : "Edit"}
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={editing ? saveEdit : () => setEditing(true)}
+            >
+              {editing ? "Save & recheck" : "Edit"}
             </button>
           )}
-          <button className="btn primary" disabled={blocked || busy} onClick={approve}>
+          <button
+            className="btn primary"
+            disabled={blocked || busy || editing}
+            onClick={approve}
+          >
             {busy
               ? "Working…"
               : blocked
                 ? "Blocked"
                 : isEmail
-                  ? bodyEdited
-                    ? "Approve with edits"
-                    : "Approve & Create Draft"
+                  ? "Approve & Create Draft"
                   : "Approve & Write"}
           </button>
         </div>

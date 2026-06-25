@@ -1,0 +1,8 @@
+{
+  "name": "product-engineering-os",
+  "version": "0.1.0",
+  "skill": "transform-product-repos",
+  "canonical_path": "/Users/preciousmuwanguzi/Developer/product-engineering-os",
+  "installed_at": "2026-06-25",
+  "update_policy": "proposal-only through the repository draft-PR gates"
+}

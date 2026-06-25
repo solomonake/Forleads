@@ -23,10 +23,11 @@ import type {
   Situation,
 } from "@/lib/core/types";
 import { planDispatch } from "@/lib/agents/dispatcher";
-import { runScoutCached } from "@/lib/agents/scouts";
+import { runScout, runScoutCached } from "@/lib/agents/scouts";
 import { reduce } from "@/lib/agents/reducer";
 import {
   persistEvidenceMemory,
+  persistEventMemory,
   persistNeighborhoodMemory,
   persistOutcomeMemory,
   recallForLead,
@@ -51,18 +52,28 @@ export async function emit(
   type: DomainEventType,
   payload: Record<string, unknown>,
   source: string,
-  leadId?: string
+  leadId?: string,
+  idempotencyKeyValue?: string,
 ): Promise<DomainEvent> {
   const repo = await getRepo();
-  return repo.appendEvent({
+  if (idempotencyKeyValue) {
+    const prior = await repo.getEventByIdempotencyKey(agentId, idempotencyKeyValue);
+    if (prior) return prior;
+  }
+  const event = await repo.appendEvent({
     id: uuid(),
     agent_id: agentId,
     lead_surface_id: leadId,
     type,
     payload,
     source,
+    idempotency_key: idempotencyKeyValue,
     created_at: nowISO(),
   });
+  if (["artifact.edited", "artifact.approved", "artifact.sent", "email.reply"].includes(type)) {
+    await persistEventMemory(event).catch(() => null);
+  }
+  return event;
 }
 
 // ---- Lead creation / lookup -------------------------------------------------
@@ -83,7 +94,6 @@ export async function ensureLead(
     lat: input.lat,
     h3_index: h3Key(input.lng, input.lat),
     status: "researching",
-    contact: { email: "owner@example.com" }, // mock contact channel so the loop runs
     first_seen_at: nowISO(),
     last_worked_at: nowISO(),
   };
@@ -175,7 +185,39 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
     plan.scouts.map((job) => runScoutCached({ lng: lead.lng, lat: lead.lat, address: lead.address, job }))
   );
 
-  const { summary, rejected } = reduce(scoutResults, Date.now() - started);
+  let reduced = reduce(scoutResults, Date.now() - started);
+  if (reduced.summary.breakout?.kind === "deeper_scout") {
+    const target = reduced.summary.breakout.target;
+    const targetCard = reduced.summary.cards.find((card) => card.claim === target);
+    const originalJob = plan.scouts.find((job) => job.type === targetCard?.scout);
+    if (originalJob) {
+      const deeper = await runScout({
+        lng: lead.lng,
+        lat: lead.lat,
+        address: lead.address,
+        job: {
+          ...originalJob,
+          why: `Single depth-one breakout for conflicting claim: ${target}`,
+          budget: {
+            maxCalls: originalJob.budget.maxCalls + 1,
+            maxMs: Math.round(originalJob.budget.maxMs * 1.5),
+            maxTokens: Math.round(originalJob.budget.maxTokens * 1.5),
+          },
+        },
+      });
+      scoutResults.push(deeper);
+      reduced = reduce(scoutResults, Date.now() - started);
+      if (reduced.summary.breakout?.kind === "deeper_scout") {
+        reduced.summary.breakout = {
+          kind: "ask_human",
+          target,
+          question: `Sources still conflict on "${target}". Can you confirm the correct value?`,
+          reason: "The single permitted deeper scout did not resolve the conflict.",
+        };
+      }
+    }
+  }
+  const { summary, rejected } = reduced;
   await repo.saveEvidence(lead.id, summary.cards);
 
   // Persist every reduced card for lead-scoped recall. The neighborhood writer
@@ -288,9 +330,14 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
       model: isLive ? config.claudeModel : "deterministic-composer",
       promptVersion: composed.promptVersion,
       mode: isLive ? "live" : "mock",
+      tokens: composed.modelUsage
+        ? composed.modelUsage.inputTokens + composed.modelUsage.outputTokens
+        : undefined,
     },
     trace_id: traceId,
+    revision: 1,
     created_at: nowISO(),
+    updated_at: nowISO(),
   };
   await repo.saveArtifact(artifact);
 
@@ -304,7 +351,16 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
     evidenceUsed: composed.evidenceUsed,
     excluded: composed.excluded,
     compliance,
-    cost: { claudeCalls: isLive ? 1 : 0, paidDataCalls: 0, ms: 0 },
+    cost: {
+      claudeCalls: isLive ? 1 : 0,
+      paidDataCalls: 0,
+      ms: 0,
+      inputTokens: composed.modelUsage?.inputTokens,
+      outputTokens: composed.modelUsage?.outputTokens,
+      cacheReadTokens: composed.modelUsage?.cacheReadTokens,
+      cacheWriteTokens: composed.modelUsage?.cacheWriteTokens,
+      fallbackReason: composed.fallbackReason,
+    },
     priorOutcomes,
   });
   // Bind the trace's id to the one referenced by the artifact.
@@ -331,71 +387,83 @@ export interface ApproveResult {
 
 export async function approveArtifact(
   artifactId: string,
-  opts?: { googleAccessToken?: string; editedBody?: string }
+  expectedRevision: number,
+  opts?: { googleAccessToken?: string }
 ): Promise<ApproveResult | null> {
   const repo = await getRepo();
   const artifact = await repo.getArtifact(artifactId);
   if (!artifact) return null;
+  if (artifact.revision !== expectedRevision) {
+    throw new Error(
+      `Artifact changed since review (expected revision ${expectedRevision}, current ${artifact.revision}).`
+    );
+  }
 
   // Fail-closed: a blocked artifact can never be approved/sent.
   if (artifact.status === "blocked" || !artifact.compliance_result.pass) {
     throw new Error("Cannot approve: compliance linter blocked this artifact.");
   }
 
-  // If the user edited the email body in the Review Tray, re-lint the edited
-  // text before sending — they may have introduced a fair-housing violation
-  // the original linter never saw. Fail-closed if the edit broke compliance.
-  let workingPayload = artifact.payload;
-  let editedExcerpt: string | undefined;
-  if (opts?.editedBody !== undefined && artifact.type === "email") {
-    const orig = artifact.payload as unknown as Record<string, unknown>;
-    const origBody = typeof orig.body === "string" ? orig.body : "";
-    if (opts.editedBody !== origBody) {
-      const reLint = lintArtifactText([
-        typeof orig.subject === "string" ? orig.subject : undefined,
-        opts.editedBody,
-      ]);
-      if (!reLint.pass) {
-        throw new Error(
-          `Cannot approve: your edit reintroduced a compliance issue (${reLint.flags[0]?.issue ?? "see flags"}).`,
-        );
-      }
-      workingPayload = { ...orig, body: opts.editedBody } as typeof artifact.payload;
-      editedExcerpt = opts.editedBody.slice(0, 240);
-    }
-  }
-
   const connector = connectorForAction(artifact.type, opts);
   const key = idempotencyKey([
     artifact.id,
+    String(artifact.revision),
     artifact.type,
     connector.provider,
-    JSON.stringify(workingPayload),
   ]);
   const meta = { idempotencyKey: key, agentId: artifact.agent_id, leadSurfaceId: artifact.lead_surface_id };
 
-  // Route to the right connector method by action type. workingPayload may be
-  // the edited body if the user touched the textarea in the Review Tray.
+  const durablePrior = await repo.getConnectorWrite(key);
+  if (durablePrior) {
+    return {
+      artifact,
+      connector: {
+        provider: durablePrior.provider,
+        ...durablePrior.result,
+        deduped: true,
+      },
+    };
+  }
+
+  // Route to the right connector method by action type.
   let result;
   switch (artifact.type) {
     case "email":
-      result = await connector.createDraft(workingPayload as never, meta);
+      result = await connector.createDraft(artifact.payload as never, meta);
       break;
     case "calendar":
-      result = await connector.createCalendarEvent(workingPayload as never, meta);
+      result = await connector.createCalendarEvent(artifact.payload as never, meta);
       break;
     case "sms":
       result = connector.sendSms
-        ? await connector.sendSms(workingPayload as never, meta)
+        ? await connector.sendSms(artifact.payload as never, meta)
         : { ok: false, provider: connector.provider, idempotencyKey: key, deduped: false, mode: connector.mode, error: "no sms" };
       break;
     case "task":
-      result = await connector.createTask(workingPayload as never, meta);
+      result = await connector.createTask(artifact.payload as never, meta);
       break;
     case "crm_note":
     default:
-      result = await connector.writeCrmNote(workingPayload as never, meta);
+      result = await connector.writeCrmNote(artifact.payload as never, meta);
       break;
+  }
+  if (result.ok) {
+    await repo.saveConnectorWrite({
+      id: uuid(),
+      agent_id: artifact.agent_id,
+      artifact_id: artifact.id,
+      provider: result.provider,
+      idempotency_key: key,
+      result: {
+        ok: result.ok,
+        externalId: result.externalId,
+        url: result.url,
+        deduped: result.deduped,
+        mode: result.mode,
+        error: result.error,
+      },
+      created_at: nowISO(),
+    });
   }
 
   if (!result.ok) {
@@ -409,22 +477,12 @@ export async function approveArtifact(
   const updated = await repo.updateArtifact(artifact.id, {
     status: isEmailDraft ? "approved" : "sent",
     approved_at: nowISO(),
+    approved_revision: artifact.revision,
+    updated_at: nowISO(),
     sent_at: isEmailDraft ? undefined : nowISO(),
-    payload: workingPayload,
     external_draft_ref: result.externalId
       ? { provider: result.provider, externalId: result.externalId, url: result.url, idempotencyKey: key }
       : undefined,
-    edit_history: editedExcerpt
-      ? [
-          ...((artifact.edit_history ?? []) as never[]),
-          {
-            at: nowISO(),
-            field: "body",
-            before: ((artifact.payload as unknown as { body?: string }).body ?? "").slice(0, 240),
-            after: editedExcerpt,
-          },
-        ]
-      : artifact.edit_history,
   });
 
   // Update the trace's connector record.
@@ -450,16 +508,20 @@ export async function approveArtifact(
 
   // Outcome memory — best-effort. The composer next time can warn before
   // drafting a duplicate offer to this same lead.
+  const latestEdit = artifact.edit_history?.at(-1);
+  const editedExcerpt =
+    latestEdit?.field === "body" ? latestEdit.after.slice(0, 240) : undefined;
+  const verdict = editedExcerpt ? "edited" : "approved";
   const outcomeMem = await persistOutcomeMemory(
     updated!,
-    editedExcerpt ? "edited" : "approved",
+    verdict,
     editedExcerpt,
   );
   if (outcomeMem) {
     await emit(
       artifact.agent_id,
       "outcome.recorded",
-      { verdict: editedExcerpt ? "edited" : "approved", artifactId: artifact.id, memoryId: outcomeMem.id },
+      { verdict, artifactId: artifact.id, memoryId: outcomeMem.id },
       "memory",
       artifact.lead_surface_id,
     );

@@ -10,6 +10,14 @@ export default defineConfig({
   retries: 0,
   reporter: [["list"]],
   outputDir: ".playwright/videos",
+  webServer: process.env.PR_DEMO_BASE_URL
+    ? undefined
+    : {
+        command: "npm run dev",
+        url: baseURL,
+        reuseExistingServer: true,
+        timeout: 120_000,
+      },
   use: {
     baseURL,
     headless: true,

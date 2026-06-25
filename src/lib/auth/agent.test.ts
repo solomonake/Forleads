@@ -56,27 +56,27 @@ describe("agentIdForSub", () => {
 });
 
 describe("currentAgentId / requireAgentId", () => {
-  it("is null when unauthenticated (mutating routes must 401)", () => {
+  it("is null when unauthenticated (mutating routes must 401)", async () => {
     session.value = null;
-    expect(currentAgentId()).toBeNull();
-    expect(requireAgentId()).toBeNull();
+    expect(await currentAgentId()).toBeNull();
+    expect(await requireAgentId()).toBeNull();
   });
 
-  it("is the per-user id when authenticated, never client-controlled", () => {
+  it("is the per-user id when authenticated, never client-controlled", async () => {
     session.value = { sub: "google|abc" };
-    expect(currentAgentId()).toBe(agentIdForSub("google|abc"));
+    expect(await currentAgentId()).toBe(agentIdForSub("google|abc"));
   });
 });
 
 describe("readAgentId", () => {
-  it("falls back to the read-only demo workspace when logged out", () => {
+  it("falls back to the read-only demo workspace when logged out", async () => {
     session.value = null;
-    expect(readAgentId()).toBe(DEMO_AGENT_ID);
+    expect(await readAgentId()).toBe(DEMO_AGENT_ID);
   });
 
-  it("is the user's own workspace when logged in", () => {
+  it("is the user's own workspace when logged in", async () => {
     session.value = { sub: "google|xyz" };
-    expect(readAgentId()).toBe(agentIdForSub("google|xyz"));
+    expect(await readAgentId()).toBe(agentIdForSub("google|xyz"));
   });
 });
 
@@ -102,6 +102,8 @@ describe("ensureCurrentAgent", () => {
     expect(row).not.toBeNull();
     expect(row?.name).toBe("New User");
     expect(row?.email).toBe("new@example.com");
+    expect(await repo.listLoopDefs(id)).toHaveLength(4);
+    expect((await repo.listConnectorAccounts(id)).length).toBeGreaterThan(0);
   });
 
   it("is idempotent — repeat calls do not create duplicate rows", async () => {

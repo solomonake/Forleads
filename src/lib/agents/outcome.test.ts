@@ -2,7 +2,7 @@
 // outcome.test.ts — the human gate writes outcome memories.
 //
 // approveArtifact → outcome memory with verdict="approved".
-// approveArtifact with editedBody that differs from original → "edited".
+// reviseArtifact + approveArtifact at the new revision → "edited".
 // rejectArtifact → "rejected" + artifact.cancelled.
 // recallOutcomes filters by actionType and surfaces only outcome-kind rows.
 // ============================================================================
@@ -20,6 +20,8 @@ import { getRepo } from "@/lib/db";
 import { DEMO_AGENT_ID } from "@/lib/core/config";
 import { DEMO_AGENT } from "@/lib/db/seed";
 import { resetIdempotencyLedger } from "@/lib/connectors";
+import { reviseArtifact } from "@/lib/artifacts/revise";
+import type { EmailPayload } from "@/lib/core/types";
 
 interface RepoGlobal {
   __forleadsRepo?: unknown;
@@ -64,7 +66,7 @@ describe("approveArtifact → outcome memory", () => {
       // blocks, the test setup needs adjusting, not the test logic.
       throw new Error(`setup produced a blocked artifact: ${JSON.stringify(artifact.compliance_result.flags)}`);
     }
-    await approveArtifact(artifact.id);
+    await approveArtifact(artifact.id, artifact.revision);
 
     const repo = await getRepo();
     const events = (await repo.listEvents(DEMO_AGENT_ID)).filter(
@@ -80,12 +82,19 @@ describe("approveArtifact → outcome memory", () => {
   });
 });
 
-describe("approveArtifact with editedBody", () => {
+describe("approveArtifact after revision", () => {
   it("writes an `[edited]` outcome memory and records the edit in edit_history", async () => {
     const { lead, artifact } = await setup("13 Edited Lane");
     if (artifact.status === "blocked") throw new Error("setup blocked");
     const edited = "Hi — quick neighborhood note for you. I trimmed this myself.";
-    await approveArtifact(artifact.id, { editedBody: edited });
+    const revised = await reviseArtifact({
+      artifactId: artifact.id,
+      agentId: DEMO_AGENT_ID,
+      expectedRevision: artifact.revision,
+      payload: { ...(artifact.payload as EmailPayload), body: edited },
+    });
+    if (!revised) throw new Error("revision failed");
+    await approveArtifact(revised.id, revised.revision);
 
     const repo = await getRepo();
     const after = await repo.getArtifact(artifact.id);
@@ -103,8 +112,7 @@ describe("approveArtifact with editedBody", () => {
   it("does NOT mark `edited` if the user's body matches the original verbatim", async () => {
     const { lead, artifact } = await setup("15 Unchanged Way");
     if (artifact.status === "blocked") throw new Error("setup blocked");
-    const original = (artifact.payload as { body: string }).body;
-    await approveArtifact(artifact.id, { editedBody: original });
+    await approveArtifact(artifact.id, artifact.revision);
 
     const outcomes = await recallOutcomes(lead, "email");
     expect(outcomes.length).toBe(1);
@@ -115,9 +123,16 @@ describe("approveArtifact with editedBody", () => {
     const { artifact } = await setup("16 Revision Key Way");
     if (artifact.status === "blocked") throw new Error("setup blocked");
 
-    const first = await approveArtifact(artifact.id);
+    const first = await approveArtifact(artifact.id, artifact.revision);
     const edited = "A materially different approved body.";
-    const second = await approveArtifact(artifact.id, { editedBody: edited });
+    const revised = await reviseArtifact({
+      artifactId: artifact.id,
+      agentId: DEMO_AGENT_ID,
+      expectedRevision: artifact.revision,
+      payload: { ...(artifact.payload as EmailPayload), body: edited },
+    });
+    if (!revised) throw new Error("revision failed");
+    const second = await approveArtifact(revised.id, revised.revision);
 
     expect(first?.connector.deduped).toBe(false);
     expect(second?.connector.deduped).toBe(false);
@@ -134,7 +149,9 @@ describe("approveArtifact with editedBody", () => {
 
     try {
       await expect(
-        approveArtifact(artifact.id, { googleAccessToken: "expired-token" }),
+        approveArtifact(artifact.id, artifact.revision, {
+          googleAccessToken: "expired-token",
+        }),
       ).rejects.toThrow(/Connector write failed/);
     } finally {
       globalThis.fetch = originalFetch;
@@ -181,7 +198,7 @@ describe("recallOutcomes filters", () => {
   it("returns only outcome-kind memories for the lead", async () => {
     const { lead, artifact } = await setup("21 Filter St");
     if (artifact.status === "blocked") throw new Error("setup blocked");
-    await approveArtifact(artifact.id);
+    await approveArtifact(artifact.id, artifact.revision);
 
     // The lead also has evidence + note memories floating around; recallOutcomes
     // must NOT surface them.

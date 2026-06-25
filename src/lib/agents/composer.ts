@@ -45,6 +45,13 @@ export interface ComposeOutput {
   evidenceUsed: EvidenceCard[];
   excluded: { content: string; reason: string }[];
   promptVersion: string;
+  modelUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+  };
+  fallbackReason?: string;
 }
 
 const PROMPT_VERSION = "composer-1.2.0";
@@ -274,6 +281,7 @@ async function composeLive(input: ComposeInput): Promise<ComposeOutput> {
   const usable = input.evidence.filter((c) => c.confidence !== "D");
   const system = liveSystem(input);
   const user = liveUser(input);
+  let modelUsage: ComposeOutput["modelUsage"];
 
   if (input.actionType === "sms") {
     const out = await claudeJSON<{ body?: string }>({
@@ -281,6 +289,9 @@ async function composeLive(input: ComposeInput): Promise<ComposeOutput> {
       user,
       schemaHint: `{ "body": string }  // one friendly SMS, under 320 chars`,
       maxTokens: 300,
+      onUsage: (usage) => {
+        modelUsage = usage;
+      },
     });
     const clean = applyExclusions(String(out.body ?? "").trim());
     if (!clean.text) throw new Error("live composer returned empty sms");
@@ -289,6 +300,7 @@ async function composeLive(input: ComposeInput): Promise<ComposeOutput> {
       evidenceUsed: usable,
       excluded: clean.excluded,
       promptVersion: LIVE_PROMPT_VERSION,
+      modelUsage,
     };
   }
 
@@ -298,6 +310,9 @@ async function composeLive(input: ComposeInput): Promise<ComposeOutput> {
     user,
     schemaHint: `{ "subject": string, "body": string }`,
     maxTokens: 800,
+    onUsage: (usage) => {
+      modelUsage = usage;
+    },
   });
   const subject = String(out.subject ?? "").trim();
   const clean = applyExclusions(String(out.body ?? "").trim());
@@ -313,6 +328,7 @@ async function composeLive(input: ComposeInput): Promise<ComposeOutput> {
     evidenceUsed: usable,
     excluded: clean.excluded,
     promptVersion: LIVE_PROMPT_VERSION,
+    modelUsage,
   };
 }
 
@@ -325,7 +341,10 @@ export async function composeBest(input: ComposeInput): Promise<ComposeOutput> {
   if (claudeLive() && (input.actionType === "email" || input.actionType === "sms")) {
     // .catch attaches synchronously (no microtask gap) — the live rejection is
     // always handled; a draft is always produced, never a broken one.
-    return composeLive(input).catch(() => compose(input));
+    return composeLive(input).catch((error) => ({
+      ...compose(input),
+      fallbackReason: error instanceof Error ? error.message : "live composer failed",
+    }));
   }
   return compose(input);
 }

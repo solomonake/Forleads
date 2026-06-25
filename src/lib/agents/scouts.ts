@@ -119,15 +119,17 @@ async function runMarket(input: ScoutInput): Promise<ScoutResult> {
 }
 
 async function runRisk(input: ScoutInput): Promise<ScoutResult> {
-  // Deterministic mock open-hazard signal; a real adapter would call a hazard layer.
+  // No risk provider is configured yet. An honest gap is safer than deriving a
+  // plausible-looking flood result from coordinates.
   const cards = stamp(
     [
       {
         scout: "risk",
         claim: "Flood risk",
-        value: input.lat % 0.01 > 0.005 ? "Low" : "Moderate",
-        sources: [{ name: "open hazard layer" }],
-        confidence: "B",
+        value: null,
+        sources: [],
+        confidence: "D",
+        reasoning: "No verified hazard provider is configured for this market.",
       },
     ],
     "risk"
@@ -135,23 +137,24 @@ async function runRisk(input: ScoutInput): Promise<ScoutResult> {
   return {
     scout: "risk",
     cards,
-    gaps: [],
-    cost: { ms: 120, tokens: 0, calls: 1 },
-    status: "ok",
+    gaps: ["No verified risk provider configured"],
+    cost: { ms: 0, tokens: 0, calls: 0 },
+    status: "insufficient_evidence",
   };
 }
 
 async function runPeople(input: ScoutInput): Promise<ScoutResult> {
-  // Lawful public signals ONLY — never demographics (compliance + privacy).
+  // Never infer occupancy from an address alone. A real people provider must
+  // supply a lawful, cited public-record signal.
   const cards = stamp(
     [
       {
         scout: "people",
         claim: "Occupancy",
-        value: "Likely owner-occupied",
-        sources: [{ name: "public records" }],
-        confidence: "C",
-        reasoning: "Lawful public signals only — never demographic attributes.",
+        value: null,
+        sources: [],
+        confidence: "D",
+        reasoning: "No lawful public-record provider is configured.",
       },
     ],
     "people"
@@ -159,9 +162,9 @@ async function runPeople(input: ScoutInput): Promise<ScoutResult> {
   return {
     scout: "people",
     cards,
-    gaps: [],
-    cost: { ms: 200, tokens: 0, calls: 1 },
-    status: "ok",
+    gaps: ["No lawful people-data provider configured"],
+    cost: { ms: 0, tokens: 0, calls: 0 },
+    status: "insufficient_evidence",
   };
 }
 
@@ -175,7 +178,28 @@ const RUNNERS: Record<ScoutType, (i: ScoutInput) => Promise<ScoutResult>> = {
 
 export async function runScout(input: ScoutInput): Promise<ScoutResult> {
   const runner = RUNNERS[input.job.type];
-  return runner(input);
+  const result = await runner(input);
+  const allowed = input.job.allowlist.map((source) => source.toLowerCase());
+  const cards = result.cards.filter((card) =>
+    card.confidence === "D" ||
+    card.sources.every((source) =>
+      allowed.some((entry) => source.name.toLowerCase().includes(entry)),
+    ),
+  );
+  const rejected = result.cards.length - cards.length;
+  return {
+    ...result,
+    cards,
+    gaps: rejected
+      ? [...result.gaps, `${rejected} card(s) rejected: source outside scout allowlist`]
+      : result.gaps,
+    cost: {
+      ...result.cost,
+      calls: Math.min(result.cost.calls, input.job.budget.maxCalls),
+      tokens: Math.min(result.cost.tokens, input.job.budget.maxTokens),
+    },
+    status: rejected && cards.length === 0 ? "insufficient_evidence" : result.status,
+  };
 }
 
 // ---- Cache-first by H3 (constitution §10, audit axis 5) ---------------------
@@ -215,7 +239,7 @@ export async function runScoutCached(input: ScoutInput): Promise<ScoutResult> {
 
   const cache = getCache();
   const hit = cache.get<ScoutResult>(key);
-  if (hit) return hit;
+  if (hit) return { ...hit, cost: { ...hit.cost, cacheHit: true, calls: 0, tokens: 0 } };
 
   const result = await runScout(input);
   if (result.status === "ok") cache.set(key, result, SCOUT_CACHE_TTL_MS);

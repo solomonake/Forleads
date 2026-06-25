@@ -6,6 +6,8 @@ import { agentIdForSub } from "@/lib/auth/agent";
 import { exchangeCode, fetchProfile } from "@/lib/auth/google";
 import { SESSION_COOKIE, seal, sessionCookieOptions, type Session } from "@/lib/auth/session";
 import { getRepo } from "@/lib/db";
+import { provisionWorkspace } from "@/lib/db/seed";
+import { saveGoogleCredential } from "@/lib/auth/credentials";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -30,7 +32,6 @@ export async function GET(req: NextRequest) {
       email: profile.email,
       picture: profile.picture,
       brandVoice: "warm_local",
-      google: tokens,
       createdAt: Date.now(),
     };
 
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
     const agentId = agentIdForSub(profile.sub);
     const repo = await getRepo();
     const existing = await repo.getAgent(agentId);
-    await repo.upsertAgent({
+    await provisionWorkspace(repo, {
       id: agentId,
       name: profile.name,
       email: profile.email,
@@ -49,6 +50,7 @@ export async function GET(req: NextRequest) {
       locale: existing?.locale ?? "en-US",
       mode: existing?.mode ?? "crm",
     });
+    session.googleCredentialRef = await saveGoogleCredential(agentId, tokens);
 
     // New user with no phone yet → send them through a one-field onboarding.
     const dest = session.phone ? "/?auth=ok" : "/?auth=ok&onboard=phone";

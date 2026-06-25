@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiGet, apiPost, ApiError } from "./ui";
+import { apiGet, apiPost, ApiError } from "./api";
 
 const realFetch = globalThis.fetch;
 

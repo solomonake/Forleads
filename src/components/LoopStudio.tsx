@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { LeadSurface, LoopDefinition, LoopRun } from "@/lib/core/types";
+import type { LeadSurface, LoopAnalytics, LoopDefinition, LoopRun } from "@/lib/core/types";
 import { apiGet, apiPost } from "./ui";
 
 export function LoopStudio() {
@@ -9,16 +9,24 @@ export function LoopStudio() {
   const [runs, setRuns] = useState<LoopRun[]>([]);
   const [leads, setLeads] = useState<LeadSurface[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState("");
+  const [analytics, setAnalytics] = useState<Record<string, LoopAnalytics>>({});
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [d, l] = await Promise.all([
-      apiGet<{ definitions: LoopDefinition[]; runs: LoopRun[] }>("/api/loops"),
+      apiGet<{
+        definitions: LoopDefinition[];
+        runs: LoopRun[];
+        analytics: Record<string, LoopAnalytics>;
+      }>("/api/loops"),
       apiGet<{ leads: LeadSurface[] }>("/api/leads"),
     ]);
     setDefs(d.definitions);
     setRuns(d.runs);
+    setAnalytics(d.analytics);
     setLeads(l.leads);
+    setSelectedLeadId((current) => current || l.leads[0]?.id || "");
   }, []);
 
   useEffect(() => {
@@ -26,7 +34,7 @@ export function LoopStudio() {
   }, [load]);
 
   const runNow = async (loopId: string) => {
-    const lead = leads[0];
+    const lead = leads.find((candidate) => candidate.id === selectedLeadId);
     if (!lead) {
       setMsg("Open the Map and ground a lead first, then loops have something to act on.");
       setTimeout(() => setMsg(null), 3500);
@@ -51,11 +59,33 @@ export function LoopStudio() {
         back · REPORT on a schedule. Every run is logged.
       </div>
       {msg && <div className="row" style={{ marginBottom: 14 }}>{msg}</div>}
+      <label className="row" style={{ display: "block", marginBottom: 14 }}>
+        <span className="rmeta">Lead used by “Run now”</span>
+        <select
+          value={selectedLeadId}
+          onChange={(event) => setSelectedLeadId(event.target.value)}
+          style={{ width: "100%", marginTop: 8 }}
+        >
+          <option value="">Select a grounded lead</option>
+          {leads.map((lead) => (
+            <option key={lead.id} value={lead.id}>
+              {lead.address}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <div className="panel-grid">
         {defs.map((d) => {
           const open = selected === d.id;
-          const s = d.stats ?? { runs: 0, approved: 0, replies: 0, blocked: 0 };
+          const s = analytics[d.id] ?? {
+            runs: 0,
+            approved: 0,
+            replies: 0,
+            blocked: 0,
+            produced: 0,
+            skipped: 0,
+          };
           return (
             <div className="row" key={d.id}>
               <div className="rtitle">
@@ -65,7 +95,7 @@ export function LoopStudio() {
               <div className="rmeta">
                 {d.description}
                 <br />
-                {s.runs} runs · {s.approved} approved · {s.replies} replies · {s.blocked} blocked
+                {s.runs} runs · {s.produced} produced · {s.approved} approved · {s.replies} replies · {s.blocked} blocked
               </div>
               {open && (
                 <div className="rmeta" style={{ marginTop: 10, borderTop: "1px dashed var(--hairline)", paddingTop: 10 }}>

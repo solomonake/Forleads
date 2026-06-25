@@ -6,9 +6,10 @@
 // .agent/audits/2026-06-23-prod-readiness.md axes 1–3).
 // ============================================================================
 
-import { DEMO_AGENT_ID } from "@/lib/core/config";
+import { config, DEMO_AGENT_ID } from "@/lib/core/config";
 import { deterministicUuid } from "@/lib/core/ids";
 import { getRepo } from "@/lib/db";
+import { provisionWorkspace } from "@/lib/db/seed";
 import { getSession } from "./session";
 
 /**
@@ -21,8 +22,8 @@ export function agentIdForSub(sub: string): string {
 }
 
 /** The signed-in user's agent id, or null when unauthenticated. */
-export function currentAgentId(): string | null {
-  const s = getSession();
+export async function currentAgentId(): Promise<string | null> {
+  const s = await getSession();
   return s ? agentIdForSub(s.sub) : null;
 }
 
@@ -30,7 +31,7 @@ export function currentAgentId(): string | null {
  * For MUTATING routes: the caller's agent id, or null → the route must 401.
  * (Same as currentAgentId; named for intent at the call site.)
  */
-export function requireAgentId(): string | null {
+export async function requireAgentId(): Promise<string | null> {
   return currentAgentId();
 }
 
@@ -39,8 +40,8 @@ export function requireAgentId(): string | null {
  * workspace when logged out. Still never trusts client input — a logged-out user
  * can only ever see the seeded demo agent, never an arbitrary tenant.
  */
-export function readAgentId(): string {
-  return currentAgentId() ?? DEMO_AGENT_ID;
+export async function readAgentId(): Promise<string> {
+  return (await currentAgentId()) ?? DEMO_AGENT_ID;
 }
 
 /**
@@ -55,20 +56,19 @@ export function readAgentId(): string {
  * satisfied. Idempotent. Returns the agent id, or null if unauthenticated.
  */
 export async function ensureCurrentAgent(): Promise<string | null> {
-  const s = getSession();
-  if (!s) return null;
+  const s = await getSession();
+  if (!s) return config.allowDemoMutations ? DEMO_AGENT_ID : null;
   const id = agentIdForSub(s.sub);
   const repo = await getRepo();
   const existing = await repo.getAgent(id);
-  if (existing) return id;
-  await repo.upsertAgent({
+  await provisionWorkspace(repo, {
     id,
     name: s.name,
     email: s.email,
     signatureHtml: `<p>${s.name} · ${s.email}</p>`,
-    brandVoice: s.brandVoice ?? "warm_local",
-    locale: "en-US",
-    mode: "crm",
+    brandVoice: existing?.brandVoice ?? s.brandVoice ?? "warm_local",
+    locale: existing?.locale ?? "en-US",
+    mode: existing?.mode ?? "crm",
   });
   return id;
 }
