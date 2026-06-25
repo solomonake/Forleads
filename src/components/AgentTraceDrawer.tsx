@@ -96,6 +96,15 @@ export function AgentTraceDrawer({
               <span className="tv">
                 {trace.cost.claudeCalls} Claude call(s) · {trace.cost.paidDataCalls} paid data
                 call(s)
+                {trace.cost.inputTokens !== undefined
+                  ? ` · ${trace.cost.inputTokens} input / ${trace.cost.outputTokens ?? 0} output tokens`
+                  : ""}
+                {trace.cost.cacheReadTokens
+                  ? ` · ${trace.cost.cacheReadTokens} cache-read tokens`
+                  : ""}
+                {trace.cost.fallbackReason
+                  ? ` · fallback: ${trace.cost.fallbackReason}`
+                  : ""}
               </span>
             </div>
           </>

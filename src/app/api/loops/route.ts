@@ -7,15 +7,19 @@ import { optStr, str, validateBody } from "@/lib/validation";
 import { SITUATIONS, type Situation } from "@/lib/core/types";
 import { getRepo } from "@/lib/db";
 import { runLoop } from "@/lib/loops/engine";
+import { deriveLoopAnalytics } from "@/lib/loops/analytics";
 
 export const GET = withRoute("loops.list", async () => {
   const agentId = await readAgentIdEnsured();
   const repo = await getRepo();
-  const [definitions, runs] = await Promise.all([
+  const [definitions, runs, artifacts, events] = await Promise.all([
     repo.listLoopDefs(agentId),
     repo.listLoopRuns(agentId),
+    repo.listArtifacts(agentId),
+    repo.listEvents(agentId),
   ]);
-  return NextResponse.json({ definitions, runs });
+  const analytics = deriveLoopAnalytics({ definitions, runs, artifacts, events });
+  return NextResponse.json({ definitions, runs, analytics });
 });
 
 export const POST = withRoute("loops.run", async (req: NextRequest) => {

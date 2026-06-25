@@ -1,4 +1,4 @@
-# Session handoff — resume here
+# Archived session handoff - durable persistence
 
 _Updated 2026-06-23. Paste this into a fresh window to continue without dragging
 the old transcript. Read `AGENT_OS.md` + `playbook.md` first (small, dense)._

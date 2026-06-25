@@ -1,82 +1,54 @@
-# Agent OS — how agents work in this repo
+# Agent OS v2
 
-This folder is a **knowledge graph for agents**. Any model (Opus, Sonnet, Codex,
-Copilot) reads it on entry and writes back to it on exit, so each session starts
-smarter than the last and never re-learns what's already known. Humans read it
-too — it's the shared brain.
+This directory is the durable knowledge and proof layer shared by Codex and
+Claude. `AGENTS.md` is the root contract. Chat history is disposable.
 
-## The files (nodes of the graph)
+## Knowledge graph
 
-| File | Holds | Read when |
-|---|---|---|
-| `AGENT_OS.md` (this) | How we operate: loops, token budget, planning, human-in-loop | First, every session |
-| `onboarding-notes.md` | Repo facts: stack, commands, git, host, secrets needed | First, every session |
-| `playbook.md` | Reusable patterns + a **gotchas table** (failures already solved) | Before acting; before debugging anything |
-| `decisions.md` | Why the architecture is the way it is (ADRs) | When a choice seems odd or you want to change it |
-| `plans/*.md` | Model-agnostic, ready-to-execute plans for upcoming work | When picking up the next chunk |
-| `SESSION_HANDOFF.md` | The latest "resume here" summary | When continuing a session in a fresh window |
+| Node | Purpose |
+|---|---|
+| `onboarding-notes.md` | Current stack, commands, hosting, and environment facts |
+| `playbook.md` | Reusable patterns and solved failures |
+| `decisions.md` | Accepted architecture decisions and tradeoffs |
+| `plans/` | Decision-complete task packets |
+| `knowledge/catalog.json` | Source provenance, freshness, trust, and actionable rules |
+| `evals/corpus.v1.json` | Versioned product, adversarial, and regression scenarios |
+| `handoffs/` | Historical continuation state |
 
-Cross-link between files with `→ playbook.md#osm` style references. The graph is
-the links.
+## Operating loop
 
-## The operating loop (every task)
+1. Orient: read the small operating files and inspect the relevant code.
+2. Pain: state the user, job, observed pain, and business value.
+3. Research: verify unstable facts using primary or approved sources.
+4. Plan: define current and desired behavior, non-goals, seams, and acceptance.
+5. Risk: choose low, medium, high, or critical using `AGENTS.md`.
+6. Implement: make the smallest coherent change.
+7. Test: run targeted tests, then the risk-selected gate.
+8. Break: attack malformed input, stale state, retries, timeouts, and partial failure.
+9. Review: invoke only relevant specialists, capped at three.
+10. Product verify: exercise happy, empty, failure, recovery, and responsive paths.
+11. Record: update a gotcha, ADR, knowledge entry, or handoff when warranted.
+12. Draft PR: include intent, proof, cost proxies, demo, risk, and rollback.
 
-```
-ORIENT → PLAN → ACT → VERIFY → RECORD
-```
+## Token and context discipline
 
-1. **ORIENT** (cheap, read-only): read this folder + the relevant code. Never
-   re-derive what onboarding-notes / playbook already states.
-2. **PLAN**: for anything non-trivial, write/refresh a plan in `plans/`. A good
-   plan is model-agnostic (see below) so any model can execute it.
-3. **ACT**: make the change. Prefer the smallest diff that matches surrounding
-   code. Batch independent tool calls in one step.
-4. **VERIFY**: run the repo's gates (typecheck, lint, test) and — for anything a
-   user can see — actually run it and look. Don't claim done on faith.
-5. **RECORD**: if you hit and solved a failure, add a row to the gotchas table.
-   If you made a non-obvious choice, log it in decisions.md. Update
-   onboarding-notes if a fact changed. This is the self-improvement step — skip
-   it and the next session repeats your pain.
+- Search first, then read narrow slices.
+- Do not reread material already summarized in the task context.
+- Batch independent inspections.
+- Prefer a targeted probe of the risky seam before a full suite.
+- Keep static doctrine out of prompts; retrieve only relevant knowledge entries.
+- Track exact runtime tokens when exposed. Otherwise report context bytes/files,
+  repeated reads, command count, elapsed time, and verification cost as proxies.
+- Stop uncontrolled exploration and write a handoff when context becomes noisy.
 
-## Token budget discipline (cost = quality here)
+## Human boundary
 
-Opus works best under ~200k context tokens; quality degrades as it fills. Treat
-context as a budget, not infinite:
+Agents may create a branch, implement, verify, commit, push, and open a draft PR
+only after mandatory gates pass. Merge, deployment, spending, production
+mutation, destructive action, and external communication require approval.
 
-- **Read narrow.** Read the part of a file you need (offset/limit, grep first),
-  not the whole thing. Grep to locate, then read the hit.
-- **Don't re-read.** If a file's content is already in this session, use it.
-- **Batch parallel tool calls** in one turn when they're independent — one
-  round-trip, less overhead.
-- **Verify cheaply.** A targeted `curl`/SQL probe of the risky layer beats
-  spinning the whole app. (We proved the Supabase geo round-trip and live OSM
-  with one call each.)
-- **Prefer dedicated tools** (Edit/Read/Grep) over shelling out `cat`/`sed`.
-- **Hand off before you're full.** At ~70% context, stop and write
-  `SESSION_HANDOFF.md` so a fresh window resumes with a small, dense seed
-  instead of dragging a bloated transcript. A 2-page handoff is worth 150k
-  tokens of scrollback.
+## Learning promotion
 
-## Model-agnostic planning (so any model reproduces top work)
-
-A plan should carry everything a model needs so the *model* stops mattering.
-Template in `plans/TEMPLATE.md`. Every plan states: **Goal · Context links ·
-Exact files & seams · Steps · Verification · Risks/gotchas · Done criteria.**
-If a plan needs the agent to "be smart," it's underspecified — push the
-intelligence into the plan, not the model.
-
-## Human-in-the-loop protocol
-
-Agents discover everything they can; they **ask the human only for what they
-genuinely can't reach**, and they ask with exact steps. Ask (don't guess) for:
-secrets/keys, outward-facing approvals (deploy, send, merge to main),
-destructive actions, or a genuine product decision. When you ask, give the human
-a numbered "how to get this" so a first-timer can do it. Record the answer so
-you never ask twice.
-
-## Self-improvement contract
-
-Before debugging, check `playbook.md#gotchas` — the failure may already be
-solved. After solving a *new* failure (a stress test, an env quirk, a flaky
-provider), add a row so it's solved forever. The gotchas table is how the system
-gets less mediocre over time.
+Product-specific facts stay local. Promote a lesson into the future shared OS
+only when it is generalizable, evidence-backed, tested, non-secret, and not
+coupled to Forleads' accidental architecture.

@@ -1,7 +1,4 @@
-# CI — runs the repo's gates on every PR so the "require status checks" branch
-# rule has something real to enforce. Fast + deterministic (typecheck, lint,
-# test). The heavy production build is covered by Vercel's preview deploy, so we
-# don't repeat it here (keeps Actions minutes low; see .agent/playbook.md).
+# CI runs deterministic product and agent-system proof on every change.
 name: CI
 
 on:
@@ -12,7 +9,7 @@ on:
 
 jobs:
   gates:
-    name: typecheck · lint · test
+    name: agent proof
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,10 +24,40 @@ jobs:
         run: npm ci
 
       - name: Typecheck
-        run: npm run typecheck
+        run: npm run agent:doctor
 
-      - name: Lint
-        run: npm run lint
+      - name: Static and unit gates
+        run: npm run typecheck && npm run lint && npm test
 
-      - name: Test
-        run: npm test
+      - name: Coverage and agent evaluations
+        run: npm run test:coverage && npm run agent:eval
+
+      - name: Dependency security
+        run: npm audit --audit-level=high
+
+      - name: Secret pattern scan
+        run: |
+          if git grep -nE '(sk_live_|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----)' -- ':!package-lock.json'; then
+            echo "Potential committed secret detected"
+            exit 1
+          fi
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Product flows and accessibility smoke
+        run: npm run demo:e2e
+
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-proof-${{ github.sha }}
+          path: |
+            coverage/**
+            .playwright/**
+            test-results/**
+          if-no-files-found: ignore

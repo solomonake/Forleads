@@ -30,6 +30,8 @@ export interface Session {
   picture?: string;
   phone?: string;
   brandVoice?: "warm_local" | "crisp_pro" | "luxury";
+  googleCredentialRef?: string;
+  /** Legacy sessions only; new OAuth callbacks store tokens server-side. */
   google?: GoogleTokens;
   createdAt: number;
 }
@@ -51,18 +53,18 @@ function key(): Buffer {
   return createHash("sha256").update(secret).digest(); // 32 bytes
 }
 
-export function seal(session: Session): string {
+export function sealValue(value: unknown): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv(ALG, key(), iv);
   const data = Buffer.concat([
-    cipher.update(JSON.stringify(session), "utf8"),
+    cipher.update(JSON.stringify(value), "utf8"),
     cipher.final(),
   ]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([iv, tag, data]).toString("base64url");
 }
 
-export function unseal(token: string): Session | null {
+export function unsealValue<T>(token: string): T | null {
   try {
     const raw = Buffer.from(token, "base64url");
     const iv = raw.subarray(0, 12);
@@ -71,16 +73,24 @@ export function unseal(token: string): Session | null {
     const decipher = createDecipheriv(ALG, key(), iv);
     decipher.setAuthTag(tag);
     const out = Buffer.concat([decipher.update(data), decipher.final()]);
-    return JSON.parse(out.toString("utf8")) as Session;
+    return JSON.parse(out.toString("utf8")) as T;
   } catch {
     return null; // tampered or wrong key → treat as logged out
   }
 }
 
+export function seal(session: Session): string {
+  return sealValue(session);
+}
+
+export function unseal(token: string): Session | null {
+  return unsealValue<Session>(token);
+}
+
 // ---- Next.js cookie helpers (server components / route handlers) ------------
 
-export function getSession(): Session | null {
-  const token = cookies().get(SESSION_COOKIE)?.value;
+export async function getSession(): Promise<Session | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
   return token ? unseal(token) : null;
 }
 

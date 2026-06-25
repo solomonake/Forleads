@@ -37,12 +37,20 @@ export async function apiGet<T>(url: string): Promise<T> {
 }
 
 export async function apiPost<T>(url: string, body: unknown): Promise<T> {
+  return apiWrite<T>("POST", url, body);
+}
+
+export async function apiPatch<T>(url: string, body: unknown): Promise<T> {
+  return apiWrite<T>("PATCH", url, body);
+}
+
+async function apiWrite<T>(method: "POST" | "PATCH", url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   const data = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `POST ${url} → ${res.status}`);
+  if (!res.ok) throw new Error(data.error ?? `${method} ${url} → ${res.status}`);
   return data;
 }

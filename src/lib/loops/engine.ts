@@ -135,13 +135,6 @@ export async function runLoop(def: LoopDefinition, ctx: LoopContext): Promise<Lo
   };
   await repo.saveLoopRun(run);
 
-  // Update loop stats.
-  const stats = def.stats ?? { runs: 0, approved: 0, replies: 0, blocked: 0 };
-  await repo.upsertLoopDef({
-    ...def,
-    stats: { ...stats, runs: stats.runs + 1, blocked: stats.blocked + (anyBlocked ? 1 : 0) },
-  });
-
   return run;
 }
 

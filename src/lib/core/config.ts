@@ -16,6 +16,9 @@ export const DEMO_AGENT_ID =
 export type Mode = "mock" | "live";
 
 export const config = {
+  allowDemoMutations:
+    env("FORLEADS_ALLOW_DEMO_MUTATIONS") === "1" ||
+    process.env.NODE_ENV === "development",
   agentMode: (env("FORLEADS_AGENT_MODE") ?? "mock") as Mode,
   claudeModel: env("FORLEADS_CLAUDE_MODEL") ?? "claude-sonnet-4-6",
   anthropicKey: env("ANTHROPIC_API_KEY"),

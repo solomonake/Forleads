@@ -39,6 +39,7 @@ export interface ScoutCost {
   ms: number;
   tokens: number;
   calls: number;
+  cacheHit?: boolean;
 }
 
 export type ScoutStatus =
@@ -284,8 +285,11 @@ export interface Artifact {
   model_trace: ModelTrace;
   external_draft_ref?: ExternalDraftRef;
   trace_id?: UUID;
+  revision: number;
   created_at: ISODate;
+  updated_at: ISODate;
   approved_at?: ISODate;
+  approved_revision?: number;
   sent_at?: ISODate;
   snooze_until?: ISODate;
   edit_history?: ArtifactEdit[];
@@ -305,6 +309,7 @@ export type DomainEventType =
   | "lead.created"
   | "note.created"
   | "artifact.drafted"
+  | "artifact.edited"
   | "artifact.approved"
   | "artifact.sent"
   | "artifact.blocked"
@@ -322,6 +327,24 @@ export interface DomainEvent {
   type: DomainEventType;
   payload: Record<string, unknown>;
   source: string;
+  idempotency_key?: string;
+  created_at: ISODate;
+}
+
+export interface ConnectorWrite {
+  id: UUID;
+  agent_id: UUID;
+  artifact_id?: UUID;
+  provider: string;
+  idempotency_key: string;
+  result: {
+    ok: boolean;
+    externalId?: string;
+    url?: string;
+    deduped: boolean;
+    mode: string;
+    error?: string;
+  };
   created_at: ISODate;
 }
 
@@ -369,6 +392,11 @@ export interface LoopStats {
   approved: number;
   replies: number;
   blocked: number;
+}
+
+export interface LoopAnalytics extends LoopStats {
+  produced: number;
+  skipped: number;
 }
 
 export type LoopRunStatus =
@@ -432,7 +460,20 @@ export interface AgentTrace {
   excluded: { content: string; reason: string }[];
   policy: { name: string; result: "pass" | "fail" }[];
   connector?: { provider: string; action: string; idempotencyKey: string; sent: boolean };
-  cost: { claudeCalls: number; paidDataCalls: number; ms: number };
+  cost: {
+    claudeCalls: number;
+    paidDataCalls: number;
+    ms: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+    providerCalls?: number;
+    cacheHits?: number;
+    estimatedCostUsd?: number;
+    fallbackReason?: string;
+    knowledgeSourceIds?: string[];
+  };
   created_at: ISODate;
 }
 
@@ -463,6 +504,17 @@ export interface ConnectorAccount {
   capabilities: string[];
   last_healthcheck_at?: ISODate;
   created_at: ISODate;
+}
+
+export interface ConnectorCredential {
+  id: UUID;
+  agent_id: UUID;
+  provider: ConnectorProvider;
+  encrypted_payload: string;
+  version: number;
+  created_at: ISODate;
+  updated_at: ISODate;
+  revoked_at?: ISODate;
 }
 
 // ---- Agent / identity -------------------------------------------------------

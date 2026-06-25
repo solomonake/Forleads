@@ -17,6 +17,10 @@ export const POST = withRoute("zapier.inbound", async (req: NextRequest) => {
   if (secret !== config.zapier.webhookSecret) {
     return NextResponse.json({ error: "invalid secret" }, { status: 401 });
   }
+  const idempotencyKey = req.headers.get("x-idempotency-key");
+  if (!idempotencyKey) {
+    return NextResponse.json({ error: "x-idempotency-key required" }, { status: 400 });
+  }
   const body = (await req.json()) as {
     type?: DomainEventType;
     leadId?: string;
@@ -30,7 +34,8 @@ export const POST = withRoute("zapier.inbound", async (req: NextRequest) => {
     body.type ?? "watcher.hit",
     body.payload ?? {},
     "zapier-inbound",
-    body.leadId
+    body.leadId,
+    idempotencyKey,
   );
-  return NextResponse.json({ ok: true, eventId: event.id });
+  return NextResponse.json({ ok: true, eventId: event.id, idempotencyKey });
 });

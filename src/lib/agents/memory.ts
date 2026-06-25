@@ -19,6 +19,7 @@ import type {
   Memory,
   MemoryHit,
   Note,
+  DomainEvent,
 } from "@/lib/core/types";
 import { getRepo } from "@/lib/db";
 import { getEmbedder } from "./embedder";
@@ -80,6 +81,23 @@ export async function persistNoteMemory(note: Note): Promise<Memory> {
     created_at: nowISO(),
   };
   return repo.saveMemory(mem);
+}
+
+export async function persistEventMemory(event: DomainEvent): Promise<Memory | null> {
+  if (!event.lead_surface_id) return null;
+  const repo = await getRepo();
+  const text = `[event/${event.type}] ${JSON.stringify(event.payload)}`;
+  const embedding = await getEmbedder().embed(text);
+  return repo.saveMemory({
+    id: uuid(),
+    agent_id: event.agent_id,
+    lead_surface_id: event.lead_surface_id,
+    kind: "event",
+    text,
+    ref: event.id,
+    embedding,
+    created_at: event.created_at,
+  });
 }
 
 /** Recall the top-K most relevant memories for `lead` against a query string. */

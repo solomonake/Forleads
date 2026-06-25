@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withRoute } from "@/lib/observability";
 import { getRepo } from "@/lib/db";
 
-export const GET = withRoute<{ params: { id: string } }>(
+const traceRoute = withRoute<{ params: { id: string } }>(
   "trace.get",
   async (_req: NextRequest, { params }) => {
     const repo = await getRepo();
@@ -13,3 +13,10 @@ export const GET = withRoute<{ params: { id: string } }>(
     return NextResponse.json({ trace });
   },
 );
+
+export async function GET(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  return traceRoute(req, { params: await context.params });
+}

@@ -11,6 +11,8 @@ import type {
   AgentTrace,
   Artifact,
   ConnectorAccount,
+  ConnectorWrite,
+  ConnectorCredential,
   DomainEvent,
   EvidenceCard,
   LeadSurface,
@@ -48,11 +50,17 @@ export interface Repository {
   saveArtifact(a: Artifact): Promise<Artifact>;
   getArtifact(id: string): Promise<Artifact | null>;
   updateArtifact(id: string, patch: Partial<Artifact>): Promise<Artifact | null>;
+  updateArtifactAtRevision(
+    id: string,
+    expectedRevision: number,
+    patch: Partial<Artifact>
+  ): Promise<Artifact | null>;
   listArtifacts(agentId: string): Promise<Artifact[]>;
 
   // domain events
   appendEvent(e: DomainEvent): Promise<DomainEvent>;
   listEvents(agentId: string): Promise<DomainEvent[]>;
+  getEventByIdempotencyKey(agentId: string, key: string): Promise<DomainEvent | null>;
 
   // loops
   listLoopDefs(agentId: string): Promise<LoopDefinition[]>;
@@ -77,6 +85,10 @@ export interface Repository {
   // connector accounts
   listConnectorAccounts(agentId: string): Promise<ConnectorAccount[]>;
   upsertConnectorAccount(a: ConnectorAccount): Promise<ConnectorAccount>;
+  getConnectorCredential(id: string): Promise<ConnectorCredential | null>;
+  upsertConnectorCredential(credential: ConnectorCredential): Promise<ConnectorCredential>;
+  getConnectorWrite(key: string): Promise<ConnectorWrite | null>;
+  saveConnectorWrite(write: ConnectorWrite): Promise<ConnectorWrite>;
 
   // memories (lead-scoped recall)
   saveMemory(m: Memory): Promise<Memory>;
@@ -90,12 +102,14 @@ interface Store {
   notes: Map<string, Note[]>;
   artifacts: Map<string, Artifact>;
   events: DomainEvent[];
+  connectorWrites: Map<string, ConnectorWrite>;
   loopDefs: Map<string, LoopDefinition>;
   loopRuns: LoopRun[];
   watchers: Map<string, Watcher>;
   traces: Map<string, AgentTrace>;
   reports: WeeklyReport[];
   connectorAccounts: Map<string, ConnectorAccount>;
+  connectorCredentials: Map<string, ConnectorCredential>;
   memories: Map<string, Memory[]>; // keyed by lead_surface_id
 }
 
@@ -160,6 +174,13 @@ export class InMemoryRepository implements Repository {
     this.s.artifacts.set(id, next);
     return next;
   }
+  async updateArtifactAtRevision(id: string, expectedRevision: number, patch: Partial<Artifact>) {
+    const cur = this.s.artifacts.get(id);
+    if (!cur || cur.revision !== expectedRevision) return null;
+    const next = { ...cur, ...patch };
+    this.s.artifacts.set(id, next);
+    return next;
+  }
   async listArtifacts(agentId: string) {
     return [...this.s.artifacts.values()]
       .filter((a) => a.agent_id === agentId)
@@ -172,6 +193,11 @@ export class InMemoryRepository implements Repository {
   }
   async listEvents(agentId: string) {
     return this.s.events.filter((e) => e.agent_id === agentId);
+  }
+  async getEventByIdempotencyKey(agentId: string, key: string) {
+    return this.s.events.find(
+      (event) => event.agent_id === agentId && event.idempotency_key === key,
+    ) ?? null;
   }
 
   async listLoopDefs(agentId: string) {
@@ -228,6 +254,21 @@ export class InMemoryRepository implements Repository {
     this.s.connectorAccounts.set(a.provider, a);
     return a;
   }
+  async getConnectorCredential(id: string) {
+    const credential = this.s.connectorCredentials.get(id) ?? null;
+    return credential?.revoked_at ? null : credential;
+  }
+  async upsertConnectorCredential(credential: ConnectorCredential) {
+    this.s.connectorCredentials.set(credential.id, credential);
+    return credential;
+  }
+  async getConnectorWrite(key: string) {
+    return this.s.connectorWrites.get(key) ?? null;
+  }
+  async saveConnectorWrite(write: ConnectorWrite) {
+    this.s.connectorWrites.set(write.idempotency_key, write);
+    return write;
+  }
 
   async saveMemory(m: Memory) {
     const arr = this.s.memories.get(m.lead_surface_id) ?? [];
@@ -258,6 +299,8 @@ export function emptyStore(): Store {
     traces: new Map(),
     reports: [],
     connectorAccounts: new Map(),
+    connectorCredentials: new Map(),
+    connectorWrites: new Map(),
     memories: new Map(),
   };
 }

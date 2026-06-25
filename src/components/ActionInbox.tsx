@@ -42,9 +42,12 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
     load();
   }, [load]);
 
-  const approve = async (id: string) => {
+  const approve = async (artifact: Artifact) => {
     try {
-      await apiPost("/api/approve", { artifactId: id });
+      await apiPost("/api/approve", {
+        artifactId: artifact.id,
+        expectedRevision: artifact.revision,
+      });
       setMsg("Approved — written to its connector (idempotent).");
       await load();
     } catch (e) {
@@ -126,7 +129,7 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
                   </a>
                 )}
                 {!blocked && artifact.status === "drafted" && (
-                  <button className="minibtn primary" onClick={() => approve(artifact.id)}>
+                  <button className="minibtn primary" onClick={() => approve(artifact)}>
                     Approve
                   </button>
                 )}

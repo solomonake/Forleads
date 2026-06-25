@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "environment": "local mock mode, Node 20",
+  "p95_ms": 225,
+  "maximum_regression_percent": 10,
+  "note": "Steady-state local mock baseline after route warmup under Node 20; cold starts are tracked separately."
+}
