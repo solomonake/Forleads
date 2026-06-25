@@ -517,15 +517,22 @@ export async function approveArtifact(
     verdict,
     editedExcerpt,
   );
-  if (outcomeMem) {
-    await emit(
-      artifact.agent_id,
-      "outcome.recorded",
-      { verdict, artifactId: artifact.id, memoryId: outcomeMem.id },
-      "memory",
-      artifact.lead_surface_id,
-    );
-  }
+  // Always emit the verdict event, even if the memory write fell back to
+  // null. The verdict IS the human gate signal — prod observability needs
+  // the count to match real approvals/rejections, not just the ones we
+  // happened to persist.
+  await emit(
+    artifact.agent_id,
+    "outcome.recorded",
+    {
+      verdict,
+      artifactId: artifact.id,
+      persisted: outcomeMem !== null,
+      ...(outcomeMem ? { memoryId: outcomeMem.id } : {}),
+    },
+    "memory",
+    artifact.lead_surface_id,
+  );
 
   // Advance the lead's status to contacted.
   if (artifact.lead_surface_id) {
@@ -583,15 +590,20 @@ export async function rejectArtifact(
     "rejected",
     reason,
   );
-  if (outcomeMem) {
-    await emit(
-      artifact.agent_id,
-      "outcome.recorded",
-      { verdict: "rejected", artifactId: artifact.id, memoryId: outcomeMem.id, reason: reason ?? null },
-      "memory",
-      artifact.lead_surface_id,
-    );
-  }
+  // Always emit — see approve path for the rationale.
+  await emit(
+    artifact.agent_id,
+    "outcome.recorded",
+    {
+      verdict: "rejected",
+      artifactId: artifact.id,
+      persisted: outcomeMem !== null,
+      reason: reason ?? null,
+      ...(outcomeMem ? { memoryId: outcomeMem.id } : {}),
+    },
+    "memory",
+    artifact.lead_surface_id,
+  );
 
   return { artifact: updated!, memoryId: outcomeMem?.id };
 }
