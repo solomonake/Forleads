@@ -26,6 +26,7 @@ import { runScoutCached } from "@/lib/agents/scouts";
 import { reduce } from "@/lib/agents/reducer";
 import {
   persistEvidenceMemory,
+  persistOutcomeMemory,
   recallForLead,
   renderRecallNote,
 } from "@/lib/agents/memory";
@@ -279,7 +280,7 @@ export interface ApproveResult {
 
 export async function approveArtifact(
   artifactId: string,
-  opts?: { googleAccessToken?: string }
+  opts?: { googleAccessToken?: string; editedBody?: string }
 ): Promise<ApproveResult | null> {
   const repo = await getRepo();
   const artifact = await repo.getArtifact(artifactId);
@@ -290,31 +291,66 @@ export async function approveArtifact(
     throw new Error("Cannot approve: compliance linter blocked this artifact.");
   }
 
+  // If the user edited the email body in the Review Tray, re-lint the edited
+  // text before sending — they may have introduced a fair-housing violation
+  // the original linter never saw. Fail-closed if the edit broke compliance.
+  let workingPayload = artifact.payload;
+  let editedExcerpt: string | undefined;
+  if (opts?.editedBody !== undefined && artifact.type === "email") {
+    const orig = artifact.payload as unknown as Record<string, unknown>;
+    const origBody = typeof orig.body === "string" ? orig.body : "";
+    if (opts.editedBody !== origBody) {
+      const reLint = lintArtifactText([
+        typeof orig.subject === "string" ? orig.subject : undefined,
+        opts.editedBody,
+      ]);
+      if (!reLint.pass) {
+        throw new Error(
+          `Cannot approve: your edit reintroduced a compliance issue (${reLint.flags[0]?.issue ?? "see flags"}).`,
+        );
+      }
+      workingPayload = { ...orig, body: opts.editedBody } as typeof artifact.payload;
+      editedExcerpt = opts.editedBody.slice(0, 240);
+    }
+  }
+
   const connector = connectorForAction(artifact.type, opts);
-  const key = idempotencyKey([artifact.id, artifact.type, connector.provider]);
+  const key = idempotencyKey([
+    artifact.id,
+    artifact.type,
+    connector.provider,
+    JSON.stringify(workingPayload),
+  ]);
   const meta = { idempotencyKey: key, agentId: artifact.agent_id, leadSurfaceId: artifact.lead_surface_id };
 
-  // Route to the right connector method by action type.
+  // Route to the right connector method by action type. workingPayload may be
+  // the edited body if the user touched the textarea in the Review Tray.
   let result;
   switch (artifact.type) {
     case "email":
-      result = await connector.createDraft(artifact.payload as never, meta);
+      result = await connector.createDraft(workingPayload as never, meta);
       break;
     case "calendar":
-      result = await connector.createCalendarEvent(artifact.payload as never, meta);
+      result = await connector.createCalendarEvent(workingPayload as never, meta);
       break;
     case "sms":
       result = connector.sendSms
-        ? await connector.sendSms(artifact.payload as never, meta)
+        ? await connector.sendSms(workingPayload as never, meta)
         : { ok: false, provider: connector.provider, idempotencyKey: key, deduped: false, mode: connector.mode, error: "no sms" };
       break;
     case "task":
-      result = await connector.createTask(artifact.payload as never, meta);
+      result = await connector.createTask(workingPayload as never, meta);
       break;
     case "crm_note":
     default:
-      result = await connector.writeCrmNote(artifact.payload as never, meta);
+      result = await connector.writeCrmNote(workingPayload as never, meta);
       break;
+  }
+
+  if (!result.ok) {
+    throw new Error(
+      `Connector write failed: ${result.error ?? `${result.provider} returned an unsuccessful result`}`,
+    );
   }
 
   // Email drafts are "drafted in the user's tool" (sent=false); others are written.
@@ -323,9 +359,21 @@ export async function approveArtifact(
     status: isEmailDraft ? "approved" : "sent",
     approved_at: nowISO(),
     sent_at: isEmailDraft ? undefined : nowISO(),
+    payload: workingPayload,
     external_draft_ref: result.externalId
       ? { provider: result.provider, externalId: result.externalId, url: result.url, idempotencyKey: key }
       : undefined,
+    edit_history: editedExcerpt
+      ? [
+          ...((artifact.edit_history ?? []) as never[]),
+          {
+            at: nowISO(),
+            field: "body",
+            before: ((artifact.payload as unknown as { body?: string }).body ?? "").slice(0, 240),
+            after: editedExcerpt,
+          },
+        ]
+      : artifact.edit_history,
   });
 
   // Update the trace's connector record.
@@ -349,6 +397,23 @@ export async function approveArtifact(
   );
   await emit(artifact.agent_id, "connector.write", { provider: result.provider, idempotencyKey: key, ok: result.ok }, "connector", artifact.lead_surface_id);
 
+  // Outcome memory — best-effort. The composer next time can warn before
+  // drafting a duplicate offer to this same lead.
+  const outcomeMem = await persistOutcomeMemory(
+    updated!,
+    editedExcerpt ? "edited" : "approved",
+    editedExcerpt,
+  );
+  if (outcomeMem) {
+    await emit(
+      artifact.agent_id,
+      "outcome.recorded",
+      { verdict: editedExcerpt ? "edited" : "approved", artifactId: artifact.id, memoryId: outcomeMem.id },
+      "memory",
+      artifact.lead_surface_id,
+    );
+  }
+
   // Advance the lead's status to contacted.
   if (artifact.lead_surface_id) {
     const lead = await repo.getLead(artifact.lead_surface_id);
@@ -367,6 +432,55 @@ export async function approveArtifact(
       error: result.error,
     },
   };
+}
+
+// ---- Reject (the OTHER human gate) ------------------------------------------
+
+export interface RejectResult {
+  artifact: Artifact;
+  memoryId?: string;
+}
+
+/** The human's "no" — write a `cancelled` artifact + outcome memory so the
+ *  composer can adjust next time. Reason is free-text and optional. */
+export async function rejectArtifact(
+  artifactId: string,
+  reason?: string,
+): Promise<RejectResult | null> {
+  const repo = await getRepo();
+  const artifact = await repo.getArtifact(artifactId);
+  if (!artifact) return null;
+  // Idempotent: rejecting an already-cancelled artifact is a no-op.
+  if (artifact.status === "cancelled") return { artifact };
+
+  const updated = await repo.updateArtifact(artifact.id, {
+    status: "cancelled",
+  });
+
+  await emit(
+    artifact.agent_id,
+    "artifact.cancelled",
+    { artifactId: artifact.id, reason: reason ?? null },
+    "pipeline",
+    artifact.lead_surface_id,
+  );
+
+  const outcomeMem = await persistOutcomeMemory(
+    updated!,
+    "rejected",
+    reason,
+  );
+  if (outcomeMem) {
+    await emit(
+      artifact.agent_id,
+      "outcome.recorded",
+      { verdict: "rejected", artifactId: artifact.id, memoryId: outcomeMem.id, reason: reason ?? null },
+      "memory",
+      artifact.lead_surface_id,
+    );
+  }
+
+  return { artifact: updated!, memoryId: outcomeMem?.id };
 }
 
 function nextStatus(s: LeadStatus): LeadStatus {

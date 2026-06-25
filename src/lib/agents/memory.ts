@@ -13,12 +13,14 @@
 
 import { nowISO, uuid } from "@/lib/core/ids";
 import type {
+  Artifact,
   Confidence,
   EvidenceCard,
   LeadSurface,
   Memory,
   MemoryHit,
   Note,
+  OutcomeVerdict,
 } from "@/lib/core/types";
 import { getRepo } from "@/lib/db";
 import { getEmbedder } from "./embedder";
@@ -62,6 +64,79 @@ export async function persistEvidenceMemory(
     created_at: nowISO(),
   };
   return repo.saveMemory(mem);
+}
+
+/** Strip an artifact payload down to a short human-readable excerpt for the
+ * outcome memory text. Different action types have different "important" fields;
+ * the excerpt is what surfaces to the agent later as "you already sent X here". */
+function outcomeExcerpt(artifact: Artifact): string {
+  const p = artifact.payload as unknown as Record<string, unknown>;
+  const pick = (k: string): string | undefined => {
+    const v = p[k];
+    return typeof v === "string" && v.trim() ? v.trim() : undefined;
+  };
+  const subject = pick("subject") ?? pick("title");
+  const body = pick("body") ?? pick("notes");
+  const parts: string[] = [];
+  if (subject) parts.push(subject);
+  if (body) parts.push(body);
+  const text = parts.join(" — ") || JSON.stringify(p).slice(0, 200);
+  return text.length > 240 ? `${text.slice(0, 237)}…` : text;
+}
+
+/** Embed + persist the human's verdict on a drafted artifact so the composer
+ *  can warn before drafting a duplicate next time. Always best-effort: an
+ *  outcome write must NEVER block the approve / reject flow. */
+export async function persistOutcomeMemory(
+  artifact: Artifact,
+  verdict: OutcomeVerdict,
+  editedExcerpt?: string,
+): Promise<Memory | null> {
+  if (!artifact.lead_surface_id) return null;
+  try {
+    const repo = await getRepo();
+    const embedder = getEmbedder();
+    const detailLabel = verdict === "rejected" ? "reason" : "edited";
+    const tail = editedExcerpt
+      ? ` · ${detailLabel}="${editedExcerpt.slice(0, 100)}${editedExcerpt.length > 100 ? "…" : ""}"`
+      : "";
+    const text = `[${verdict}] ${artifact.type}: ${outcomeExcerpt(artifact)}${tail}`;
+    const embedding = await embedder.embed(text);
+    const mem: Memory = {
+      id: uuid(),
+      agent_id: artifact.agent_id,
+      lead_surface_id: artifact.lead_surface_id,
+      kind: "outcome",
+      text,
+      ref: artifact.id,
+      embedding,
+      created_at: nowISO(),
+    };
+    return await repo.saveMemory(mem);
+  } catch {
+    // The embedder or DB hiccup must not break the human-gate flow.
+    return null;
+  }
+}
+
+/** Recall prior outcomes for this lead, optionally filtered by action type.
+ * Used by the composer-trace to surface "you already approved 2 emails here". */
+export async function recallOutcomes(
+  lead: LeadSurface,
+  actionType?: string,
+): Promise<Memory[]> {
+  const repo = await getRepo();
+  const embedder = getEmbedder();
+  // Query string is intentionally generic — recall is lead-scoped at the DB
+  // layer, so we just want every outcome row. We embed a short label so the
+  // similarity ordering keeps approved/edited near the top.
+  const q = await embedder.embed(`outcome ${actionType ?? ""}`);
+  const hits = await repo.recallMemories(lead.id, q, 32);
+  let memos = hits.map((h) => h.memory).filter((m) => m.kind === "outcome");
+  if (actionType) {
+    memos = memos.filter((m) => m.text.startsWith("[") && m.text.includes(`] ${actionType}:`));
+  }
+  return memos;
 }
 
 /** Embed + persist a free-text note as a memory row. */

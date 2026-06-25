@@ -18,6 +18,7 @@ import { POST as notesPOST } from "./notes/route";
 import { POST as leadPOST } from "./lead/route";
 import { POST as loopsPOST } from "./loops/route";
 import { POST as approvePOST } from "./approve/route";
+import { POST as rejectPOST } from "./reject/route";
 
 function post(body: unknown) {
   return new Request("http://localhost/api/x", {
@@ -52,6 +53,11 @@ describe("mutating routes reject unauthenticated callers (401)", () => {
 
   it("POST /api/approve — no anonymous outward sends", async () => {
     const res = await approvePOST(post({ artifactId: "a" }));
+    expect(res.status).toBe(401);
+  });
+
+  it("POST /api/reject — outcome memory write must be agent-scoped", async () => {
+    const res = await rejectPOST(post({ artifactId: "a" }));
     expect(res.status).toBe(401);
   });
 });
