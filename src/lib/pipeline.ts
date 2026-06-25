@@ -19,6 +19,7 @@ import type {
   LeadSurface,
   ReduceSummary,
   ScoutResult,
+  ScoutType,
   Situation,
 } from "@/lib/core/types";
 import { planDispatch } from "@/lib/agents/dispatcher";
@@ -137,6 +138,28 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
     );
   }
 
+  // Cross-lead H3-cell recall — compute the SET of scout types that already
+  // have an A/B-grade fact on this block from a sibling lead. The dispatcher
+  // uses it to skip redundant scouts. We do this BEFORE the swarm so the
+  // skipped scouts never run.
+  const neighborhoodHits = lead.h3_index
+    ? await recallNeighborhood(lead.agent_id, lead.h3_index)
+    : [];
+  const siblingHits = neighborhoodHits.filter(
+    (h) => h.memory.lead_surface_id !== lead.id,
+  );
+  const neighborhoodCoveredScouts: ScoutType[] = [];
+  for (const h of siblingHits) {
+    // Parse the scout tag from the stored surface form ("[<scout>/<grade>] …").
+    const m = /^\[([a-z]+)\/([A-D])\]/.exec(h.memory.text);
+    if (!m) continue;
+    if (m[2] !== "A" && m[2] !== "B") continue;
+    const scoutType = m[1] as ScoutType;
+    if (!neighborhoodCoveredScouts.includes(scoutType)) {
+      neighborhoodCoveredScouts.push(scoutType);
+    }
+  }
+
   const plan = await planDispatch({
     lng: lead.lng,
     lat: lead.lat,
@@ -144,6 +167,7 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
     status: lead.status,
     priorMemoryRefs: recall.refs,
     priorGroundedCount: recall.priorGroundedCount,
+    neighborhoodCoveredScouts,
   });
 
   // Fan out in parallel — bounded by the dispatcher to <= 5.
@@ -161,15 +185,9 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
     await persistNeighborhoodMemory(lead.agent_id, lead, card);
   }
 
-  // Cross-lead area recall. Privacy: agent-scoped and market-only.
-  const neighborhood = lead.h3_index
-    ? await recallNeighborhood(lead.agent_id, lead.h3_index)
-    : [];
-  // Drop priors that came from this lead; this note is cross-lead context.
-  const crossLeadPriors = neighborhood.filter(
-    (h) => h.memory.lead_surface_id !== lead.id,
-  );
-  const neighborhoodCount = crossLeadPriors.length;
+  // Reuse the cross-lead hits we already pulled at the top of runSwarm — same
+  // privacy guarantees (agent-scoped, neighborhood-kind only).
+  const neighborhoodCount = siblingHits.length;
   const neighborhoodNote = renderNeighborhoodNote(neighborhoodCount);
 
   const recallNote = renderRecallNote(recall);
