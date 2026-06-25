@@ -46,7 +46,8 @@ export type ScoutStatus =
   | "ok"
   | "partial"
   | "insufficient_evidence"
-  | "budget_exceeded";
+  | "budget_exceeded"
+  | "error";
 
 export interface ScoutResult {
   scout: ScoutType;

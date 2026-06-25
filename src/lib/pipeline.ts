@@ -180,10 +180,26 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
     neighborhoodCoveredScouts,
   });
 
-  // Fan out in parallel — bounded by the dispatcher to <= 5.
-  const scoutResults = await Promise.all(
+  // Fan out in parallel — bounded by the dispatcher to <= 5. Promise.allSettled
+  // (NOT Promise.all) so one provider's exception cannot 500 the whole tap:
+  // each failing scout becomes a status="error" result with the message in
+  // gaps, and the reducer keeps composing whatever did succeed.
+  const settled = await Promise.allSettled(
     plan.scouts.map((job) => runScoutCached({ lng: lead.lng, lat: lead.lat, address: lead.address, job }))
   );
+  const scoutResults: ScoutResult[] = settled.map((s, i) => {
+    if (s.status === "fulfilled") return s.value;
+    const job = plan.scouts[i]!;
+    const message = s.reason instanceof Error ? s.reason.message : String(s.reason);
+    log("warn", "scout.degraded", { leadId: lead.id, scout: job.type, error: message });
+    return {
+      scout: job.type,
+      cards: [],
+      gaps: [`scout failed: ${message}`],
+      cost: { ms: 0, tokens: 0, calls: 0 },
+      status: "error" as const,
+    };
+  });
 
   let reduced = reduce(scoutResults, Date.now() - started);
   if (reduced.summary.breakout?.kind === "deeper_scout") {
@@ -191,20 +207,35 @@ export async function runSwarm(lead: LeadSurface): Promise<SwarmResult> {
     const targetCard = reduced.summary.cards.find((card) => card.claim === target);
     const originalJob = plan.scouts.find((job) => job.type === targetCard?.scout);
     if (originalJob) {
-      const deeper = await runScout({
-        lng: lead.lng,
-        lat: lead.lat,
-        address: lead.address,
-        job: {
-          ...originalJob,
-          why: `Single depth-one breakout for conflicting claim: ${target}`,
-          budget: {
-            maxCalls: originalJob.budget.maxCalls + 1,
-            maxMs: Math.round(originalJob.budget.maxMs * 1.5),
-            maxTokens: Math.round(originalJob.budget.maxTokens * 1.5),
+      // Same degrade-gracefully envelope as the main fanout: the breakout
+      // is best-effort and must never 500 the tap.
+      let deeper: ScoutResult;
+      try {
+        deeper = await runScout({
+          lng: lead.lng,
+          lat: lead.lat,
+          address: lead.address,
+          job: {
+            ...originalJob,
+            why: `Single depth-one breakout for conflicting claim: ${target}`,
+            budget: {
+              maxCalls: originalJob.budget.maxCalls + 1,
+              maxMs: Math.round(originalJob.budget.maxMs * 1.5),
+              maxTokens: Math.round(originalJob.budget.maxTokens * 1.5),
+            },
           },
-        },
-      });
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        log("warn", "scout.degraded", { leadId: lead.id, scout: originalJob.type, error: message, breakout: true });
+        deeper = {
+          scout: originalJob.type,
+          cards: [],
+          gaps: [`breakout scout failed: ${message}`],
+          cost: { ms: 0, tokens: 0, calls: 0 },
+          status: "error",
+        };
+      }
       scoutResults.push(deeper);
       reduced = reduce(scoutResults, Date.now() - started);
       if (reduced.summary.breakout?.kind === "deeper_scout") {
