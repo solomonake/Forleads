@@ -90,7 +90,13 @@ export function LoopStudio() {
             <div className="row" key={d.id}>
               <div className="rtitle">
                 <span>● {d.name}</span>
-                <span className="pill-status pill-live">{d.active ? "active" : "paused"}</span>
+                <span className="pill-status pill-live">
+                  {d.active
+                    ? d.cadence?.everyDays
+                      ? `scheduled · every ${d.cadence.everyDays}d`
+                      : "event-driven"
+                    : "paused"}
+                </span>
               </div>
               <div className="rmeta">
                 {d.description}
@@ -126,7 +132,9 @@ export function LoopStudio() {
       </div>
 
       <h1 style={{ marginTop: 30, fontSize: 18 }}>Recent runs</h1>
-      <div className="sub">Every loop run is inspectable, with its planner trace.</div>
+      <div className="sub">
+        Every manual and scheduled run is inspectable, with its planner trace.
+      </div>
       <div className="panel-grid">
         {runs.length === 0 && (
           <div className="row">

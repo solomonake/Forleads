@@ -385,6 +385,10 @@ export class SupabaseRepository implements Repository {
     );
     return data ? agentFromRow(data) : null;
   }
+  async listAgents() {
+    const data = unwrap(await this.sb.from("agent").select("*"));
+    return (data ?? []).map(agentFromRow);
+  }
   async upsertAgent(agent: Agent) {
     unwrap(await this.sb.from("agent").upsert(agentToRow(agent)).select().single());
     return agent;
@@ -530,6 +534,12 @@ export class SupabaseRepository implements Repository {
   async appendEvent(e: DomainEvent) {
     unwrap(await this.sb.from("domain_event").insert(eventToRow(e)).select());
     return e;
+  }
+  async claimEvent(e: DomainEvent) {
+    const result = await this.sb.from("domain_event").insert(eventToRow(e)).select("id");
+    if (result.error?.code === "23505") return false;
+    unwrap(result);
+    return true;
   }
   async listEvents(agentId: string) {
     const data = unwrap(

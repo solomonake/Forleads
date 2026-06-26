@@ -38,6 +38,7 @@ export function defaultLoops(agentId: string, nowISO: string): LoopDefinition[] 
         "When a lead has had no activity for N days and isn't dead/won, draft a low-pressure nurture for batch approval.",
       trigger: { event: "task.due", match: { kind: "stale_check" } },
       conditions: [
+        { kind: "has_contact_channel" },
         { kind: "no_activity_days", value: 30 },
         { kind: "status_not_in", value: ["won", "dead"] },
         { kind: "not_opted_out" },

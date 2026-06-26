@@ -1,5 +1,5 @@
 // GET  /api/loops  — list loop definitions + recent runs (Loop Studio)
-// POST /api/loops  — run a loop now against a lead (manual trigger / demo)
+// POST /api/loops  — run a loop now against a lead (manual trigger)
 import { NextRequest, NextResponse } from "next/server";
 import { ensureCurrentAgent, readAgentIdEnsured } from "@/lib/auth/agent";
 import { withRoute } from "@/lib/observability";

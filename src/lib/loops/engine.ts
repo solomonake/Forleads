@@ -26,6 +26,7 @@ export interface LoopContext {
   situationConfidence?: number;
   evidence: EvidenceCard[];
   triggerSource: string;
+  now?: Date;
 }
 
 function evalCondition(c: LoopCondition, ctx: LoopContext): { pass: boolean; detail: string } {
@@ -55,7 +56,7 @@ function evalCondition(c: LoopCondition, ctx: LoopContext): { pass: boolean; det
     case "no_activity_days": {
       const days = (c.value as number) ?? 30;
       const last = new Date(ctx.lead.last_worked_at).getTime();
-      const ageDays = (Date.now() - last) / 86400000;
+      const ageDays = ((ctx.now?.getTime() ?? Date.now()) - last) / 86400000;
       const ok = ageDays >= days;
       return { pass: ok, detail: `Last worked ${ageDays.toFixed(1)}d ago (threshold ${days}d).` };
     }
@@ -64,11 +65,15 @@ function evalCondition(c: LoopCondition, ctx: LoopContext): { pass: boolean; det
   }
 }
 
-export async function runLoop(def: LoopDefinition, ctx: LoopContext): Promise<LoopRun> {
+export async function runLoop(
+  def: LoopDefinition,
+  ctx: LoopContext,
+  options: { runId?: string } = {},
+): Promise<LoopRun> {
   const repo = await getRepo();
   const steps: LoopRunStep[] = [];
   const artifactIds: string[] = [];
-  const runId = uuid();
+  const runId = options.runId ?? uuid();
 
   steps.push({ at: nowISO(), stage: "trigger", detail: `Triggered by ${def.trigger.event} via ${ctx.triggerSource}.`, outcome: "info" });
 
@@ -99,6 +104,21 @@ export async function runLoop(def: LoopDefinition, ctx: LoopContext): Promise<Lo
 
   // Produce each action's artifact (draft-first).
   for (const action of def.actions) {
+    const missingChannel =
+      action.type === "email"
+        ? !ctx.lead.contact?.email
+        : action.type === "sms"
+          ? !ctx.lead.contact?.phone
+          : false;
+    if (missingChannel) {
+      steps.push({
+        at: nowISO(),
+        stage: `action:${action.type}`,
+        detail: `Skipped ${action.type}: the lead has no matching contact channel.`,
+        outcome: "fail",
+      });
+      continue;
+    }
     const artifact: Artifact = await draftArtifact({
       agent,
       lead: ctx.lead,
@@ -127,7 +147,12 @@ export async function runLoop(def: LoopDefinition, ctx: LoopContext): Promise<Lo
     loop_definition_id: def.id,
     agent_id: def.agent_id,
     lead_surface_id: ctx.lead.id,
-    status: anyBlocked ? "blocked_compliance" : "produced_artifact",
+    status:
+      artifactIds.length === 0
+        ? "skipped_condition"
+        : anyBlocked
+          ? "blocked_compliance"
+          : "produced_artifact",
     planner_trace: steps,
     artifact_ids: artifactIds,
     started_at: steps[0]!.at,

@@ -1,22 +1,33 @@
 # Current agent checkpoint
 
-Generated: 2026-06-25T23:51:31.098Z
+Generated: 2026-06-26T00:09:35.606Z
 
 ## State
-- Branch: `codex/operator-loop-checkpoint`
-- Commit: `b1e23cca0df5`
+- Branch: `codex/scheduled-loop-runner`
+- Commit: `bfe773172840`
 - Worktree: dirty
 - Changed files:
-  - M .agent/metrics/runs.jsonl
+  - M .env.example
+  -  M src/app/api/loops/route.ts
+  -  M src/components/LoopStudio.tsx
+  -  M src/lib/db/repository.ts
+  -  M src/lib/db/supabase-repo.ts
+  -  M src/lib/loops/definitions.ts
+  -  M src/lib/loops/engine.ts
+  - ?? .agent/plans/scheduled-loop-runner.md
+  - ?? src/app/api/cron/
+  - ?? src/lib/loops/scheduler.test.ts
+  - ?? src/lib/loops/scheduler.ts
+  - ?? vercel.json
 
 ## Goal
-Build durable scheduled loop execution so follow-up runs after the user leaves
+Ship durable scheduled loop execution
 
 ## Completed
-Operator-flow release b1e23cc merged to main and verified live on Vercel; exact Clarksburg query returns real Nominatim matches; high-risk gate passed
+Implemented daily Vercel cron route, fail-closed Bearer auth, cross-tenant bounded scheduler, daily idempotent claims, error retry, action-channel safety, Loop Studio schedule visibility, 164 tests, coverage, eval, and build; installed sensitive production CRON_SECRET
 
 ## Next exact action
-Inspect loop definitions, run persistence, and cron authentication seams; write a decision-complete scheduled-runner plan
+Commit, push, merge to main, verify Vercel cron registration and authenticated production execution
 
 ## Blockers
 none

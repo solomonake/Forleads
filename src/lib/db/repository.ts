@@ -30,6 +30,7 @@ import { cosineSimilarity } from "@/lib/agents/embedder";
 export interface Repository {
   // agents
   getAgent(id: string): Promise<Agent | null>;
+  listAgents(): Promise<Agent[]>;
   upsertAgent(agent: Agent): Promise<Agent>;
 
   // lead surfaces
@@ -59,6 +60,8 @@ export interface Repository {
 
   // domain events
   appendEvent(e: DomainEvent): Promise<DomainEvent>;
+  /** Atomically append an idempotent event. Returns false when already claimed. */
+  claimEvent(e: DomainEvent): Promise<boolean>;
   listEvents(agentId: string): Promise<DomainEvent[]>;
   getEventByIdempotencyKey(agentId: string, key: string): Promise<DomainEvent | null>;
 
@@ -126,6 +129,9 @@ export class InMemoryRepository implements Repository {
 
   async getAgent(id: string) {
     return this.s.agents.get(id) ?? null;
+  }
+  async listAgents() {
+    return [...this.s.agents.values()];
   }
   async upsertAgent(agent: Agent) {
     this.s.agents.set(agent.id, agent);
@@ -198,6 +204,20 @@ export class InMemoryRepository implements Repository {
   async appendEvent(e: DomainEvent) {
     this.s.events.push(e);
     return e;
+  }
+  async claimEvent(e: DomainEvent) {
+    if (
+      e.idempotency_key &&
+      this.s.events.some(
+        (event) =>
+          event.agent_id === e.agent_id &&
+          event.idempotency_key === e.idempotency_key,
+      )
+    ) {
+      return false;
+    }
+    this.s.events.push(e);
+    return true;
   }
   async listEvents(agentId: string) {
     return this.s.events.filter((e) => e.agent_id === agentId);
