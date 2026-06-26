@@ -1,33 +1,23 @@
 # Current agent checkpoint
 
-Generated: 2026-06-26T00:09:35.606Z
+Generated: 2026-06-26T03:02:01.593Z
 
 ## State
-- Branch: `codex/scheduled-loop-runner`
-- Commit: `bfe773172840`
+- Branch: `detached`
+- Commit: `d3ffc0d60277`
 - Worktree: dirty
 - Changed files:
-  - M .env.example
-  -  M src/app/api/loops/route.ts
-  -  M src/components/LoopStudio.tsx
-  -  M src/lib/db/repository.ts
-  -  M src/lib/db/supabase-repo.ts
-  -  M src/lib/loops/definitions.ts
-  -  M src/lib/loops/engine.ts
-  - ?? .agent/plans/scheduled-loop-runner.md
-  - ?? src/app/api/cron/
-  - ?? src/lib/loops/scheduler.test.ts
-  - ?? src/lib/loops/scheduler.ts
-  - ?? vercel.json
+  - M .agent/handoffs/current.md
+  -  M .agent/metrics/runs.jsonl
 
 ## Goal
 Ship durable scheduled loop execution
 
 ## Completed
-Implemented daily Vercel cron route, fail-closed Bearer auth, cross-tenant bounded scheduler, daily idempotent claims, error retry, action-channel safety, Loop Studio schedule visibility, 164 tests, coverage, eval, and build; installed sensitive production CRON_SECRET
+Replaced malformed Vercel production CRON_SECRET with a no-newline generated value, redeployed failed production deployment for main d3ffc0d, and verified production now serves /api/cron/loops. Production health is OK with Supabase persistence, live agent mode, and no mock connector writes.
 
 ## Next exact action
-Commit, push, merge to main, verify Vercel cron registration and authenticated production execution
+Continue to the next product phase after scheduled loops: choose the next production gap from durable reporting, connector outcome feedback, or live loop observability; run agent:context before editing.
 
 ## Blockers
 none
@@ -36,7 +26,7 @@ none
 In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secrets, spending, destructive actions, and external communication require the user.
 
 ## Verification proof
-none
+Vercel production inspect: Branch main Commit d3ffc0d, /api/cron/loops in route table, deployment status Ready, aliased forleads.vercel.app at 2026-06-26T02:57:58Z. curl /api/health -> 200 ok. curl /api/cron/loops without auth -> 401 unauthorized with x-matched-path /api/cron/loops.
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.
