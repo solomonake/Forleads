@@ -2,7 +2,35 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { LeadSurface, LoopAnalytics, LoopDefinition, LoopRun } from "@/lib/core/types";
+import type { LoopObservability } from "@/lib/loops/observability";
 import { apiGet, apiPost } from "./ui";
+
+function plural(count: number, singular: string, pluralWord = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : pluralWord}`;
+}
+
+function formatWhen(iso?: string) {
+  if (!iso) return "never";
+  return new Date(iso).toLocaleString();
+}
+
+function schedulePill(summary?: LoopObservability) {
+  if (!summary) return { label: "unknown", className: "pill-mock" };
+  if (summary.state === "due_now") return { label: "due now", className: "pill-blocked" };
+  if (summary.state === "waiting") return { label: "scheduled", className: "pill-live" };
+  if (summary.state === "paused") return { label: "paused", className: "pill-mock" };
+  return { label: "event-driven", className: "pill-mock" };
+}
+
+function scheduleLine(summary?: LoopObservability) {
+  if (!summary) return "Schedule health unavailable.";
+  if (summary.state === "paused") return "Paused; no scheduled work will be claimed.";
+  if (summary.state === "event_driven") return "Event-driven; waits for matching activity.";
+  if (summary.state === "due_now") {
+    return `${plural(summary.dueNow, "lead")} due now across ${plural(summary.trackedLeads, "tracked lead")}.`;
+  }
+  return `Next due ${formatWhen(summary.nextDueAt)} across ${plural(summary.trackedLeads, "tracked lead")}.`;
+}
 
 export function LoopStudio() {
   const [defs, setDefs] = useState<LoopDefinition[]>([]);
@@ -11,6 +39,8 @@ export function LoopStudio() {
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [analytics, setAnalytics] = useState<Record<string, LoopAnalytics>>({});
+  const [observability, setObservability] = useState<Record<string, LoopObservability>>({});
+  const [leadLabelMap, setLeadLabelMap] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -19,12 +49,16 @@ export function LoopStudio() {
         definitions: LoopDefinition[];
         runs: LoopRun[];
         analytics: Record<string, LoopAnalytics>;
+        observability: Record<string, LoopObservability>;
+        leadLabels: Record<string, string>;
       }>("/api/loops"),
       apiGet<{ leads: LeadSurface[] }>("/api/leads"),
     ]);
     setDefs(d.definitions);
     setRuns(d.runs);
     setAnalytics(d.analytics);
+    setObservability(d.observability);
+    setLeadLabelMap(d.leadLabels);
     setLeads(l.leads);
     setSelectedLeadId((current) => current || l.leads[0]?.id || "");
   }, []);
@@ -86,20 +120,22 @@ export function LoopStudio() {
             produced: 0,
             skipped: 0,
           };
+          const o = observability[d.id];
+          const pill = schedulePill(o);
           return (
             <div className="row" key={d.id}>
               <div className="rtitle">
                 <span>● {d.name}</span>
-                <span className="pill-status pill-live">
-                  {d.active
-                    ? d.cadence?.everyDays
-                      ? `scheduled · every ${d.cadence.everyDays}d`
-                      : "event-driven"
-                    : "paused"}
+                <span className={`pill-status ${pill.className}`}>
+                  {pill.label}
                 </span>
               </div>
               <div className="rmeta">
                 {d.description}
+                <br />
+                {scheduleLine(o)}
+                {o?.lastRunAt ? ` Last run ${formatWhen(o.lastRunAt)}${o.lastRunStatus ? ` (${o.lastRunStatus})` : ""}.` : " No runs yet."}
+                {o?.lastLeadId ? ` Last lead: ${leadLabelMap[o.lastLeadId] ?? "Unknown lead"}.` : ""}
                 <br />
                 {s.runs} runs · {s.produced} produced · {s.approved} approved · {s.replies} replies · {s.blocked} blocked
               </div>
@@ -150,7 +186,7 @@ export function LoopStudio() {
               </span>
             </div>
             <div className="rmeta">
-              {new Date(r.started_at).toLocaleString()} · {r.artifact_ids.length} artifact(s)
+              {formatWhen(r.started_at)} · {leadLabelMap[r.lead_surface_id ?? ""] ?? "Unknown lead"} · {r.artifact_ids.length} artifact(s)
               {r.planner_trace.map((step, i) => (
                 <div key={i} style={{ marginTop: 4 }}>
                   <span style={{ color: step.outcome === "fail" ? "var(--danger)" : step.outcome === "pass" ? "var(--ok)" : "var(--text-muted)" }}>
