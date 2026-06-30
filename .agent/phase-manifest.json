@@ -1,0 +1,181 @@
+{
+  "schemaVersion": "1.0.0",
+  "objective": "Finish the full Forleads product build through measured, low-token, phase-gated loops.",
+  "updatedAt": "2026-06-30T07:34:50.881Z",
+  "loopRules": {
+    "maxParallelWorkers": 2,
+    "onePrimaryAgent": true,
+    "workerContext": "shared operating docs plus one packet plus exact source files",
+    "stopOn": [
+      "mandatory gate failure",
+      "secret or spend boundary",
+      "production mutation",
+      "drift score below 70",
+      "unresolved tenant/security risk"
+    ],
+    "recordAfterEveryPhase": true
+  },
+  "scoreWeights": {
+    "product": 30,
+    "evidence": 20,
+    "safety": 20,
+    "tokenEfficiency": 15,
+    "driftControl": 15
+  },
+  "phases": [
+    {
+      "id": "phase-0-packets",
+      "title": "Preserve packet set and decisions",
+      "status": "completed",
+      "risk": "low",
+      "workstreams": [
+        "ws-a",
+        "ws-b",
+        "ws-c",
+        "ws-d",
+        "ws-e",
+        "ws-f",
+        "ws-g",
+        "ws-h",
+        "ws-i",
+        "ws-j",
+        "ws-k",
+        "ws-m"
+      ],
+      "packets": [
+        ".agent/plans/ws-a.md",
+        ".agent/plans/ws-b.md",
+        ".agent/plans/ws-c.md",
+        ".agent/plans/ws-d.md",
+        ".agent/plans/ws-e.md",
+        ".agent/plans/ws-f.md",
+        ".agent/plans/ws-g.md",
+        ".agent/plans/ws-h.md",
+        ".agent/plans/ws-i.md",
+        ".agent/plans/ws-j.md",
+        ".agent/plans/ws-k.md",
+        ".agent/plans/ws-m.md"
+      ],
+      "acceptance": [
+        "Packets are versioned in repo",
+        "Phase 0 decisions are versioned",
+        "WS-A provider choice has a standalone ADR"
+      ],
+      "completedAt": "2026-06-30T07:34:50.806Z",
+      "lastScore": 85,
+      "lastOutcome": "success"
+    },
+    {
+      "id": "phase-1a-mechanical",
+      "title": "Low-token mechanical build: FEMA risk + seller update",
+      "status": "ready",
+      "risk": "medium",
+      "workstreams": [
+        "ws-b",
+        "ws-i"
+      ],
+      "packets": [
+        ".agent/plans/ws-b.md",
+        ".agent/plans/ws-i.md"
+      ],
+      "targetBranches": [
+        "feat/ws-b-fema-nfhl-risk",
+        "feat/ws-i-seller-update"
+      ],
+      "acceptance": [
+        "Each workstream ships targeted tests",
+        "No worker reads unrelated ws packets",
+        "Phase metrics recorded before continuing"
+      ]
+    },
+    {
+      "id": "phase-1b-frontdoor-hardening",
+      "title": "Landing, Sentry, quota, and metric slice",
+      "status": "pending",
+      "risk": "medium",
+      "workstreams": [
+        "ws-m"
+      ],
+      "packets": [
+        ".agent/plans/ws-m.md"
+      ],
+      "targetBranches": [
+        "feat/ws-m-landing-sentry-quota"
+      ],
+      "acceptance": [
+        "Root landing path is product-clear",
+        "Error sink is env-gated",
+        "Quota defaults open and observable",
+        "North Star event path is measured"
+      ]
+    },
+    {
+      "id": "phase-1c-vision-flagged",
+      "title": "Gemini vision behind an off-by-default flag",
+      "status": "pending",
+      "risk": "high",
+      "workstreams": [
+        "ws-k"
+      ],
+      "packets": [
+        ".agent/plans/ws-k.md"
+      ],
+      "targetBranches": [
+        "feat/ws-k-vision-gemini"
+      ],
+      "acceptance": [
+        "Flag default is off",
+        "Validator rejects hidden facts and demographic inference",
+        "No provider failure breaks imagery scout",
+        "Spend and rollback notes are recorded"
+      ]
+    },
+    {
+      "id": "phase-2-provider-stack",
+      "title": "ATTOM, comps, creatives, watchers, farming, CRM overlay",
+      "status": "pending",
+      "risk": "high",
+      "workstreams": [
+        "ws-a",
+        "ws-c",
+        "ws-h",
+        "ws-g",
+        "ws-f",
+        "ws-d",
+        "ws-e"
+      ],
+      "packets": [
+        ".agent/plans/ws-a.md",
+        ".agent/plans/ws-c.md",
+        ".agent/plans/ws-h.md",
+        ".agent/plans/ws-g.md",
+        ".agent/plans/ws-f.md",
+        ".agent/plans/ws-d.md",
+        ".agent/plans/ws-e.md"
+      ],
+      "acceptance": [
+        "Provider facts are cited",
+        "PII and fair-housing risks stay fail-closed",
+        "CRM writes are human-gated",
+        "Every PR has adversarial tests and rollback notes"
+      ]
+    },
+    {
+      "id": "phase-3-critical-send",
+      "title": "Real send only after founder ack",
+      "status": "blocked",
+      "risk": "critical",
+      "workstreams": [
+        "ws-j"
+      ],
+      "packets": [
+        ".agent/plans/ws-j.md"
+      ],
+      "acceptance": [
+        "Explicit per-channel founder approval exists",
+        "Critical gates and end-to-end proof pass",
+        "Rollback and incident playbook are current"
+      ]
+    }
+  ]
+}

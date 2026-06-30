@@ -16,6 +16,7 @@ Claude. `AGENTS.md` is the root contract. Chat history is disposable.
 | `handoffs/` | Historical continuation state |
 | `handoffs/current.md` | Crash-resistant latest checkpoint for the next agent |
 | `metrics/` | Versioned task scorecards for model and workflow evaluation |
+| `phase-manifest.json` | Phase order, worker context limits, stop rules, and improvement scoring |
 
 ## Operating loop
 
@@ -41,6 +42,9 @@ Claude. `AGENTS.md` is the root contract. Chat history is disposable.
 - Keep static doctrine out of prompts; retrieve only relevant knowledge entries.
 - Track exact runtime tokens when exposed. Otherwise report context bytes/files,
   repeated reads, command count, elapsed time, and verification cost as proxies.
+- Use `npm run agent:phase` before phase work to print the next focused worker
+  packet. Use `npm run agent:phase:record -- --phase=<id> ...` after each
+  phase to append product, evidence, safety, token-efficiency, and drift scores.
 - Stop uncontrolled exploration and write a handoff when context becomes noisy.
 - Checkpoint after ORIENT, PLAN, IMPLEMENT, VERIFY, and SHIP. Do not wait until
   the last tokens: `npm run agent:checkpoint -- --goal="..." --completed="..." --next="..."`.
