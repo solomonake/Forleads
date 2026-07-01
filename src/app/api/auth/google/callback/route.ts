@@ -3,11 +3,14 @@
 // cookie, and bind the agent identity so drafts come from the real user.
 import { NextRequest, NextResponse } from "next/server";
 import { agentIdForSub } from "@/lib/auth/agent";
+import { config } from "@/lib/core/config";
 import { exchangeCode, fetchProfile } from "@/lib/auth/google";
 import { SESSION_COOKIE, seal, sessionCookieOptions, type Session } from "@/lib/auth/session";
 import { getRepo } from "@/lib/db";
 import { provisionWorkspace } from "@/lib/db/seed";
 import { saveGoogleCredential } from "@/lib/auth/credentials";
+import { log } from "@/lib/observability";
+import { sendWelcomeEmail } from "@/lib/email/welcome";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -52,11 +55,24 @@ export async function GET(req: NextRequest) {
     });
     session.googleCredentialRef = await saveGoogleCredential(agentId, tokens);
 
+    if (!config.founder.sub && profile.email.toLowerCase() === config.founder.email.toLowerCase()) {
+      log("info", "founder.bootstrap_candidate", {
+        email: profile.email,
+        sub: profile.sub,
+      });
+    }
+
     // New user with no phone yet → send them through a one-field onboarding.
-    const dest = session.phone ? "/?auth=ok" : "/?auth=ok&onboard=phone";
+    const dest = session.phone ? "/app?auth=ok" : "/app?auth=ok&onboard=phone";
     const res = NextResponse.redirect(new URL(dest, req.url));
     res.cookies.set(SESSION_COOKIE, seal(session), sessionCookieOptions());
     res.cookies.delete("fl_oauth_state");
+    void sendWelcomeEmail({
+      agentId,
+      email: profile.email,
+      name: profile.name,
+      accessToken: tokens.access_token,
+    });
     return res;
   } catch (e) {
     const reason = encodeURIComponent(e instanceof Error ? e.message : "exchange_failed");

@@ -10,6 +10,13 @@ function env(key: string): string | undefined {
   return v && v.trim() !== "" ? v.trim() : undefined;
 }
 
+function intEnv(key: string, fallback: number): number {
+  const raw = env(key);
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 const production = process.env.NODE_ENV === "production";
 const supabaseConfigured = Boolean(
   env("NEXT_PUBLIC_SUPABASE_URL") && env("SUPABASE_SERVICE_ROLE_KEY"),
@@ -34,6 +41,9 @@ export const config = {
   allowDemoMutations:
     env("FORLEADS_ALLOW_DEMO_MUTATIONS") === "1" ||
     process.env.NODE_ENV === "development",
+  rateLimitDailyQuota: intEnv("RATE_LIMIT_DAILY_QUOTA", 5000),
+  welcomeEmailEnabled:
+    env("WELCOME_EMAIL_ENABLED") === "1" || env("WELCOME_EMAIL_ENABLED") === "true",
   agentMode: (env("FORLEADS_AGENT_MODE") ??
     (production && env("ANTHROPIC_API_KEY") ? "live" : "mock")) as Mode,
   claudeModel: env("FORLEADS_CLAUDE_MODEL") ?? "claude-sonnet-4-6",
@@ -91,6 +101,15 @@ export const config = {
 
   zapier: {
     webhookSecret: env("ZAPIER_WEBHOOK_SECRET"),
+  },
+
+  sentry: {
+    dsn: env("SENTRY_DSN"),
+  },
+
+  founder: {
+    email: env("FOUNDER_EMAIL") ?? "solomonriting@gmail.com",
+    sub: env("FOUNDER_SUB"),
   },
 } as const;
 

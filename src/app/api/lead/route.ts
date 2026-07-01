@@ -2,6 +2,7 @@
 // cited evidence cards + the reduce summary (the "fly-to" loading window).
 import { NextRequest, NextResponse } from "next/server";
 import { ensureCurrentAgent } from "@/lib/auth/agent";
+import { config } from "@/lib/core/config";
 import { log, withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { num, optStr, str, validateBody } from "@/lib/validation";
@@ -18,7 +19,13 @@ export const POST = withRoute("lead", async (req: NextRequest) => {
   if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
   // Discovery fans out to the external (Overpass) budget — the binding
   // constraint. Tightest limit of any route. (.agent/audits/…capacity-envelope.md)
-  const limited = enforceRateLimit(req, { name: "lead", agentId, perAgent: 20, perIp: 30 });
+  const limited = enforceRateLimit(req, {
+    name: "lead",
+    agentId,
+    perAgent: 20,
+    perIp: 30,
+    quota: { tenantKey: agentId, limit: config.rateLimitDailyQuota },
+  });
   if (limited) return limited;
   const lead = await ensureLead(agentId, {
     address: body.address,

@@ -42,6 +42,7 @@ describe("InMemoryRateLimiter (fixed window)", () => {
 describe("enforceRateLimit (route glue)", () => {
   beforeEach(() => {
     (globalThis as unknown as { __forleadsRateLimiter?: unknown }).__forleadsRateLimiter = undefined;
+    (globalThis as unknown as { __forleadsQuotaGate?: unknown }).__forleadsQuotaGate = undefined;
   });
   const req = (ip: string) =>
     new NextRequest("http://localhost/api/lead", { headers: { "x-forwarded-for": ip } });
@@ -60,5 +61,19 @@ describe("enforceRateLimit (route glue)", () => {
     const opts = { name: "t2", agentId: "agentX", perAgent: 1, perIp: 100 };
     expect(enforceRateLimit(req("1.1.1.1"), opts)).toBeNull();
     expect(enforceRateLimit(req("2.2.2.2"), opts)?.status).toBe(429); // same agent, new IP
+  });
+
+  it("returns a daily_quota reason when the tenant quota is exhausted", async () => {
+    const opts = {
+      name: "t3",
+      agentId: "agentX",
+      perAgent: 100,
+      perIp: 100,
+      quota: { tenantKey: "agentX", limit: 1, windowMs: 86_400_000 },
+    };
+    expect(enforceRateLimit(req("1.1.1.1"), opts)).toBeNull();
+    const blocked = enforceRateLimit(req("1.1.1.1"), opts);
+    expect(blocked?.status).toBe(429);
+    await expect(blocked?.json()).resolves.toMatchObject({ reason: "daily_quota" });
   });
 });

@@ -2,6 +2,7 @@
 // fail-closed compliance linter, persist it + its Agent Trace. Draft-first.
 import { NextRequest, NextResponse } from "next/server";
 import { ensureCurrentAgent } from "@/lib/auth/agent";
+import { config } from "@/lib/core/config";
 import { withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { oneOf, optNum, str, validateBody } from "@/lib/validation";
@@ -19,7 +20,13 @@ export const POST = withRoute("draft", async (req: NextRequest) => {
   }));
   const agentId = await ensureCurrentAgent();
   if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
-  const limited = enforceRateLimit(req, { name: "compose", agentId, perAgent: 30, perIp: 45 });
+  const limited = enforceRateLimit(req, {
+    name: "compose",
+    agentId,
+    perAgent: 30,
+    perIp: 45,
+    quota: { tenantKey: agentId, limit: config.rateLimitDailyQuota },
+  });
   if (limited) return limited;
   const repo = await getRepo();
   const lead = await repo.getLead(body.leadId);

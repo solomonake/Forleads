@@ -59,7 +59,13 @@ export const POST = withRoute("seller-update.post", async (req: NextRequest) => 
   }));
   const agentId = await ensureCurrentAgent();
   if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
-  const limited = enforceRateLimit(req, { name: "compose", agentId, perAgent: 10, perIp: 15 });
+  const limited = enforceRateLimit(req, {
+    name: "compose",
+    agentId,
+    perAgent: 10,
+    perIp: 15,
+    quota: { tenantKey: agentId, limit: config.rateLimitDailyQuota },
+  });
   if (limited) return limited;
 
   const { repo, listing } = await loadTenantListing(body.listingId, agentId);

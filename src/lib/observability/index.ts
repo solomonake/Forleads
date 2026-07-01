@@ -10,6 +10,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { uuid } from "@/lib/core/ids";
+import { reportError } from "./sentry";
 
 type Level = "info" | "warn" | "error";
 
@@ -57,6 +58,13 @@ export function withRoute<C = unknown>(
         ? (e as { status: number }).status
         : 500;
       const client = status < 500;
+      await reportError(err, {
+        name,
+        method: req.method,
+        status,
+        ms: Date.now() - started,
+        requestId,
+      });
       log(client ? "warn" : "error", client ? "request.rejected" : "request.error", {
         name,
         method: req.method,
@@ -66,10 +74,12 @@ export function withRoute<C = unknown>(
         error: err.message,
         ...(client ? {} : { stack: err.stack }),
       });
-      return NextResponse.json(
+      const response = NextResponse.json(
         { error: client ? err.message : "internal error", requestId },
         { status },
       );
+      response.headers.set("x-request-id", requestId);
+      return response;
     }
   };
 }

@@ -5,7 +5,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { freshAccessToken } from "@/lib/auth/google";
 import { getSession, seal, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth/session";
+import { config } from "@/lib/core/config";
+import { emitApprovedAction } from "@/lib/analytics/northstar";
 import { withRoute } from "@/lib/observability";
+import { enforceRateLimit } from "@/lib/ratelimit";
 import { num, str, validateBody } from "@/lib/validation";
 import { approveArtifact } from "@/lib/pipeline";
 import { ensureCurrentAgent } from "@/lib/auth/agent";
@@ -18,6 +21,14 @@ export const POST = withRoute("approve", async (req: NextRequest) => {
   if (!agentId) {
     return NextResponse.json({ error: "authentication required" }, { status: 401 });
   }
+  const limited = enforceRateLimit(req, {
+    name: "approve",
+    agentId,
+    perAgent: 40,
+    perIp: 60,
+    quota: { tenantKey: agentId, limit: config.rateLimitDailyQuota },
+  });
+  if (limited) return limited;
   const body = await validateBody(req, (b) => ({
     artifactId: str(b, "artifactId", { max: 100 }),
     expectedRevision: num(b, "expectedRevision", { min: 1 }),
@@ -59,6 +70,13 @@ export const POST = withRoute("approve", async (req: NextRequest) => {
     throw e;
   }
   if (!result) return NextResponse.json({ error: "artifact not found" }, { status: 404 });
+
+  void emitApprovedAction({
+    agentId,
+    artifactId: result.artifact.id,
+    leadId: result.artifact.lead_surface_id,
+    loopId: result.artifact.loop_run_id,
+  });
 
   const res = NextResponse.json(result);
   // Persist a refreshed access token back into the session cookie.

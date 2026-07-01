@@ -12,6 +12,7 @@
 // ============================================================================
 
 import { NextResponse, type NextRequest } from "next/server";
+import { getQuotaGate, type QuotaGate } from "./quota";
 
 export interface RateLimitResult {
   ok: boolean;
@@ -73,6 +74,12 @@ export interface RateLimitOptions {
   perAgent: number; // requests / window for one agent
   perIp: number; // requests / window for one IP
   windowMs?: number; // default 60s
+  quota?: {
+    tenantKey: string;
+    limit: number;
+    windowMs?: number;
+    gate?: QuotaGate;
+  };
 }
 
 /**
@@ -85,25 +92,43 @@ export function enforceRateLimit(req: NextRequest, opts: RateLimitOptions): Next
   const windowMs = opts.windowMs ?? 60_000;
   const limiter = getRateLimiter();
   const ip = clientIp(req);
+  const quotaGate = opts.quota?.gate ?? getQuotaGate();
+  const quotaRes = opts.quota
+    ? quotaGate.check(
+        `${opts.name}:quota:${opts.quota.tenantKey}`,
+        opts.quota.limit,
+        opts.quota.windowMs ?? 86_400_000,
+      )
+    : null;
 
   const ipRes = limiter.check(`${opts.name}:ip:${ip}`, opts.perIp, windowMs);
   const agentRes = opts.agentId
     ? limiter.check(`${opts.name}:agent:${opts.agentId}`, opts.perAgent, windowMs)
     : null;
 
-  const blocked = !ipRes.ok ? ipRes : agentRes && !agentRes.ok ? agentRes : null;
+  const blocked = quotaRes && !quotaRes.ok
+    ? { reason: "daily_quota" as const, result: quotaRes }
+    : !ipRes.ok
+      ? { reason: "rate_limit" as const, result: ipRes }
+      : agentRes && !agentRes.ok
+        ? { reason: "rate_limit" as const, result: agentRes }
+        : null;
   if (!blocked) return null;
 
-  const retryAfter = Math.ceil(blocked.resetMs / 1000);
+  const retryAfter = Math.ceil(blocked.result.resetMs / 1000);
   return NextResponse.json(
-    { error: "rate limit exceeded", retryAfterSeconds: retryAfter },
+    {
+      error: blocked.reason === "daily_quota" ? "daily quota exceeded" : "rate limit exceeded",
+      reason: blocked.reason,
+      retryAfterSeconds: retryAfter,
+    },
     {
       status: 429,
       headers: {
         "Retry-After": String(retryAfter),
-        "X-RateLimit-Limit": String(blocked.limit),
-        "X-RateLimit-Remaining": String(blocked.remaining),
-        "X-RateLimit-Reset": String(Math.ceil((Date.now() + blocked.resetMs) / 1000)),
+        "X-RateLimit-Limit": String(blocked.result.limit),
+        "X-RateLimit-Remaining": String(blocked.result.remaining),
+        "X-RateLimit-Reset": String(Math.ceil((Date.now() + blocked.result.resetMs) / 1000)),
       },
     },
   );

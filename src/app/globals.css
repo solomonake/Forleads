@@ -98,6 +98,249 @@ button {
   inset: 0;
   display: flex;
 }
+.landing {
+  min-height: 100vh;
+  overflow-y: auto;
+  background:
+    radial-gradient(900px 520px at 18% 14%, rgba(124, 140, 255, 0.16), transparent 58%),
+    radial-gradient(760px 440px at 84% 18%, rgba(45, 224, 200, 0.12), transparent 56%),
+    #0a0e14;
+}
+.landing-hero {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 36px;
+  align-items: center;
+  padding: 56px 40px 24px;
+}
+.landing-copy {
+  max-width: 620px;
+}
+.landing-kicker {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--signal);
+  margin-bottom: 14px;
+}
+.landing-copy h1 {
+  font-size: clamp(42px, 6vw, 72px);
+  line-height: 0.97;
+  max-width: 10ch;
+}
+.landing-sub {
+  margin-top: 20px;
+  max-width: 52ch;
+  color: var(--text-2);
+  font-size: 18px;
+  line-height: 1.6;
+}
+.landing-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 28px;
+}
+.landing-actions form {
+  margin: 0;
+}
+.landing-cta {
+  height: 48px;
+  padding: 0 18px;
+  border-radius: var(--r-pill);
+  border: 0;
+  background: var(--grad-signal);
+  color: #04130d;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--glow-signal);
+  transition: transform var(--dur-tap) var(--ease-spring), filter var(--dur-tap) ease;
+}
+.landing-cta:hover {
+  filter: brightness(1.04);
+}
+.landing-cta:active {
+  transform: scale(0.98);
+}
+.landing-link {
+  color: var(--text-2);
+  text-decoration: none;
+  font-size: 14px;
+}
+.landing-link:hover {
+  color: var(--text);
+}
+.landing-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 34px;
+}
+.landing-metrics div,
+.landing-band div {
+  background: rgba(18, 24, 34, 0.72);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  box-shadow: var(--edge);
+  padding: 16px;
+}
+.landing-metrics strong,
+.landing-band strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.landing-metrics span,
+.landing-band p {
+  display: block;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.landing-preview {
+  min-height: 520px;
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  border: 1px solid var(--hairline);
+  border-radius: 24px;
+  background: rgba(18, 24, 34, 0.78);
+  box-shadow: var(--shadow-lift), var(--edge);
+  overflow: hidden;
+}
+.landing-preview-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 0;
+  background: rgba(12, 16, 23, 0.78);
+  border-right: 1px solid var(--hairline);
+}
+.landing-preview-rail span {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--hairline);
+  background: rgba(34, 44, 61, 0.72);
+}
+.landing-preview-stage {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 14px;
+  padding: 18px;
+}
+.landing-preview-command {
+  height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: rgba(10, 14, 20, 0.66);
+  border: 1px solid var(--hairline);
+}
+.landing-preview-command b {
+  color: var(--signal);
+}
+.landing-preview-command span {
+  color: var(--text-2);
+  font-size: 13px;
+}
+.landing-preview-map {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--hairline);
+  background:
+    linear-gradient(rgba(18, 24, 34, 0.2), rgba(18, 24, 34, 0.2)),
+    radial-gradient(circle at 20% 30%, rgba(45, 224, 200, 0.16), transparent 22%),
+    radial-gradient(circle at 76% 60%, rgba(124, 140, 255, 0.18), transparent 20%),
+    #0d131d;
+  min-height: 340px;
+}
+.landing-preview-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 54px 54px;
+  opacity: 0.55;
+}
+.landing-preview-pin {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #0a0e14;
+  background: var(--signal);
+  box-shadow: 0 0 18px rgba(45, 224, 200, 0.42);
+}
+.landing-preview-pin-a {
+  top: 26%;
+  left: 30%;
+}
+.landing-preview-pin-b {
+  top: 44%;
+  left: 62%;
+  background: var(--brand);
+  box-shadow: 0 0 18px rgba(124, 140, 255, 0.42);
+}
+.landing-preview-pin-c {
+  top: 68%;
+  left: 42%;
+}
+.landing-preview-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(10, 14, 20, 0.76);
+  border: 1px solid var(--hairline);
+}
+.landing-preview-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.landing-preview-row strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.landing-preview-row span {
+  color: var(--text-2);
+  text-align: right;
+}
+.landing-band {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 0 40px 40px;
+  margin-top: -6vh;
+}
+.landing-notice {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  max-width: 360px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--warn);
+  background: rgba(34, 44, 61, 0.94);
+  box-shadow: var(--shadow-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.landing-notice.danger {
+  border-color: var(--danger);
+}
 #navrail {
   width: 60px;
   flex-shrink: 0;
@@ -1770,6 +2013,29 @@ button {
 }
 
 @media (max-width: 720px) {
+  html,
+  body {
+    overflow: auto;
+  }
+  .landing-hero {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    padding: 32px 20px 16px;
+  }
+  .landing-copy h1 {
+    max-width: 11ch;
+  }
+  .landing-metrics,
+  .landing-band {
+    grid-template-columns: 1fr;
+  }
+  .landing-preview {
+    min-height: 420px;
+  }
+  .landing-band {
+    margin-top: 0;
+    padding: 0 20px 24px;
+  }
   .launchpad {
     left: 16px;
     width: calc(100% - 32px);
@@ -1823,6 +2089,8 @@ button {
     transition: opacity 0.2s ease;
   }
   /* No transform-based motion when reduced motion is requested. */
+  .landing-cta,
+  .landing-cta:active,
   .navbtn:active,
   .tool:hover,
   .tool:active,

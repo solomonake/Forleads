@@ -352,6 +352,7 @@ export type DomainEventType =
   | "artifact.drafted"
   | "artifact.edited"
   | "artifact.approved"
+  | "northstar.action.approved"
   | "artifact.sent"
   | "artifact.blocked"
   | "seller_update.drafted"
@@ -363,7 +364,9 @@ export type DomainEventType =
   | "connector.write"
   | "artifact.cancelled"
   | "outcome.recorded"
-  | "memory.recalled";
+  | "memory.recalled"
+  | "welcome.sent"
+  | "welcome.skipped";
 
 export interface DomainEvent {
   id: UUID;
