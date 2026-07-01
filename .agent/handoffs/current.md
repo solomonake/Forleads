@@ -1,23 +1,24 @@
 # Current agent checkpoint
 
-Generated: 2026-06-26T03:02:01.593Z
+Generated: 2026-07-01T01:53:05.125Z
 
 ## State
-- Branch: `detached`
-- Commit: `d3ffc0d60277`
+- Branch: `codex/phase-loop-os`
+- Commit: `0cf6b8d7ab49`
 - Worktree: dirty
 - Changed files:
-  - M .agent/handoffs/current.md
+  - M .agent/metrics/phase-runs.jsonl
   -  M .agent/metrics/runs.jsonl
+  -  M .agent/phase-manifest.json
 
 ## Goal
-Ship durable scheduled loop execution
+Phase 1a integrated on measured loop branch
 
 ## Completed
-Replaced malformed Vercel production CRON_SECRET with a no-newline generated value, redeployed failed production deployment for main d3ffc0d, and verified production now serves /api/cron/loops. Production health is OK with Supabase persistence, live agent mode, and no mock connector writes.
+Cherry-picked clean WS-B and WS-I onto codex/phase-loop-os; medium gate passed with 193 tests and agent eval 15/15.
 
 ## Next exact action
-Continue to the next product phase after scheduled loops: choose the next production gap from durable reporting, connector outcome feedback, or live loop observability; run agent:context before editing.
+Begin WS-M in a fresh isolated branch from codex/phase-loop-os and keep Phase 1b scoped to landing, Sentry, quota, and North Star metric.
 
 ## Blockers
 none
@@ -26,7 +27,7 @@ none
 In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secrets, spending, destructive actions, and external communication require the user.
 
 ## Verification proof
-Vercel production inspect: Branch main Commit d3ffc0d, /api/cron/loops in route table, deployment status Ready, aliased forleads.vercel.app at 2026-06-26T02:57:58Z. curl /api/health -> 200 ok. curl /api/cron/loops without auth -> 401 unauthorized with x-matched-path /api/cron/loops.
+npm run agent:check -- --risk=medium -> pass on codex/phase-loop-os
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.
