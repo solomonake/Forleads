@@ -8,9 +8,13 @@ beforeEach(() => {
   (globalThis as unknown as { __forleadsCache?: unknown }).__forleadsCache = undefined;
 });
 
-const input = (type: ScoutType, address = "1 Test St"): ScoutInput => ({
-  lng: -73.985,
-  lat: 40.748,
+const input = (
+  type: ScoutType,
+  address = "1 Test St",
+  coords = { lng: -73.985, lat: 40.748 },
+): ScoutInput => ({
+  lng: coords.lng,
+  lat: coords.lat,
   address,
   job: {
     type,
@@ -21,7 +25,9 @@ const input = (type: ScoutType, address = "1 Test St"): ScoutInput => ({
         ? ["OpenStreetMap", "OSM"]
         : type === "imagery"
           ? ["Mapillary", "Esri", "Imagery Scout"]
-          : [],
+          : type === "risk"
+            ? ["FEMA", "NFHL"]
+            : [],
   },
 });
 
@@ -39,6 +45,15 @@ describe("runScoutCached", () => {
     const b = await runScoutCached(input("risk", "12 B St")); // different address, same coords/cell
     expect(a.status).toBe("insufficient_evidence");
     expect(b.cost.cacheHit).not.toBe(true);
+  });
+
+  it("serves a repeat successful risk lookup from cache at H3-cell scope", async () => {
+    const coords = { lng: -95.3979, lat: 29.7858 };
+    const first = await runScoutCached(input("risk", "Houston Heights", coords));
+    const second = await runScoutCached(input("risk", "Nearby Houston parcel", coords));
+    expect(first.status).toBe("ok");
+    expect(second.cost.cacheHit).toBe(true);
+    expect(second.cost.calls).toBe(0);
   });
 
   it("NEVER caches the people scout (personal signals must not leak across leads)", async () => {

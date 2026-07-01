@@ -11,6 +11,8 @@ import type {
   ImageryProvider,
   PropertyDataProvider,
   PropertyQuery,
+  RiskProvider,
+  RiskQuery,
 } from "./types";
 
 // A small global gazetteer so "global from day one" is felt in mock mode.
@@ -221,6 +223,38 @@ export class MockImageryProvider implements ImageryProvider {
 
   aerialAttribution(): string {
     return "Imagery © Esri";
+  }
+}
+
+export class MockRiskProvider implements RiskProvider {
+  readonly name = "mock-risk";
+  readonly mode = "mock" as const;
+
+  async flood(q: RiskQuery): Promise<EvidenceCard[]> {
+    const inFixtureCell = Math.abs(q.lng - -95.3979) < 0.02 && Math.abs(q.lat - 29.7858) < 0.02;
+    if (!inFixtureCell) {
+      return [
+        {
+          scout: "risk",
+          claim: "Flood zone",
+          value: null,
+          sources: [{ name: "FEMA NFHL", url: "https://hazards.fema.gov/nfhl" }],
+          confidence: "D",
+          reasoning: "Mock risk provider has no configured flood-zone fixture for this point.",
+        },
+      ];
+    }
+
+    return [
+      {
+        scout: "risk",
+        claim: "Flood zone",
+        value: "AE — high-risk SFHA",
+        sources: [{ name: "FEMA NFHL", url: "https://hazards.fema.gov/nfhl" }],
+        confidence: "A",
+        reasoning: "Deterministic mock fixture shaped like an NFHL flood-zone hit.",
+      },
+    ];
   }
 }
 

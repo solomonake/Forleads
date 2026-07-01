@@ -47,6 +47,7 @@ export const config = {
     env("FORLEADS_IMAGERY_PROVIDER") ??
     (production && env("MAPILLARY_TOKEN") ? "mapillary" : "mock"),
   geocoder: env("FORLEADS_GEOCODER") ?? (production ? "nominatim" : "mock"),
+  riskProvider: env("FORLEADS_RISK_PROVIDER") ?? (production ? "fema-nfhl" : "mock"),
 
   supabase: {
     url: env("NEXT_PUBLIC_SUPABASE_URL"),
@@ -100,6 +101,7 @@ export function coreLiveModeViolations(): string[] {
   if (config.geocoder === "mock") violations.push("geocoder");
   if (config.propertyProvider === "osm-mock") violations.push("property");
   if (config.imageryProvider === "mock") violations.push("imagery");
+  if (config.riskProvider === "mock") violations.push("risk");
   if (config.agentMode === "mock") violations.push("agent");
   return violations;
 }

@@ -11,6 +11,8 @@ import type {
   ImageryProvider,
   PropertyDataProvider,
   PropertyQuery,
+  RiskProvider,
+  RiskQuery,
 } from "./types";
 
 // ---- Public Nominatim (zero self-hosting; ~1 req/sec fair-use) --------------
@@ -217,6 +219,115 @@ export class OSMPropertyProvider implements PropertyDataProvider {
       },
     ];
   }
+}
+
+// ---- FEMA NFHL flood zones -------------------------------------------------
+// Live probe 2026-06-30: NFHL returns ESRI JSON as
+// features[0].attributes.{FLD_ZONE,ZONE_SUBTY,SFHA_TF}.
+
+type FemaNfhlFeature = {
+  attributes?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
+};
+
+const FEMA_NFHL_QUERY_URL =
+  "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query";
+const FEMA_NFHL_SOURCE_URL = "https://hazards.fema.gov/nfhl";
+
+export class FemaNfhlRiskProvider implements RiskProvider {
+  readonly name = "fema-nfhl";
+  readonly mode = "live" as const;
+
+  constructor(private queryUrl = FEMA_NFHL_QUERY_URL) {}
+
+  async flood(q: RiskQuery): Promise<EvidenceCard[]> {
+    const url = this.buildQueryUrl(q);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": "Forleads/1.0 (real-estate CRM; +https://forleads.vercel.app)",
+          Accept: "application/json",
+        },
+        signal: controller.signal,
+      });
+      if (!res.ok) return this.gap(`FEMA NFHL request failed with HTTP ${res.status}.`, url);
+
+      const data = (await res.json()) as { features?: FemaNfhlFeature[] };
+      const feature = data.features?.[0];
+      if (!feature) {
+        return this.gap("Point is outside FEMA NFHL coverage or has no mapped flood-zone polygon.", url);
+      }
+
+      const attrs = feature.attributes ?? feature.properties ?? {};
+      const zone = textAttr(attrs, "FLD_ZONE");
+      if (!zone) {
+        return this.gap("FEMA NFHL returned a feature without a flood-zone code.", url);
+      }
+
+      const sfha = parseSfha(textAttr(attrs, "SFHA_TF"));
+      const subtype = textAttr(attrs, "ZONE_SUBTY");
+      const value = sfha === true ? `${zone} — high-risk SFHA` : `${zone} — SFHA: ${sfha === false ? "no" : "unknown"}`;
+      return [
+        {
+          scout: "risk",
+          claim: "Flood zone",
+          value: subtype ? `${value} · ${subtype}` : value,
+          sources: [{ name: "FEMA NFHL", url }],
+          confidence: "A",
+          reasoning: "FEMA National Flood Hazard Layer polygon intersected the lead coordinates.",
+        },
+      ];
+    } catch (error) {
+      const reason =
+        error instanceof DOMException && error.name === "AbortError"
+          ? "FEMA NFHL request timed out."
+          : "Network error reaching FEMA NFHL.";
+      return this.gap(reason, url);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private buildQueryUrl(q: RiskQuery): string {
+    const url = new URL(this.queryUrl);
+    url.searchParams.set("f", "json");
+    url.searchParams.set("geometry", `${q.lng},${q.lat}`);
+    url.searchParams.set("geometryType", "esriGeometryPoint");
+    url.searchParams.set("inSR", "4326");
+    url.searchParams.set("spatialRel", "esriSpatialRelIntersects");
+    url.searchParams.set("outFields", "FLD_ZONE,ZONE_SUBTY,SFHA_TF");
+    url.searchParams.set("returnGeometry", "false");
+    url.searchParams.set("resultRecordCount", "1");
+    return url.toString();
+  }
+
+  private gap(reason: string, url = FEMA_NFHL_SOURCE_URL): EvidenceCard[] {
+    return [
+      {
+        scout: "risk",
+        claim: "Flood zone",
+        value: null,
+        sources: [{ name: "FEMA NFHL", url }],
+        confidence: "D",
+        reasoning: reason,
+      },
+    ];
+  }
+}
+
+function textAttr(attrs: Record<string, unknown>, key: string): string | undefined {
+  const value = attrs[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function parseSfha(value: string | undefined): boolean | undefined {
+  if (!value) return undefined;
+  if (/^(t|true|yes|y|1)$/i.test(value)) return true;
+  if (/^(f|false|no|n|0)$/i.test(value)) return false;
+  return undefined;
 }
 
 // ---- Mapillary imagery ------------------------------------------------------
