@@ -58,6 +58,8 @@ export const config = {
     (production && env("MAPILLARY_TOKEN") ? "mapillary" : "mock"),
   geocoder: env("FORLEADS_GEOCODER") ?? (production ? "nominatim" : "mock"),
   riskProvider: env("FORLEADS_RISK_PROVIDER") ?? (production ? "fema-nfhl" : "mock"),
+  visionProvider: (env("FORLEADS_VISION") ?? "off") as "gemini" | "mock" | "off",
+  visionModel: env("FORLEADS_VISION_MODEL") ?? "gemini-2.5-flash",
 
   supabase: {
     url: env("NEXT_PUBLIC_SUPABASE_URL"),
@@ -81,6 +83,8 @@ export const config = {
     clientId: env("MS_CLIENT_ID"),
     clientSecret: env("MS_CLIENT_SECRET"),
   },
+
+  geminiKey: env("GEMINI_API_KEY"),
 
   followupboss: {
     apiKey: env("FOLLOWUPBOSS_API_KEY"),
@@ -128,4 +132,8 @@ export function coreLiveModeViolations(): string[] {
 /** True if Claude credentials are present and live mode requested. */
 export function claudeLive(): boolean {
   return config.agentMode === "live" && Boolean(config.anthropicKey);
+}
+
+export function visionLive(): boolean {
+  return config.visionProvider === "gemini" && Boolean(config.geminiKey);
 }

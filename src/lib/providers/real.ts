@@ -5,6 +5,8 @@
 // ============================================================================
 
 import type { EvidenceCard } from "@/lib/core/types";
+import { log } from "@/lib/observability";
+import type { VisionCaptioner } from "./vision";
 import type {
   GeocodeProvider,
   GeoResult,
@@ -335,13 +337,19 @@ function parseSfha(value: string | undefined): boolean | undefined {
 export class MapillaryImageryProvider implements ImageryProvider {
   readonly name = "mapillary";
   readonly mode = "live" as const;
-  constructor(private token: string) {}
+  constructor(
+    private token: string,
+    private vision?: VisionCaptioner | null,
+    private fetcher: typeof fetch = fetch,
+  ) {}
 
   async street(q: PropertyQuery): Promise<EvidenceCard[]> {
     const bbox = [q.lng - 0.0006, q.lat - 0.0006, q.lng + 0.0006, q.lat + 0.0006].join(",");
-    const url = `https://graph.mapillary.com/images?access_token=${this.token}&fields=id&bbox=${bbox}&limit=5`;
+    const url =
+      `https://graph.mapillary.com/images?access_token=${this.token}` +
+      `&fields=id,thumb_1024_url&bbox=${bbox}&limit=5`;
     try {
-      const res = await fetch(url);
+      const res = await this.fetcher(url);
       if (!res.ok) {
         return [
           {
@@ -354,7 +362,9 @@ export class MapillaryImageryProvider implements ImageryProvider {
           },
         ];
       }
-      const data = (await res.json()) as { data?: { id: string }[] };
+      const data = (await res.json()) as {
+        data?: { id: string; thumb_1024_url?: string | null }[];
+      };
       const n = data.data?.length ?? 0;
       if (n === 0) {
         return [
@@ -368,7 +378,7 @@ export class MapillaryImageryProvider implements ImageryProvider {
           },
         ];
       }
-      return [
+      const cards: EvidenceCard[] = [
         {
           scout: "imagery",
           claim: "Street imagery",
@@ -377,6 +387,29 @@ export class MapillaryImageryProvider implements ImageryProvider {
           confidence: "A",
         },
       ];
+      if (!this.vision) return cards;
+      const frames =
+        (data.data ?? [])
+          .filter((entry) => typeof entry.thumb_1024_url === "string" && entry.thumb_1024_url)
+          .slice(0, 3)
+          .map((entry) => ({ id: entry.id, url: entry.thumb_1024_url! }));
+      if (frames.length === 0) return cards;
+      try {
+        const captions = await this.vision.caption({
+          address: q.address,
+          lng: q.lng,
+          lat: q.lat,
+          frameIds: frames.map((frame) => frame.id),
+          frameUrls: frames.map((frame) => frame.url),
+        });
+        return [...cards, ...captions];
+      } catch {
+        log("warn", "vision_caption_failed", {
+          provider: this.vision.name,
+          frameCount: frames.length,
+        });
+        return cards;
+      }
     } catch {
       return [
         {

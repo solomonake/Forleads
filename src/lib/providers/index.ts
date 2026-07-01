@@ -17,6 +17,7 @@ import {
   PhotonNominatimGeocodeProvider,
   PublicNominatimGeocodeProvider,
 } from "./real";
+import { getVisionCaptioner } from "./vision";
 import type {
   GeocodeProvider,
   ImageryProvider,
@@ -48,7 +49,10 @@ export function getPropertyProvider(): PropertyDataProvider {
 
 export function getImageryProvider(): ImageryProvider {
   if (config.imageryProvider === "mapillary" && process.env.MAPILLARY_TOKEN) {
-    return new MapillaryImageryProvider(process.env.MAPILLARY_TOKEN);
+    return new MapillaryImageryProvider(
+      process.env.MAPILLARY_TOKEN,
+      getVisionCaptioner(),
+    );
   }
   return new MockImageryProvider();
 }
