@@ -1,10 +1,10 @@
 # Current agent checkpoint
 
-Generated: 2026-07-01T01:53:05.125Z
+Generated: 2026-07-01T04:02:46.690Z
 
 ## State
 - Branch: `codex/phase-loop-os`
-- Commit: `0cf6b8d7ab49`
+- Commit: `873d7d4be0ae`
 - Worktree: dirty
 - Changed files:
   - M .agent/metrics/phase-runs.jsonl
@@ -12,13 +12,13 @@ Generated: 2026-07-01T01:53:05.125Z
   -  M .agent/phase-manifest.json
 
 ## Goal
-Phase 1a integrated on measured loop branch
+Phase 1b integrated on measured loop branch
 
 ## Completed
-Cherry-picked clean WS-B and WS-I onto codex/phase-loop-os; medium gate passed with 193 tests and agent eval 15/15.
+Cherry-picked verified WS-M onto codex/phase-loop-os; landing/app split, env-gated Sentry seam, tenant daily quota, founder North Star endpoint, and welcome-draft path are now recorded with a 93 phase score.
 
 ## Next exact action
-Begin WS-M in a fresh isolated branch from codex/phase-loop-os and keep Phase 1b scoped to landing, Sentry, quota, and North Star metric.
+Start phase-1c-vision-flagged from codex/phase-loop-os in a fresh isolated branch, keeping Gemini vision behind the off-by-default flag.
 
 ## Blockers
 none
@@ -27,7 +27,7 @@ none
 In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secrets, spending, destructive actions, and external communication require the user.
 
 ## Verification proof
-npm run agent:check -- --risk=medium -> pass on codex/phase-loop-os
+npm run agent:check -- --risk=medium; npm run agent:phase:record -- --phase=phase-1b-frontdoor-hardening
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.

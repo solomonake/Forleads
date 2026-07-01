@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "objective": "Finish the full Forleads product build through measured, low-token, phase-gated loops.",
-  "updatedAt": "2026-07-01T01:53:05.090Z",
+  "updatedAt": "2026-07-01T04:02:25.323Z",
   "loopRules": {
     "maxParallelWorkers": 2,
     "onePrimaryAgent": true,
@@ -94,7 +94,7 @@
     {
       "id": "phase-1b-frontdoor-hardening",
       "title": "Landing, Sentry, quota, and metric slice",
-      "status": "pending",
+      "status": "completed",
       "risk": "medium",
       "workstreams": [
         "ws-m"
@@ -110,7 +110,10 @@
         "Error sink is env-gated",
         "Quota defaults open and observable",
         "North Star event path is measured"
-      ]
+      ],
+      "completedAt": "2026-07-01T04:02:25.249Z",
+      "lastScore": 93,
+      "lastOutcome": "success"
     },
     {
       "id": "phase-1c-vision-flagged",
