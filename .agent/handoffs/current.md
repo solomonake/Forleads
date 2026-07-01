@@ -1,10 +1,10 @@
 # Current agent checkpoint
 
-Generated: 2026-07-01T04:02:46.690Z
+Generated: 2026-07-01T06:37:21.535Z
 
 ## State
 - Branch: `codex/phase-loop-os`
-- Commit: `873d7d4be0ae`
+- Commit: `4e36465dd1c9`
 - Worktree: dirty
 - Changed files:
   - M .agent/metrics/phase-runs.jsonl
@@ -12,22 +12,22 @@ Generated: 2026-07-01T04:02:46.690Z
   -  M .agent/phase-manifest.json
 
 ## Goal
-Phase 1b integrated on measured loop branch
+Phase 1c integrated on measured loop branch
 
 ## Completed
-Cherry-picked verified WS-M onto codex/phase-loop-os; landing/app split, env-gated Sentry seam, tenant daily quota, founder North Star endpoint, and welcome-draft path are now recorded with a 93 phase score.
+Cherry-picked verified WS-K onto codex/phase-loop-os; off-by-default Gemini vision captions now sit behind a validator-first seam with fail-soft Mapillary injection and a 92 phase score.
 
 ## Next exact action
-Start phase-1c-vision-flagged from codex/phase-loop-os in a fresh isolated branch, keeping Gemini vision behind the off-by-default flag.
+Start phase-2-provider-stack from codex/phase-loop-os in a fresh isolated branch, beginning with the ATTOM/property-data seam and the exact packet set named by agent:phase.
 
 ## Blockers
-none
+No GEMINI_API_KEY present for a live paid probe; production flag remains off by design.
 
 ## Authority
 In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secrets, spending, destructive actions, and external communication require the user.
 
 ## Verification proof
-npm run agent:check -- --risk=medium; npm run agent:phase:record -- --phase=phase-1b-frontdoor-hardening
+npm run agent:check -- --risk=high; npm run agent:phase:record -- --phase=phase-1c-vision-flagged
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "objective": "Finish the full Forleads product build through measured, low-token, phase-gated loops.",
-  "updatedAt": "2026-07-01T04:02:25.323Z",
+  "updatedAt": "2026-07-01T06:36:55.593Z",
   "loopRules": {
     "maxParallelWorkers": 2,
     "onePrimaryAgent": true,
@@ -118,7 +118,7 @@
     {
       "id": "phase-1c-vision-flagged",
       "title": "Gemini vision behind an off-by-default flag",
-      "status": "pending",
+      "status": "completed",
       "risk": "high",
       "workstreams": [
         "ws-k"
@@ -134,7 +134,10 @@
         "Validator rejects hidden facts and demographic inference",
         "No provider failure breaks imagery scout",
         "Spend and rollback notes are recorded"
-      ]
+      ],
+      "completedAt": "2026-07-01T06:36:55.518Z",
+      "lastScore": 92,
+      "lastOutcome": "success"
     },
     {
       "id": "phase-2-provider-stack",
