@@ -354,6 +354,7 @@ export type DomainEventType =
   | "artifact.approved"
   | "artifact.sent"
   | "artifact.blocked"
+  | "seller_update.drafted"
   | "email.reply"
   | "task.due"
   | "watcher.hit"

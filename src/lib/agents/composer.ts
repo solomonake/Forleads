@@ -23,6 +23,7 @@ import type {
 import { nowISO } from "@/lib/core/ids";
 import { claudeLive } from "@/lib/core/config";
 import { claudeJSON } from "./claude";
+import type { SellerUpdateComposeContext } from "./seller-update";
 
 export interface ComposeInput {
   agent: Agent;
@@ -33,6 +34,7 @@ export interface ComposeInput {
   recipientEmail?: string;
   recipientPhone?: string;
   evidence: EvidenceCard[];
+  sellerUpdate?: SellerUpdateComposeContext;
   /** What the human has already done with prior drafts for this lead+action.
    *  When `rejected > 0`, the composer softens the tone and switches signoff;
    *  when `approved > 0`, the composer marks the prompt version with
@@ -66,7 +68,7 @@ const EXCLUDE_RULES: { pattern: RegExp; reason: string }[] = [
   { pattern: /near\s+(churches?|mosques?|temples?|synagogues?)/i, reason: "religion steering" },
 ];
 
-function applyExclusions(text: string): { text: string; excluded: { content: string; reason: string }[] } {
+export function applyComposerExclusions(text: string): { text: string; excluded: { content: string; reason: string }[] } {
   let out = text;
   const excluded: { content: string; reason: string }[] = [];
   for (const rule of EXCLUDE_RULES) {
@@ -109,6 +111,24 @@ function emailFor(input: ComposeInput): { subject: string; body: string } {
   const { agent, address } = input;
   const greet = voiceGreeting(agent.brandVoice);
   const sign = voiceSignoff(agent.brandVoice, agent.name);
+  if (input.sellerUpdate) {
+    const ctx = input.sellerUpdate;
+    const lines = ctx.themes.map(
+      (theme) =>
+        `- ${theme.label}: mentioned in ${theme.mentions} of ${ctx.showingsCounted} recent showing notes.`,
+    );
+    const price = ctx.themes.find((theme) => theme.kind === "price" && theme.confidence === "A");
+    const truncation = ctx.truncated
+      ? "\n\nI capped this update at the 200 most recent notes in the selected window so the summary stays auditable."
+      : "";
+    const priceCta = price
+      ? "\n\nBecause pricing came up repeatedly, it may be worth discussing whether an adjustment would help the next round of showings."
+      : "";
+    return {
+      subject: `Update on showings for ${address}`,
+      body: `${greet}\n\nI wanted to send a concise update from the last ${ctx.windowDays} days of showing feedback for ${address}.\n\n${lines.join("\n")}${priceCta}${truncation}\n\nI'll keep tracking the next round and will flag anything that changes materially.\n\n${sign}`,
+    };
+  }
   switch (input.situation) {
     case "no_contact":
       return {
@@ -180,7 +200,7 @@ export function compose(input: ComposeInput): ComposeOutput {
         body = `Following up on my last note — no pressure if the timing's off, just wanted to keep the line open.\n\n${baseBody}`;
         versionTag = `${PROMPT_VERSION}-followup`;
       }
-      const clean = applyExclusions(body);
+      const clean = applyComposerExclusions(body);
       raw = `${subject}\n${clean.text}`;
       payload = {
         from: `${input.agent.name} <${input.agent.email}>`,
@@ -198,7 +218,7 @@ export function compose(input: ComposeInput): ComposeOutput {
     }
     case "sms": {
       const base = `Hi, it's ${input.agent.name}. Quick note about ${input.address} — no pressure, happy to share an honest picture whenever you like.`;
-      const clean = applyExclusions(base);
+      const clean = applyComposerExclusions(base);
       payload = { to: input.recipientPhone ?? input.recipientLabel, body: clean.text } satisfies SmsPayload;
       return { payload, evidenceUsed: usable, excluded: clean.excluded, promptVersion: PROMPT_VERSION };
     }
@@ -293,7 +313,7 @@ async function composeLive(input: ComposeInput): Promise<ComposeOutput> {
         modelUsage = usage;
       },
     });
-    const clean = applyExclusions(String(out.body ?? "").trim());
+    const clean = applyComposerExclusions(String(out.body ?? "").trim());
     if (!clean.text) throw new Error("live composer returned empty sms");
     return {
       payload: { to: input.recipientPhone ?? input.recipientLabel, body: clean.text } satisfies SmsPayload,
@@ -315,7 +335,7 @@ async function composeLive(input: ComposeInput): Promise<ComposeOutput> {
     },
   });
   const subject = String(out.subject ?? "").trim();
-  const clean = applyExclusions(String(out.body ?? "").trim());
+  const clean = applyComposerExclusions(String(out.body ?? "").trim());
   if (!subject || !clean.text) throw new Error("live composer returned empty email");
   return {
     payload: {
