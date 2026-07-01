@@ -8,8 +8,10 @@ import {
   MockGeocodeProvider,
   MockImageryProvider,
   MockPropertyProvider,
+  MockRiskProvider,
 } from "./mock";
 import {
+  FemaNfhlRiskProvider,
   MapillaryImageryProvider,
   OSMPropertyProvider,
   PhotonNominatimGeocodeProvider,
@@ -19,6 +21,7 @@ import type {
   GeocodeProvider,
   ImageryProvider,
   PropertyDataProvider,
+  RiskProvider,
 } from "./types";
 
 export function getGeocodeProvider(): GeocodeProvider {
@@ -48,6 +51,13 @@ export function getImageryProvider(): ImageryProvider {
     return new MapillaryImageryProvider(process.env.MAPILLARY_TOKEN);
   }
   return new MockImageryProvider();
+}
+
+export function getRiskProvider(): RiskProvider {
+  if (config.riskProvider === "fema-nfhl") {
+    return new FemaNfhlRiskProvider(process.env.FEMA_NFHL_URL);
+  }
+  return new MockRiskProvider();
 }
 
 export * from "./types";

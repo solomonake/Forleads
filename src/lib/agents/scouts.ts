@@ -17,8 +17,9 @@ import type {
 import {
   getImageryProvider,
   getPropertyProvider,
+  getRiskProvider,
 } from "@/lib/providers";
-import type { PropertyQuery } from "@/lib/providers";
+import type { PropertyQuery, RiskQuery } from "@/lib/providers";
 
 export interface ScoutInput {
   lng: number;
@@ -67,6 +68,19 @@ function stamp(cards: EvidenceCard[], scout: ScoutType): EvidenceCard[] {
     scout,
     created_at: c.created_at ?? nowISO(),
   }));
+}
+
+function riskProviderFailureCards(): EvidenceCard[] {
+  return [
+    {
+      scout: "risk",
+      claim: "Flood zone",
+      value: null,
+      sources: [{ name: "FEMA NFHL", url: "https://hazards.fema.gov/nfhl" }],
+      confidence: "D",
+      reasoning: "Risk provider failed before returning cited evidence.",
+    },
+  ];
 }
 
 async function runProperty(input: ScoutInput): Promise<ScoutResult> {
@@ -119,27 +133,19 @@ async function runMarket(input: ScoutInput): Promise<ScoutResult> {
 }
 
 async function runRisk(input: ScoutInput): Promise<ScoutResult> {
-  // No risk provider is configured yet. An honest gap is safer than deriving a
-  // plausible-looking flood result from coordinates.
-  const cards = stamp(
-    [
-      {
-        scout: "risk",
-        claim: "Flood risk",
-        value: null,
-        sources: [],
-        confidence: "D",
-        reasoning: "No verified hazard provider is configured for this market.",
-      },
-    ],
-    "risk"
+  const provider = getRiskProvider();
+  const q: RiskQuery = { lng: input.lng, lat: input.lat, address: input.address };
+  const { value, timedOut, ms } = await withBudget(input.job.budget.maxMs, [], () =>
+    provider.flood(q).catch(() => riskProviderFailureCards())
   );
+  const cards = stamp(value, "risk");
+  const grounded = cards.some((c) => c.confidence !== "D");
   return {
     scout: "risk",
     cards,
-    gaps: ["No verified risk provider configured"],
-    cost: { ms: 0, tokens: 0, calls: 0 },
-    status: "insufficient_evidence",
+    gaps: grounded ? [] : ["No verified hazard provider returned FEMA NFHL flood risk evidence"],
+    cost: { ms, tokens: 0, calls: 1 },
+    status: timedOut ? "budget_exceeded" : grounded ? "ok" : "insufficient_evidence",
   };
 }
 
