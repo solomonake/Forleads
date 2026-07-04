@@ -1,22 +1,22 @@
 # Current agent checkpoint
 
-Generated: 2026-07-04T05:00:21.535Z
+Generated: 2026-07-04T05:51:11.488Z
 
 ## State
 - Branch: `codex/scheduled-loop-runner`
-- Commit: `2524282dc2af`
+- Commit: `b05e9a5c034b`
 - Worktree: clean
 - Changed files:
   - none
 
 ## Goal
-Live path prod-ready
+Per-tenant connector hub complete; awaiting user Gmail-draft proof
 
 ## Completed
-Diagnosed /api/approve 500 as Gmail 400 on non-RFC To (composer fell back to friendly label when lead had no contact.email). Added channel-required gate in pipeline (blocked artifact + setup_required flag); composer defense-in-depth throws on missing recipient. Added PATCH /api/lead/[id]/contact + ContactEditor UI so real-estate agents can supply the owner's email/phone from inside the lead panel. Fixed existing tests that leaned on the old silent-fallback behavior. Fixed Next 15 RouteContext signature. agent:check --risk=medium exit 0 (49 files/203 tests). Pushed at 2524282, all CI green (agent proof, CodeQL, Vercel preview).
+Commit A: per-tenant credentials + FUB/GHL/Twilio pilot + Connector Hub redesign shipped (d0920f3, CI green). Commit C: Microsoft 365 OAuth (Outlook drafts + Calendar events) shipped (b05e9a5, CI green). 52 files/220 tests, coverage steady. New pattern: modern AI-app connector hub — Not connected/Connected as X + Connect/Test/Disconnect, per-tenant encrypted credential rows, connectorForAction routes by artifact.agent_id + prefers connected identity (Google or Microsoft) with tenant-owned CRM/SMS keys.
 
 ## Next exact action
-User to test on Vercel preview: sign in with Google, connect Gmail scope in Connector Hub, ground address, add owner email via new Lead-panel input, add note, approve draft, verify Gmail Drafts folder. Then merge to main + strategic decision on Nango/Paragon vs per-tenant credential fields in-app.
+User to (1) test Gmail draft path on preview URL (proves OAuth token path end-to-end), (2) connect FUB or other real cred in the new hub, (3) merge to main once verified. Then first real-estate agent onboarding.
 
 ## Blockers
 none
