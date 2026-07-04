@@ -89,12 +89,19 @@ async function statusFor(
     };
   }
   if (provider === "microsoft") {
+    const raw = await loadTenantCredential<{
+      access_token?: string;
+      profile?: { email?: string; name?: string };
+    }>(agentId, "microsoft");
+    const connected = Boolean(raw?.access_token);
+    const label = raw?.profile?.email ?? raw?.profile?.name;
     return {
       provider,
       displayName: meta.displayName,
       summary: meta.summary,
       authKind: "oauth",
-      connected: false, // wired up in commit C
+      connected,
+      connectedLabel: connected && label ? label : undefined,
       capabilities: meta.capabilities,
       scopes: meta.scopes,
       connectUrl: "/api/auth/microsoft/login",

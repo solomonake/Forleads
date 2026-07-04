@@ -13,8 +13,10 @@ import { FollowUpBossConnector } from "./followupboss";
 import { GmailDraftConnector } from "./gmail";
 import { GoHighLevelConnector } from "./gohighlevel";
 import { MockConnector } from "./mock";
+import { OutlookDraftConnector } from "./outlook";
 import { TwilioConnector } from "./twilio";
 import { ZapierWebhookConnector } from "./zapier";
+import { freshAccessToken as microsoftFreshToken, type MicrosoftTokens } from "@/lib/auth/microsoft";
 import type { Connector } from "./types";
 
 // Google tokens come from the signed-in user's encrypted session (preferred),
@@ -85,6 +87,34 @@ export async function getConnectorForTenant(
   agentId: string | undefined,
 ): Promise<Connector> {
   switch (provider) {
+    case "microsoft": {
+      if (!agentId) {
+        return new OutlookDraftConnector(undefined, config.allowMockConnectorWrites);
+      }
+      // Microsoft tokens are stored as MicrosoftTokens (+ profile) in the
+      // per-tenant credential row. Refresh if within 60s of expiry, then
+      // persist the fresh access_token back for future calls.
+      const raw = await loadTenantCredential<MicrosoftTokens & { profile?: unknown }>(
+        agentId,
+        "microsoft",
+      );
+      if (!raw) {
+        return new OutlookDraftConnector(undefined, config.allowMockConnectorWrites);
+      }
+      let tokens: MicrosoftTokens = {
+        access_token: raw.access_token,
+        refresh_token: raw.refresh_token,
+        expiry: raw.expiry,
+        scope: raw.scope,
+      };
+      try {
+        tokens = await microsoftFreshToken(tokens);
+      } catch {
+        // fall through with whatever token we had; the connector will report
+        // a 401 upstream if it's expired.
+      }
+      return new OutlookDraftConnector(tokens.access_token, config.allowMockConnectorWrites);
+    }
     case "followupboss": {
       const creds = await tenantApiCreds("followupboss", agentId);
       const apiKey = creds?.apiKey ?? config.followupboss.apiKey;
@@ -126,16 +156,39 @@ export async function connectorForAction(
   opts?: ConnectorRouteOpts,
 ): Promise<Connector> {
   switch (type) {
-    case "email":
-      return new GmailDraftConnector(
-        googleToken(opts?.googleAccessToken),
-        config.allowMockConnectorWrites,
-      ); // Gmail drafts — the hero path
-    case "calendar":
-      return new GoogleCalendarConnector(
-        googleToken(opts?.googleAccessToken),
-        config.allowMockConnectorWrites,
-      );
+    case "email": {
+      // Prefer whichever mail identity the tenant is signed in with. Google
+      // (via signed-in session) wins when present; else Microsoft; else the
+      // Gmail mock so the flow still completes.
+      if (opts?.googleAccessToken || process.env.GOOGLE_ACCESS_TOKEN) {
+        return new GmailDraftConnector(
+          googleToken(opts?.googleAccessToken),
+          config.allowMockConnectorWrites,
+        );
+      }
+      const msTokens = opts?.agentId
+        ? await loadTenantCredential<MicrosoftTokens>(opts.agentId, "microsoft")
+        : null;
+      if (msTokens?.access_token) {
+        return getConnectorForTenant("microsoft", opts?.agentId);
+      }
+      return new GmailDraftConnector(undefined, config.allowMockConnectorWrites);
+    }
+    case "calendar": {
+      if (opts?.googleAccessToken || process.env.GOOGLE_ACCESS_TOKEN) {
+        return new GoogleCalendarConnector(
+          googleToken(opts?.googleAccessToken),
+          config.allowMockConnectorWrites,
+        );
+      }
+      const msTokens = opts?.agentId
+        ? await loadTenantCredential<MicrosoftTokens>(opts.agentId, "microsoft")
+        : null;
+      if (msTokens?.access_token) {
+        return getConnectorForTenant("microsoft", opts?.agentId);
+      }
+      return new GoogleCalendarConnector(undefined, config.allowMockConnectorWrites);
+    }
     case "sms":
       return getConnectorForTenant("twilio", opts?.agentId);
     case "crm_note":
