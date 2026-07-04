@@ -134,8 +134,8 @@ export class FollowUpBossConnector implements Connector {
       detail: this.apiKey
         ? "Connected — read contacts, write notes/tasks/appointments."
         : this.mockWritesEnabled
-          ? "Local mock mode — add FOLLOWUPBOSS_API_KEY to go live."
-          : "Setup required — add FOLLOWUPBOSS_API_KEY; production mock writes are disabled.",
+          ? "Not connected — add your Follow Up Boss API key in the Connector Hub."
+          : "Not connected — add your Follow Up Boss API key in the Connector Hub.",
       capabilities: this.capabilities,
     };
   }

@@ -219,7 +219,7 @@ describe("OpenDataPropertyProvider", () => {
     });
 
     expect(cards[0]?.confidence).toBe("D");
-    expect(cards[0]?.reasoning).toContain("No open sales/assessor feed");
+    expect(cards[0]?.reasoning).toContain("Public sale records don't cover this market yet");
   });
 });
 

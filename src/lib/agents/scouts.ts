@@ -170,7 +170,7 @@ async function runPeople(input: ScoutInput): Promise<ScoutResult> {
         sources: [],
         confidence: "D",
         reasoning:
-          "No lawful public-record or consented contact source is configured. Use field capture, CRM import, or operator-owned contacts.",
+          "Owner and occupant details aren't public data. Capture what you learn at the door or import your own contacts — Forleads never guesses about people.",
       },
     ],
     "people"

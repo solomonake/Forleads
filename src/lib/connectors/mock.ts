@@ -99,7 +99,7 @@ export class MockConnector implements Connector {
       mode: "mock",
       detail: this.writesEnabled
         ? "Local mock connector — writes stay on this machine."
-        : "Setup required — production mock writes are disabled.",
+        : "Not connected — connect this tool in the Connector Hub.",
       capabilities: this.capabilities,
     };
   }

@@ -93,8 +93,8 @@ export class ZapierWebhookConnector implements Connector {
       detail: this.webhookUrl
         ? "Connected — posting to your Zap."
         : this.mockWritesEnabled
-          ? "Local mock mode — paste a Zapier Catch Hook URL to go live."
-          : "Setup required — add ZAPIER_WEBHOOK_URL; production mock writes are disabled.",
+          ? "Not connected — ask your Forleads operator to enable the Zapier bridge."
+          : "Not connected — ask your Forleads operator to enable the Zapier bridge.",
       capabilities: this.capabilities,
     };
   }

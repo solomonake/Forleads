@@ -113,8 +113,8 @@ export class TwilioConnector implements Connector {
         this.mode === "live"
           ? "Connected — SMS (approved sends only)."
           : this.mockWritesEnabled
-            ? "Local mock mode — add Twilio SID/token/from number."
-            : "Setup required — add Twilio SID/token/from number; production mock writes are disabled.",
+            ? "Not connected — add your Twilio account details in the Connector Hub."
+            : "Not connected — add your Twilio account details in the Connector Hub.",
       capabilities: this.capabilities,
     };
   }

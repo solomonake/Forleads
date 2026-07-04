@@ -174,8 +174,8 @@ export class GmailDraftConnector implements Connector {
       detail: this.accessToken
         ? "Connected — Gmail compose (drafts only)."
         : this.mockWritesEnabled
-          ? "Local mock mode — connect Google OAuth to go live."
-          : "Setup required — connect Google OAuth; production mock writes are disabled.",
+          ? "Not connected — connect Google in the Connector Hub to draft in your Gmail."
+          : "Not connected — connect Google in the Connector Hub to draft in your Gmail.",
       capabilities: this.capabilities,
     };
   }
