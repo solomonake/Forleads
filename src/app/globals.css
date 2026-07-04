@@ -639,6 +639,155 @@ button {
   flex-wrap: wrap;
   margin-top: 14px;
 }
+.contact-editor {
+  margin: 0 0 16px;
+  padding: 12px 14px 14px;
+  border-radius: var(--r-lg);
+  background: rgba(10, 14, 20, 0.44);
+  border: 1px solid var(--hairline);
+  display: grid;
+  gap: 10px;
+}
+.contact-editor-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim, #9aa4b2);
+}
+.contact-editor-hint {
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-dim, #9aa4b2);
+  text-align: right;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.contact-editor-row {
+  display: flex;
+  gap: 8px;
+}
+.contact-editor-row > input {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  font-size: 13px;
+}
+.contact-editor-row > input::placeholder {
+  color: var(--text-dim, #6f7684);
+}
+.contact-editor-row > input:focus {
+  outline: none;
+  border-color: var(--accent, #7c9cff);
+}
+.contact-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.modal {
+  background: var(--surface-1, #0f1420);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  max-height: min(90vh, 640px);
+  overflow: hidden;
+}
+.modal-head {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--hairline);
+}
+.modal-title {
+  font-weight: 600;
+  color: var(--text);
+}
+.modal-close {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim, #9aa4b2);
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  display: grid;
+  gap: 14px;
+}
+.modal-field {
+  display: grid;
+  gap: 6px;
+}
+.modal-field-label {
+  font-size: 12px;
+  color: var(--text-dim, #9aa4b2);
+  letter-spacing: 0.02em;
+}
+.modal-field input {
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  font-size: 13px;
+}
+.modal-field input:focus {
+  outline: none;
+  border-color: var(--accent, #7c9cff);
+}
+.modal-field-hint {
+  font-size: 11px;
+  color: var(--text-dim, #6f7684);
+}
+.modal-error {
+  color: var(--danger, #ff6b6b);
+  font-size: 12px;
+}
+.modal-actions {
+  padding: 12px 16px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  border-top: 1px solid var(--hairline);
+}
+.minibtn.danger {
+  color: var(--danger, #ff6b6b);
+  border-color: rgba(255, 107, 107, 0.4);
+}
+@media (max-width: 520px) {
+  .contact-editor-row {
+    flex-direction: column;
+  }
+  .contact-editor-hint {
+    text-align: left;
+  }
+}
 .ops-steps {
   display: grid;
   gap: 10px;
@@ -1282,6 +1431,14 @@ button {
   font-size: 13.5px;
   margin-bottom: 22px;
 }
+.panel-section-title {
+  max-width: 1100px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 24px 0 10px;
+}
 .panel-grid {
   display: grid;
   gap: 14px;
@@ -1328,6 +1485,10 @@ button {
 .row:hover {
   border-color: var(--hairline-strong);
   box-shadow: var(--shadow-1);
+}
+.notice-row {
+  border-color: var(--warn);
+  color: var(--text);
 }
 .row .rtitle {
   font-size: 15px;
@@ -1418,6 +1579,92 @@ button {
   gap: 12px;
   margin-bottom: 20px;
 }
+.source-grid {
+  max-width: 1100px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.source-pack {
+  margin-bottom: 18px;
+}
+.source-pack h3 {
+  margin: 10px 0 10px;
+  color: var(--text-2);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+.source-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 15px 16px;
+}
+.source-card .rtitle {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.source-unlocks {
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.45;
+  margin-top: 8px;
+}
+.source-env {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.source-env code {
+  font-size: 10.5px;
+  color: var(--text-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-pill);
+  padding: 3px 7px;
+  background: var(--surface-2);
+}
+.loop-flow {
+  max-width: 1100px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.loop-flow div {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+}
+.loop-flow b {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  color: var(--bg);
+  background: var(--grad-signal);
+  font-size: 12px;
+}
+.loop-flow span,
+.loop-impact {
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.loop-impact {
+  margin-top: 10px;
+  color: var(--ok);
+}
 .pipeline-hero {
   max-width: 1100px;
   display: flex;
@@ -1502,6 +1749,12 @@ button {
   font-size: 12px;
   color: var(--text-2);
   margin-top: 4px;
+}
+.kcard .kvalue {
+  font-size: 12px;
+  color: var(--ok);
+  line-height: 1.4;
+  margin-top: 10px;
 }
 .kcard .kmeta {
   font-size: 12px;

@@ -23,6 +23,7 @@ import type {
 import { nowISO } from "@/lib/core/ids";
 import { claudeLive } from "@/lib/core/config";
 import { claudeJSON } from "./claude";
+import type { SellerUpdateComposeContext } from "./seller-update";
 
 export interface ComposeInput {
   agent: Agent;
@@ -33,6 +34,7 @@ export interface ComposeInput {
   recipientEmail?: string;
   recipientPhone?: string;
   evidence: EvidenceCard[];
+  sellerUpdate?: SellerUpdateComposeContext;
   /** What the human has already done with prior drafts for this lead+action.
    *  When `rejected > 0`, the composer softens the tone and switches signoff;
    *  when `approved > 0`, the composer marks the prompt version with
@@ -57,6 +59,30 @@ export interface ComposeOutput {
 const PROMPT_VERSION = "composer-1.2.0";
 const LIVE_PROMPT_VERSION = "composer-live-1.0.0";
 
+/** Defense in depth: pipeline.ts's channel-required gate is the primary check.
+ *  The composer must ALSO refuse to build an outbound payload with a friendly
+ *  label as the recipient — a "Gmail draft to 'Owner · 22125 Clarksburg Rd'"
+ *  is a 400 from Google's servers. Callers who bypass the pipeline see a clear
+ *  throw rather than a silently-broken draft. */
+function requireEmail(input: ComposeInput): string {
+  const value = input.recipientEmail?.trim();
+  if (!value || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    throw new Error(
+      "composer: recipientEmail is missing or not an email address — the pipeline's channel-required gate should have caught this.",
+    );
+  }
+  return value;
+}
+function requirePhone(input: ComposeInput): string {
+  const value = input.recipientPhone?.trim();
+  if (!value || (value.match(/\d/g) ?? []).length < 6) {
+    throw new Error(
+      "composer: recipientPhone is missing — the pipeline's channel-required gate should have caught this.",
+    );
+  }
+  return value;
+}
+
 // Phrases the composer proactively strips (familial status etc.). Mirrors the
 // canonical UC-1 rule: reference the home, never the children.
 const EXCLUDE_RULES: { pattern: RegExp; reason: string }[] = [
@@ -66,7 +92,7 @@ const EXCLUDE_RULES: { pattern: RegExp; reason: string }[] = [
   { pattern: /near\s+(churches?|mosques?|temples?|synagogues?)/i, reason: "religion steering" },
 ];
 
-function applyExclusions(text: string): { text: string; excluded: { content: string; reason: string }[] } {
+export function applyComposerExclusions(text: string): { text: string; excluded: { content: string; reason: string }[] } {
   let out = text;
   const excluded: { content: string; reason: string }[] = [];
   for (const rule of EXCLUDE_RULES) {
@@ -109,6 +135,24 @@ function emailFor(input: ComposeInput): { subject: string; body: string } {
   const { agent, address } = input;
   const greet = voiceGreeting(agent.brandVoice);
   const sign = voiceSignoff(agent.brandVoice, agent.name);
+  if (input.sellerUpdate) {
+    const ctx = input.sellerUpdate;
+    const lines = ctx.themes.map(
+      (theme) =>
+        `- ${theme.label}: mentioned in ${theme.mentions} of ${ctx.showingsCounted} recent showing notes.`,
+    );
+    const price = ctx.themes.find((theme) => theme.kind === "price" && theme.confidence === "A");
+    const truncation = ctx.truncated
+      ? "\n\nI capped this update at the 200 most recent notes in the selected window so the summary stays auditable."
+      : "";
+    const priceCta = price
+      ? "\n\nBecause pricing came up repeatedly, it may be worth discussing whether an adjustment would help the next round of showings."
+      : "";
+    return {
+      subject: `Update on showings for ${address}`,
+      body: `${greet}\n\nI wanted to send a concise update from the last ${ctx.windowDays} days of showing feedback for ${address}.\n\n${lines.join("\n")}${priceCta}${truncation}\n\nI'll keep tracking the next round and will flag anything that changes materially.\n\n${sign}`,
+    };
+  }
   switch (input.situation) {
     case "no_contact":
       return {
@@ -180,11 +224,11 @@ export function compose(input: ComposeInput): ComposeOutput {
         body = `Following up on my last note — no pressure if the timing's off, just wanted to keep the line open.\n\n${baseBody}`;
         versionTag = `${PROMPT_VERSION}-followup`;
       }
-      const clean = applyExclusions(body);
+      const clean = applyComposerExclusions(body);
       raw = `${subject}\n${clean.text}`;
       payload = {
         from: `${input.agent.name} <${input.agent.email}>`,
-        to: input.recipientEmail ?? input.recipientLabel,
+        to: requireEmail(input),
         subject,
         body: clean.text,
         signatureHtml: input.agent.signatureHtml,
@@ -198,8 +242,8 @@ export function compose(input: ComposeInput): ComposeOutput {
     }
     case "sms": {
       const base = `Hi, it's ${input.agent.name}. Quick note about ${input.address} — no pressure, happy to share an honest picture whenever you like.`;
-      const clean = applyExclusions(base);
-      payload = { to: input.recipientPhone ?? input.recipientLabel, body: clean.text } satisfies SmsPayload;
+      const clean = applyComposerExclusions(base);
+      payload = { to: requirePhone(input), body: clean.text } satisfies SmsPayload;
       return { payload, evidenceUsed: usable, excluded: clean.excluded, promptVersion: PROMPT_VERSION };
     }
     case "task": {
@@ -293,10 +337,10 @@ async function composeLive(input: ComposeInput): Promise<ComposeOutput> {
         modelUsage = usage;
       },
     });
-    const clean = applyExclusions(String(out.body ?? "").trim());
+    const clean = applyComposerExclusions(String(out.body ?? "").trim());
     if (!clean.text) throw new Error("live composer returned empty sms");
     return {
-      payload: { to: input.recipientPhone ?? input.recipientLabel, body: clean.text } satisfies SmsPayload,
+      payload: { to: requirePhone(input), body: clean.text } satisfies SmsPayload,
       evidenceUsed: usable,
       excluded: clean.excluded,
       promptVersion: LIVE_PROMPT_VERSION,
@@ -315,12 +359,12 @@ async function composeLive(input: ComposeInput): Promise<ComposeOutput> {
     },
   });
   const subject = String(out.subject ?? "").trim();
-  const clean = applyExclusions(String(out.body ?? "").trim());
+  const clean = applyComposerExclusions(String(out.body ?? "").trim());
   if (!subject || !clean.text) throw new Error("live composer returned empty email");
   return {
     payload: {
       from: `${input.agent.name} <${input.agent.email}>`,
-      to: input.recipientEmail ?? input.recipientLabel,
+      to: requireEmail(input),
       subject,
       body: clean.text,
       signatureHtml: input.agent.signatureHtml,

@@ -69,6 +69,12 @@ export const config = {
   microsoft: {
     clientId: env("MS_CLIENT_ID"),
     clientSecret: env("MS_CLIENT_SECRET"),
+    // "common" allows work + personal accounts. Override with a specific
+    // tenant id for single-tenant deployments.
+    tenant: env("MS_TENANT") ?? "common",
+    redirectUri:
+      env("MS_REDIRECT_URI") ??
+      `${appUrl ?? "http://localhost:3000"}/api/auth/microsoft/callback`,
   },
 
   followupboss: {

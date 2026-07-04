@@ -16,42 +16,49 @@ const COLUMNS: { status: LeadStatus; label: string }[] = [
 
 const NEXT_MOVE: Record<
   LeadStatus,
-  { detail: string; cta: string; view: "map" | "inbox" | "loops" | "pipeline" }
+  { detail: string; cta: string; view: "map" | "inbox" | "loops" | "connectors" | "pipeline"; value: string }
 > = {
   new: {
     detail: "Ground the address and let the scout pass build the first operator brief.",
     cta: "Ground on map",
     view: "map",
+    value: "Find out if this surface is worth time.",
   },
   researching: {
-    detail: "Log the field note, pressure-test the evidence, and let the agent draft first outreach.",
-    cta: "Continue on map",
-    view: "map",
+    detail: "Import an open feed, capture field evidence, or approve a grounded first touch.",
+    cta: "Open source packs",
+    view: "connectors",
+    value: "Turn D-grade gaps into sourced next actions.",
   },
   contacted: {
     detail: "Review the drafted touch and move the lead into the next follow-up commitment.",
     cta: "Open inbox",
     view: "inbox",
+    value: "Approve work that can become a real Gmail/CRM action.",
   },
   nurturing: {
     detail: "Run the nurture loop so the lead keeps moving without losing context.",
     cta: "Run loops",
     view: "loops",
+    value: "Prevent quiet leads from dying in the spreadsheet.",
   },
   appointment: {
     detail: "Track appointment prep and make sure the next promise is already queued.",
     cta: "Open pipeline",
     view: "pipeline",
+    value: "Keep the meeting and follow-up chain visible.",
   },
   won: {
     detail: "Capture the win, note the outcome, and feed the next referral motion.",
     cta: "Open pipeline",
     view: "pipeline",
+    value: "Turn wins into reusable learning.",
   },
   dead: {
     detail: "Archive the trail cleanly and retain the learning signal for future loops.",
     cta: "Open pipeline",
     view: "pipeline",
+    value: "Stop wasting cycles, keep the lesson.",
   },
 };
 
@@ -80,17 +87,17 @@ export function Pipeline({
     <div className="panel">
       <h1>Pipeline</h1>
       <div className="sub">
-        The operating board for the whole lead machine. Ground the address, capture the field
-        signal, draft the touch, then keep the next commitment visible.
+        The money board: every property sits in the stage where it is blocked, waiting for approval,
+        or ready for the next follow-up.
       </div>
 
       <div className="pipeline-hero">
         <div>
-          <div className="pipeline-kicker">Operator flow</div>
-          <div className="pipeline-title">Pipeline starts the moment a lead is grounded.</div>
+          <div className="pipeline-kicker">Lead command center</div>
+          <div className="pipeline-title">Where is the deal stuck, and what moves it forward?</div>
           <div className="pipeline-copy">
-            The map creates the lead, the inbox holds the drafted actions, and loops keep follow-up
-            alive. This board is where the operator sees what must happen next.
+            Map finds the surface. Open data and field signals prove whether it is worth chasing.
+            Action Inbox holds the human-approved work. Loop Studio keeps stale leads from going cold.
           </div>
         </div>
         <div className="pipeline-actions">
@@ -103,6 +110,9 @@ export function Pipeline({
           <button className="minibtn" onClick={() => onNavigate("loops")}>
             Run follow-up loops
           </button>
+          <button className="minibtn" onClick={() => onNavigate("connectors")}>
+            Open source packs
+          </button>
         </div>
       </div>
 
@@ -112,11 +122,11 @@ export function Pipeline({
           <strong>{stats.active}</strong>
         </div>
         <div className="pipeline-stat">
-          <span className="pipeline-stat-label">Researching now</span>
+          <span className="pipeline-stat-label">Needs intelligence</span>
           <strong>{stats.researching}</strong>
         </div>
         <div className="pipeline-stat">
-          <span className="pipeline-stat-label">Ready for contact</span>
+          <span className="pipeline-stat-label">Awaiting follow-up</span>
           <strong>{stats.contacted}</strong>
         </div>
         <div className="pipeline-stat">
@@ -177,6 +187,7 @@ export function Pipeline({
                     >
                       <div className="ka">{lead.address}</div>
                       <div className="km">{lead.locality ?? lead.h3_index}</div>
+                      <div className="kvalue">{next.value}</div>
                       <div className="kmeta">{next.detail}</div>
                       <div className="kactions">
                         <button className="minibtn" onClick={() => onNavigate(next.view)}>

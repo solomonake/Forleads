@@ -56,6 +56,17 @@ export const POST = withRoute("approve", async (req: NextRequest) => {
     const msg = e instanceof Error ? e.message : "unknown";
     if (msg.includes("compliance")) return NextResponse.json({ error: msg }, { status: 422 });
     if (msg.includes("revision")) return NextResponse.json({ error: msg }, { status: 409 });
+    if (msg.includes("Connector write failed")) {
+      return NextResponse.json(
+        {
+          error: msg.replace(
+            /^Connector write failed:\s*/,
+            "Setup required: ",
+          ),
+        },
+        { status: 424 },
+      );
+    }
     throw e;
   }
   if (!result) return NextResponse.json({ error: "artifact not found" }, { status: 404 });

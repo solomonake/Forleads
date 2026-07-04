@@ -25,8 +25,8 @@ const ALLOWLISTS: Record<ScoutType, string[]> = {
   property: ["OpenStreetMap", "OSM", "public records"],
   imagery: ["Mapillary", "Esri", "Imagery Scout"],
   people: ["public records"],
-  market: ["MLS", "ATTOM", "OSM"],
-  risk: ["open hazard layer"],
+  market: ["OpenStreetMap", "OSM", "public records", "open sales", "price paid", "assessor"],
+  risk: ["open hazard layer", "FEMA", "FEMA NFHL", "public records", "open county data", "Socrata"],
 };
 
 export interface DispatchInput {

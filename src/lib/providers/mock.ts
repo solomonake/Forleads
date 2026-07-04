@@ -11,6 +11,7 @@ import type {
   ImageryProvider,
   PropertyDataProvider,
   PropertyQuery,
+  RiskDataProvider,
 } from "./types";
 
 // A small global gazetteer so "global from day one" is felt in mock mode.
@@ -178,7 +179,7 @@ export class MockPropertyProvider implements PropertyDataProvider {
         sources: [],
         confidence: "D",
         reasoning:
-          "No recent comparable sales for this market in the free tier. Connect a local data source (MLS/ATTOM) to upgrade.",
+          "No recent comparable sales for this market in the open-data floor. Connect a local assessor, price-paid, or public sales feed to upgrade.",
       },
     ];
   }
@@ -221,6 +222,39 @@ export class MockImageryProvider implements ImageryProvider {
 
   aerialAttribution(): string {
     return "Imagery © Esri";
+  }
+}
+
+export class MockRiskProvider implements RiskDataProvider {
+  readonly name = "open-risk-mock";
+  readonly mode = "mock" as const;
+
+  async hazards(): Promise<EvidenceCard[]> {
+    return [
+      {
+        scout: "risk",
+        claim: "Flood risk",
+        value: null,
+        sources: [],
+        confidence: "D",
+        reasoning:
+          "No open hazard layer is configured. Add FEMA_NFHL_URL or OPEN_HAZARD_LAYER_URL to ground flood risk.",
+      },
+    ];
+  }
+
+  async distress(): Promise<EvidenceCard[]> {
+    return [
+      {
+        scout: "risk",
+        claim: "Open distress signals",
+        value: null,
+        sources: [],
+        confidence: "D",
+        reasoning:
+          "No open distress feed is configured. Add a county tax delinquency, code violation, or vacant registry CSV/API.",
+      },
+    ];
   }
 }
 

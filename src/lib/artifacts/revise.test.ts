@@ -12,11 +12,13 @@ describe("artifact revision safety", () => {
 
   it("persists an edit, increments revision, reruns compliance, and rejects stale approval", async () => {
     const repo = await getRepo();
-    const lead = await ensureLead(DEMO_AGENT_ID, {
+    const bare = await ensureLead(DEMO_AGENT_ID, {
       address: "9 Revision Lane",
       lng: -73.9,
       lat: 40.7,
     });
+    await repo.upsertLead({ ...bare, contact: { email: "owner@example.test" } });
+    const lead = (await repo.getLead(bare.id))!;
     const artifact = await draftArtifact({
       agent: DEMO_AGENT,
       lead,
@@ -42,11 +44,13 @@ describe("artifact revision safety", () => {
 
   it("uses the revision in connector idempotency", async () => {
     const repo = await getRepo();
-    const lead = await ensureLead(DEMO_AGENT_ID, {
+    const bare = await ensureLead(DEMO_AGENT_ID, {
       address: "10 Revision Lane",
       lng: -73.91,
       lat: 40.71,
     });
+    await repo.upsertLead({ ...bare, contact: { email: "owner@example.test" } });
+    const lead = (await repo.getLead(bare.id))!;
     const artifact = await draftArtifact({
       agent: DEMO_AGENT,
       lead,

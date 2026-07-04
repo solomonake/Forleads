@@ -1,23 +1,22 @@
 # Current agent checkpoint
 
-Generated: 2026-06-26T03:02:01.593Z
+Generated: 2026-07-04T05:51:11.488Z
 
 ## State
-- Branch: `detached`
-- Commit: `d3ffc0d60277`
-- Worktree: dirty
+- Branch: `codex/scheduled-loop-runner`
+- Commit: `b05e9a5c034b`
+- Worktree: clean
 - Changed files:
-  - M .agent/handoffs/current.md
-  -  M .agent/metrics/runs.jsonl
+  - none
 
 ## Goal
-Ship durable scheduled loop execution
+Per-tenant connector hub complete; awaiting user Gmail-draft proof
 
 ## Completed
-Replaced malformed Vercel production CRON_SECRET with a no-newline generated value, redeployed failed production deployment for main d3ffc0d, and verified production now serves /api/cron/loops. Production health is OK with Supabase persistence, live agent mode, and no mock connector writes.
+Commit A: per-tenant credentials + FUB/GHL/Twilio pilot + Connector Hub redesign shipped (d0920f3, CI green). Commit C: Microsoft 365 OAuth (Outlook drafts + Calendar events) shipped (b05e9a5, CI green). 52 files/220 tests, coverage steady. New pattern: modern AI-app connector hub — Not connected/Connected as X + Connect/Test/Disconnect, per-tenant encrypted credential rows, connectorForAction routes by artifact.agent_id + prefers connected identity (Google or Microsoft) with tenant-owned CRM/SMS keys.
 
 ## Next exact action
-Continue to the next product phase after scheduled loops: choose the next production gap from durable reporting, connector outcome feedback, or live loop observability; run agent:context before editing.
+User to (1) test Gmail draft path on preview URL (proves OAuth token path end-to-end), (2) connect FUB or other real cred in the new hub, (3) merge to main once verified. Then first real-estate agent onboarding.
 
 ## Blockers
 none
@@ -26,7 +25,7 @@ none
 In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secrets, spending, destructive actions, and external communication require the user.
 
 ## Verification proof
-Vercel production inspect: Branch main Commit d3ffc0d, /api/cron/loops in route table, deployment status Ready, aliased forleads.vercel.app at 2026-06-26T02:57:58Z. curl /api/health -> 200 ok. curl /api/cron/loops without auth -> 401 unauthorized with x-matched-path /api/cron/loops.
+none
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.

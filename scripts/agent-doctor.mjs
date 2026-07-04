@@ -57,14 +57,16 @@ for (const file of apiFiles) {
   const source = fs.readFileSync(file, "utf8");
   const relative = path.relative(root, file);
   const mutates = /export (?:const|async function) (POST|PATCH|PUT|DELETE)/.test(source);
-  if (mutates && !relative.includes("/auth/google/")) {
+  if (mutates && !relative.includes("/auth/google/") ||
+      relative.includes("/auth/microsoft/")) {
     checks.push({
       ok: /ensureCurrentAgent|requireAgentId|getSession|zapierSecret|webhookSecret/.test(source),
       label: `auth-boundary:${relative}`,
     });
   }
   checks.push({
-    ok: /withRoute/.test(source) || relative.includes("/auth/google/"),
+    ok: /withRoute/.test(source) || relative.includes("/auth/google/") ||
+      relative.includes("/auth/microsoft/"),
     label: `observability:${relative}`,
   });
 }

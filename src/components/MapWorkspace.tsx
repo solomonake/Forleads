@@ -23,6 +23,7 @@ type ToastValue =
   | { kind: "ok"; text: string }
   | { kind: "err"; text: string; requestId?: string; retry?: () => void };
 import { ReviewTray } from "./ReviewTray";
+import { ContactEditor } from "./ContactEditor";
 
 const SCOUT_GROUPS: { key: ScoutType; label: string }[] = [
   { key: "property", label: "Property" },
@@ -33,9 +34,10 @@ const SCOUT_GROUPS: { key: ScoutType; label: string }[] = [
 ];
 
 const QUICK_NOTES = [
-  { label: "Knocked, no answer", text: "Knocked, no answer. Nice yard, well kept, kids' bikes out front." },
-  { label: "Interested seller", text: "Owner home — said the house feels too big since the kids moved out." },
-  { label: "Objection: timing", text: "Seller worried it's the wrong time to sell." },
+  { label: "Tall grass", text: "Tall grass and mail piled up. Vacant-looking from the street. No photo yet." },
+  { label: "Knocked, no answer", text: "Knocked, no answer. Yard is maintained, no visible repair distress." },
+  { label: "Interested seller", text: "Owner said the house feels too big since the kids moved out." },
+  { label: "Objection: timing", text: "Seller said timing is the main concern." },
 ];
 
 const SAMPLE_SEARCHES = [
@@ -617,15 +619,15 @@ export function MapWorkspace({
                 ? "Pipeline is launching now."
                 : classification
                   ? "Operator signal captured. Draft the next touch."
-                  : "Ground it, add the field note, then push the lead forward."}
+                  : "Ground it, capture the field signal, then push the lead forward."}
             </div>
             <div className="ops-copy">
-              The UI should always tell the operator what to do next instead of leaving them with
-              a dead-end data panel.
+              Next fastest free move: import an open feed, capture field evidence, approve a draft,
+              or run a follow-up loop.
             </div>
             <div className="ops-actions">
               <button className="minibtn primary" onClick={focusComposer} disabled={!lead || lead.id === "pending"}>
-                Add field note
+                Capture field signal
               </button>
               <button className="minibtn" onClick={() => onNavigate("inbox")} disabled={!classification}>
                 Review inbox
@@ -654,6 +656,17 @@ export function MapWorkspace({
               ))}
             </div>
           </div>
+
+          {lead && lead.id !== "pending" ? (
+            <ContactEditor
+              lead={lead}
+              onSaved={(updated) => {
+                setLead(updated);
+                setToast({ kind: "ok", text: "Contact updated." });
+              }}
+              onError={(text) => setToast({ kind: "err", text })}
+            />
+          ) : null}
 
           {grouped.map((group) => (
             <div key={group.key}>
@@ -720,7 +733,7 @@ export function MapWorkspace({
             <textarea
               id="lead-note"
               value={note}
-              placeholder="Add a note… e.g. 'knocked, no answer, nice yard'"
+              placeholder="Capture field signal… e.g. 'tall grass, vacant-looking, neighbor says owner moved'"
               onChange={(e) => setNote(e.target.value)}
               onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void submitNote(note);

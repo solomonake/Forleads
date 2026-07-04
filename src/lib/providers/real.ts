@@ -11,7 +11,245 @@ import type {
   ImageryProvider,
   PropertyDataProvider,
   PropertyQuery,
+  RiskDataProvider,
 } from "./types";
+
+interface OpenSaleRecord {
+  address: string;
+  property_address?: string;
+  site_address?: string;
+  street_address?: string;
+  full_address?: string;
+  price?: string;
+  sale_price?: string;
+  amount?: string;
+  sale_date?: string;
+  date?: string;
+  source?: string;
+  source_url?: string;
+  url?: string;
+}
+
+interface OpenPublicRecord {
+  address?: string;
+  property_address?: string;
+  site_address?: string;
+  street_address?: string;
+  full_address?: string;
+  location?: string | { human_address?: string; address?: string };
+  record_type?: string;
+  type?: string;
+  category?: string;
+  status?: string;
+  description?: string;
+  violation_type?: string;
+  case_type?: string;
+  date?: string;
+  created_date?: string;
+  inspection_date?: string;
+  source?: string;
+  source_url?: string;
+  url?: string;
+}
+
+interface ArcGisFeature {
+  attributes?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
+}
+
+function envUrls(...keys: string[]): string[] {
+  return keys.flatMap((key) =>
+    (process.env[key] ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+}
+
+function normalizeUrlList(value: string | string[] | undefined): string[] {
+  if (!value) return [];
+  return (Array.isArray(value) ? value : [value])
+    .flatMap((entry) => entry.split(","))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function normalizeAddress(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(road)\b/g, "rd")
+    .replace(/\b(street)\b/g, "st")
+    .replace(/\b(avenue)\b/g, "ave")
+    .replace(/\b(drive)\b/g, "dr")
+    .replace(/\b(lane)\b/g, "ln")
+    .trim();
+}
+
+function parseCsvRows(text: string): string[][] {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "");
+  return lines.map((line) => {
+    const cells: string[] = [];
+    let current = "";
+    let quoted = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const ch = line[i]!;
+      if (ch === '"' && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else if (ch === '"') {
+        quoted = !quoted;
+      } else if (ch === "," && !quoted) {
+        cells.push(current.trim());
+        current = "";
+      } else {
+        current += ch;
+      }
+    }
+    cells.push(current.trim());
+    return cells;
+  });
+}
+
+function parseCsv(text: string): OpenSaleRecord[] {
+  const rows = parseCsvRows(text);
+  if (rows.length < 1) return [];
+  const headers = rows[0]!.map((header) => header.toLowerCase().trim());
+  const hasHeader = headers.some((header) =>
+    ["address", "property_address", "site_address", "street_address", "full_address", "sale_price", "price"].includes(
+      header,
+    ),
+  );
+  if (!hasHeader) return rows.map(hmlrRowToRecord).filter((record): record is OpenSaleRecord => record !== null);
+
+  return rows.slice(1).map((cells) => {
+    const out: Record<string, string> = {};
+    headers.forEach((header, index) => {
+      out[header] = cells[index] ?? "";
+    });
+    return out as unknown as OpenSaleRecord;
+  });
+}
+
+function hmlrRowToRecord(cells: string[]): OpenSaleRecord | null {
+  if (cells.length < 14) return null;
+  const [transactionId, price, date, postcode, , , , paon, saon, street, locality, town, , county] = cells;
+  const address = [saon, paon, street, locality, town, county, postcode]
+    .filter((part) => part && part.trim() !== "")
+    .join(" ");
+  if (!address || !price) return null;
+  return {
+    address,
+    sale_price: price,
+    sale_date: date?.slice(0, 10),
+    source: "HM Land Registry Price Paid Data",
+    source_url: "https://www.gov.uk/government/statistical-data-sets/price-paid-data-downloads",
+    url: transactionId ? `hmlr:${transactionId}` : undefined,
+  };
+}
+
+function recordsFromJson(data: unknown): OpenPublicRecord[] {
+  if (Array.isArray(data)) return data as OpenPublicRecord[];
+  if (!data || typeof data !== "object") return [];
+  const obj = data as {
+    records?: unknown[];
+    data?: unknown[];
+    features?: ArcGisFeature[];
+  };
+  if (Array.isArray(obj.records)) return obj.records as OpenPublicRecord[];
+  if (Array.isArray(obj.data)) return obj.data as OpenPublicRecord[];
+  if (Array.isArray(obj.features)) {
+    return obj.features.map((feature) => ({
+      ...(feature.properties ?? {}),
+      ...(feature.attributes ?? {}),
+    }));
+  }
+  return [];
+}
+
+async function loadOpenRecords(url: string): Promise<OpenPublicRecord[]> {
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Forleads/1.0 (open-data real-estate CRM; +https://forleads.vercel.app)",
+      Accept: "application/json,text/csv;q=0.9,*/*;q=0.8",
+    },
+  });
+  if (!res.ok) return [];
+  const contentType = res.headers.get("content-type") ?? "";
+  if (contentType.includes("json") || url.endsWith(".json")) {
+    return recordsFromJson(await res.json());
+  }
+  return parseCsv(await res.text()) as OpenPublicRecord[];
+}
+
+async function loadOpenSaleRecords(url: string): Promise<OpenSaleRecord[]> {
+  return (await loadOpenRecords(url)) as OpenSaleRecord[];
+}
+
+function priceFrom(record: OpenSaleRecord): string | undefined {
+  return record.sale_price ?? record.price ?? record.amount;
+}
+
+function dateFrom(record: OpenSaleRecord): string | undefined {
+  return record.sale_date ?? record.date;
+}
+
+function sourceFrom(record: OpenSaleRecord, fallbackUrl: string) {
+  return {
+    name: record.source || "Open sales record",
+    url: record.source_url ?? record.url ?? fallbackUrl,
+  };
+}
+
+function recordAddress(record: OpenPublicRecord): string | undefined {
+  if (record.address) return record.address;
+  if (record.property_address) return record.property_address;
+  if (record.site_address) return record.site_address;
+  if (record.street_address) return record.street_address;
+  if (record.full_address) return record.full_address;
+  const location = record.location;
+  if (typeof location === "string") return location;
+  if (!location || typeof location !== "object") return undefined;
+  if (location.address) return location.address;
+  if (location.human_address) {
+    try {
+      const parsed = JSON.parse(location.human_address) as { address?: string };
+      return parsed.address;
+    } catch {
+      return location.human_address;
+    }
+  }
+  return undefined;
+}
+
+function addressMatches(record: OpenPublicRecord, targetAddress: string): boolean {
+  const source = recordAddress(record);
+  if (!source) return false;
+  const target = normalizeAddress(targetAddress);
+  const candidate = normalizeAddress(source);
+  if (candidate === target) return true;
+
+  const targetTokens = target.split(" ");
+  const candidateTokens = candidate.split(" ");
+  if (targetTokens.length < 3 || candidateTokens.length < 3) return false;
+  if (targetTokens[0] !== candidateTokens[0]) return false;
+  const targetStreet = targetTokens.slice(1);
+  const candidateStreet = candidateTokens.slice(1);
+  const shared = Math.min(targetStreet.length, candidateStreet.length);
+  if (shared < 2) return false;
+  if (targetStreet.slice(0, 2).join(" ") === candidateStreet.slice(0, 2).join(" ")) return true;
+  return targetStreet.slice(0, shared).join(" ") === candidateStreet.slice(0, shared).join(" ");
+}
+
+function firstString(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      return String(value);
+    }
+  }
+  return undefined;
+}
 
 // ---- Public Nominatim (zero self-hosting; ~1 req/sec fair-use) --------------
 // For solo testing and small workloads. For scale, switch to PhotonNominatim
@@ -200,7 +438,7 @@ export class OSMPropertyProvider implements PropertyDataProvider {
         sources: [],
         confidence: "D",
         reasoning:
-          "OSM carries no sale-price data. Connect a per-market PropertyDataProvider (MLS/ATTOM) to ground comps.",
+          "OSM carries no sale-price data. Connect an open sales/assessor feed for this market to ground comps.",
       },
     ];
   }
@@ -217,6 +455,364 @@ export class OSMPropertyProvider implements PropertyDataProvider {
       },
     ];
   }
+}
+
+// ---- Open public sales / assessor feed -------------------------------------
+
+export class OpenDataPropertyProvider implements PropertyDataProvider {
+  readonly name = "open-data";
+  readonly mode = "live" as const;
+  private readonly salesUrls: string[];
+
+  constructor(
+    private readonly base = new OSMPropertyProvider(process.env.OVERPASS_URL),
+    salesUrls: string | string[] | undefined = envUrls(
+      "OPEN_SALES_DATA_URL",
+      "OPEN_SALES_DATA_URLS",
+      "COUNTY_OPEN_DATA_URL",
+      "US_OPEN_SALES_DATA_URL",
+      "HMLR_PRICE_PAID_URL",
+      "UK_PRICE_PAID_DATA_URL",
+      "ENGLAND_PRICE_PAID_DATA_URL",
+      "EU_OPEN_SALES_DATA_URL",
+      "EU_CADASTRE_DATA_URL",
+      "AFRICA_OPEN_SALES_DATA_URL",
+      "OPERATOR_SALES_IMPORT_URL",
+    ),
+  ) {
+    this.salesUrls = normalizeUrlList(salesUrls);
+  }
+
+  async hasCoverage(): Promise<boolean> {
+    return this.salesUrls.length > 0;
+  }
+
+  facts(input: PropertyQuery): Promise<EvidenceCard[]> {
+    return this.base.facts(input);
+  }
+
+  async comps(input: PropertyQuery): Promise<EvidenceCard[]> {
+    if (this.salesUrls.length === 0) {
+      return [
+        {
+          scout: "market",
+          claim: "Open sale records",
+          value: null,
+          sources: [],
+          confidence: "D",
+          reasoning:
+            "No open sales/assessor feed is configured for this market. Add a regional open feed URL or OPERATOR_SALES_IMPORT_URL.",
+        },
+      ];
+    }
+
+    try {
+      const loaded = await Promise.all(
+        this.salesUrls.map(async (url) => ({
+          url,
+          records: await loadOpenSaleRecords(url),
+        })),
+      );
+      const matches = loaded.flatMap(({ url, records }) =>
+        records
+          .filter((record) => addressMatches(record, input.address))
+          .map((record) => ({ url, record })),
+      );
+      if (matches.length === 0) {
+        return [
+          {
+            scout: "market",
+            claim: "Open sale records",
+            value: null,
+            sources: [],
+            confidence: "D",
+            reasoning: "The configured open sales feed returned no matching record for this address.",
+          },
+        ];
+      }
+
+      const latest = matches
+        .slice()
+        .sort((a, b) => (dateFrom(b.record) ?? "").localeCompare(dateFrom(a.record) ?? ""))[0]!;
+      const price = priceFrom(latest.record);
+      return [
+        {
+          scout: "market",
+          claim: "Open sale record",
+          value: price ? `${price}${dateFrom(latest.record) ? ` on ${dateFrom(latest.record)}` : ""}` : "record found",
+          sources: [sourceFrom(latest.record, latest.url)],
+          confidence: matches.length >= 3 ? "B" : "C",
+          reasoning:
+            matches.length >= 3
+              ? `${matches.length} public sale record(s) matched this address.`
+              : "Single public sale record matched this address; useful, but not enough for a modeled ARV.",
+        },
+      ];
+    } catch {
+      return [
+        {
+          scout: "market",
+          claim: "Open sale records",
+          value: null,
+          sources: [],
+          confidence: "D",
+          reasoning: "Could not read the configured open sales feed.",
+        },
+      ];
+    }
+  }
+}
+
+// ---- Open hazard + distress feeds ------------------------------------------
+
+export class OpenRiskDataProvider implements RiskDataProvider {
+  readonly name = "open-risk";
+  readonly mode = "live" as const;
+  private readonly hazardUrls: string[];
+  private readonly distressUrls: string[];
+
+  constructor(
+    hazardUrls: string | string[] | undefined = envUrls(
+      "FEMA_NFHL_URL",
+      "OPEN_HAZARD_LAYER_URL",
+      "US_HAZARD_LAYER_URL",
+      "UK_HAZARD_LAYER_URL",
+      "EU_HAZARD_LAYER_URL",
+      "AFRICA_HAZARD_LAYER_URL",
+    ),
+    distressUrls: string | string[] | undefined = envUrls(
+      "OPEN_DISTRESS_DATA_URL",
+      "OPEN_DISTRESS_DATA_URLS",
+      "TAX_DELINQUENCY_DATA_URL",
+      "CODE_VIOLATION_DATA_URL",
+      "VACANT_REGISTRY_DATA_URL",
+      "US_DISTRESS_DATA_URL",
+      "UK_DISTRESS_DATA_URL",
+      "EU_DISTRESS_DATA_URL",
+      "AFRICA_DISTRESS_DATA_URL",
+    ),
+  ) {
+    this.hazardUrls = normalizeUrlList(hazardUrls);
+    this.distressUrls = normalizeUrlList(distressUrls);
+  }
+
+  async hazards(input: PropertyQuery): Promise<EvidenceCard[]> {
+    if (this.hazardUrls.length === 0) {
+      return [
+        {
+          scout: "risk",
+          claim: "Flood risk",
+          value: null,
+          sources: [],
+          confidence: "D",
+          reasoning:
+            "No open hazard layer is configured. Add FEMA_NFHL_URL or OPEN_HAZARD_LAYER_URL for this market.",
+        },
+      ];
+    }
+
+    const empty: EvidenceCard[] = [];
+    for (const hazardUrl of this.hazardUrls) {
+      const cards = await this.hazardFromUrl(hazardUrl, input);
+      const grounded = cards.find(
+        (card) => card.confidence !== "D" && !String(card.value).startsWith("No mapped"),
+      );
+      if (grounded) return cards;
+      if (cards.length > 0 && empty.length === 0) empty.push(...cards);
+    }
+    return empty.length > 0
+      ? empty
+      : [
+          {
+            scout: "risk",
+            claim: "Flood risk",
+            value: null,
+            sources: [],
+            confidence: "D",
+            reasoning: "Could not read the configured open hazard layers.",
+          },
+        ];
+  }
+
+  async distress(input: PropertyQuery): Promise<EvidenceCard[]> {
+    if (this.distressUrls.length === 0) {
+      return [
+        {
+          scout: "risk",
+          claim: "Open distress signals",
+          value: null,
+          sources: [],
+          confidence: "D",
+          reasoning:
+            "No open distress feed is configured. Add county/city tax delinquency, code violation, or vacant registry data.",
+        },
+      ];
+    }
+
+    try {
+      const loaded = await Promise.all(
+        this.distressUrls.map(async (url) => ({
+          url,
+          records: await loadOpenRecords(url),
+        })),
+      );
+      const matches = loaded.flatMap(({ url, records }) =>
+        records
+          .filter((record) => addressMatches(record, input.address))
+          .map((record) => ({ url, record })),
+      );
+      if (matches.length === 0) {
+        return [
+          {
+            scout: "risk",
+            claim: "Open distress signals",
+            value: null,
+            sources: [],
+            confidence: "D",
+            reasoning: "Configured open distress feeds returned no matching record for this address.",
+          },
+        ];
+      }
+
+      const first = matches[0]!;
+      const record = first.record;
+      const label =
+        record.record_type ??
+        record.violation_type ??
+        record.case_type ??
+        record.category ??
+        record.type ??
+        record.status ??
+        "public distress record";
+      const date = record.date ?? record.created_date ?? record.inspection_date;
+      const source = record.source || "Open county data";
+      return [
+        {
+          scout: "risk",
+          claim: "Open distress signal",
+          value: `${label}${date ? ` · ${date}` : ""}`,
+          sources: [{ name: source, url: record.source_url ?? record.url ?? first.url }],
+          confidence: matches.length >= 2 ? "B" : "C",
+          reasoning:
+            matches.length >= 2
+              ? `${matches.length} public distress record(s) matched this address.`
+              : "Single public distress record matched this address; verify before prioritizing outreach.",
+        },
+      ];
+    } catch {
+      return [
+        {
+          scout: "risk",
+          claim: "Open distress signals",
+          value: null,
+          sources: [],
+          confidence: "D",
+          reasoning: "Could not read the configured open distress feed.",
+        },
+      ];
+    }
+  }
+
+  private async hazardFromUrl(rawHazardUrl: string, input: PropertyQuery): Promise<EvidenceCard[]> {
+    try {
+      const queryUrl = await this.arcGisQueryUrl(rawHazardUrl);
+      if (!queryUrl) {
+        return [
+          {
+            scout: "risk",
+            claim: "Flood risk",
+            value: null,
+            sources: [],
+            confidence: "D",
+            reasoning: "The configured hazard layer is not a queryable ArcGIS REST layer.",
+          },
+        ];
+      }
+      const url = new URL(queryUrl);
+      url.searchParams.set("f", "json");
+      url.searchParams.set("geometry", `${input.lng},${input.lat}`);
+      url.searchParams.set("geometryType", "esriGeometryPoint");
+      url.searchParams.set("inSR", "4326");
+      url.searchParams.set("spatialRel", "esriSpatialRelIntersects");
+      url.searchParams.set("outFields", "*");
+      url.searchParams.set("returnGeometry", "false");
+
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": "Forleads/1.0 (open hazard scout; +https://forleads.vercel.app)",
+          Accept: "application/json",
+        },
+      });
+      if (!res.ok) throw new Error(`hazard ${res.status}`);
+      const data = (await res.json()) as { features?: ArcGisFeature[] };
+      const features = data.features ?? [];
+      if (features.length === 0) {
+        return [
+          {
+            scout: "risk",
+            claim: "Flood risk",
+            value: "No mapped open hazard zone at this point",
+            sources: [{ name: sourceNameForHazard(rawHazardUrl), url: rawHazardUrl }],
+            confidence: "C",
+            reasoning:
+              "Point query returned no intersecting hazard polygon. Confirm locally before treating this as insurance guidance.",
+          },
+        ];
+      }
+
+      const attrs = features[0]?.attributes ?? features[0]?.properties ?? {};
+      const zone =
+        firstString(attrs, ["FLD_ZONE", "fld_zone", "ZONE", "zone", "hazard", "HAZARD", "name", "NAME"]) ??
+        "mapped zone";
+      const subtype = firstString(attrs, ["ZONE_SUBTY", "zone_subty", "SFHA_TF", "sfha_tf", "description", "DESC"]);
+      const sourceName = sourceNameForHazard(rawHazardUrl);
+      return [
+        {
+          scout: "risk",
+          claim: "Flood risk",
+          value: subtype ? `${sourceName} ${zone} · ${subtype}` : `${sourceName} ${zone}`,
+          sources: [{ name: sourceName, url: rawHazardUrl }],
+          confidence: "B",
+          reasoning:
+            "Open hazard point query intersected a mapped feature. This is public hazard context, not a replacement for local due diligence.",
+        },
+      ];
+    } catch {
+      return [];
+    }
+  }
+
+  private async arcGisQueryUrl(rawUrl: string): Promise<string | null> {
+    if (/\/query(?:\?|$)/i.test(rawUrl)) return rawUrl;
+    const clean = rawUrl.replace(/\/+$/, "");
+    if (/\/MapServer\/\d+$/i.test(clean)) return `${clean}/query`;
+    if (!/\/MapServer$/i.test(clean)) return `${clean}/query`;
+
+    try {
+      const meta = await fetch(`${clean}?f=json`, {
+        headers: {
+          "User-Agent": "Forleads/1.0 (open hazard scout; +https://forleads.vercel.app)",
+          Accept: "application/json",
+        },
+      });
+      if (!meta.ok) return `${clean}/28/query`;
+      const data = (await meta.json()) as { layers?: { id: number; name?: string }[] };
+      const layer = (data.layers ?? []).find((candidate) =>
+        /s_fld_haz_ar|flood hazard|flood zones?/i.test(candidate.name ?? ""),
+      );
+      return `${clean}/${layer?.id ?? 28}/query`;
+    } catch {
+      return `${clean}/28/query`;
+    }
+  }
+}
+
+function sourceNameForHazard(url: string): string {
+  if (/fema|nfhl/i.test(url)) return "FEMA NFHL";
+  if (/environment-agency|data\.gov\.uk|flood/i.test(url)) return "Open flood layer";
+  if (/europa|inspire/i.test(url)) return "EU open hazard layer";
+  if (/africa/i.test(url)) return "Africa open hazard layer";
+  return "Open hazard layer";
 }
 
 // ---- Mapillary imagery ------------------------------------------------------

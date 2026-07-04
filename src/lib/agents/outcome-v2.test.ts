@@ -37,9 +37,12 @@ beforeEach(() => {
 });
 
 async function groundedLead(address: string) {
-  const lead = await ensureLead(DEMO_AGENT_ID, { address, lng: -73.99, lat: 40.75 });
-  const swarm = await runSwarm(lead);
-  return { lead: swarm.lead, evidence: swarm.summary.cards };
+  const bare = await ensureLead(DEMO_AGENT_ID, { address, lng: -73.99, lat: 40.75 });
+  const swarm = await runSwarm(bare);
+  const repo = await getRepo();
+  await repo.upsertLead({ ...swarm.lead, contact: { email: "owner@example.test" } });
+  const lead = (await repo.getLead(swarm.lead.id))!;
+  return { lead, evidence: swarm.summary.cards };
 }
 
 describe("summarizeOutcomes", () => {

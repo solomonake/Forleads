@@ -16,7 +16,8 @@ for (const scenario of corpus.scenarios) {
 const sourceChecks = [
   ["revision-safe-approval", "src/lib/pipeline.ts", /expectedRevision[\s\S]+artifact\.revision/],
   ["compliance-recheck-on-edit", "src/lib/artifacts/revise.ts", /lintArtifactText/],
-  ["honest-risk-gap", "src/lib/agents/scouts.ts", /No verified hazard provider/],
+  ["honest-risk-gap", "src/lib/providers/real.ts", /No open hazard layer is configured/],
+  ["honest-risk-scout-fallback", "src/lib/agents/scouts.ts", /hazard scout failed before it could return evidence/],
   ["tenant-derived-server-side", "src/lib/auth/agent.ts", /agentIdForSub/],
   ["connector-idempotency", "src/lib/pipeline.ts", /idempotencyKey/],
 ];

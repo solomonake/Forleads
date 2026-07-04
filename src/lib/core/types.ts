@@ -217,6 +217,14 @@ export interface Note {
   created_at: ISODate;
 }
 
+export interface FieldSignal {
+  observed_condition: string[];
+  contact_seen?: string;
+  owner_statement?: string;
+  photo_pending: boolean;
+  route_seen_at: ISODate;
+}
+
 export interface SuggestedAction {
   type: ActionType;
   label: string;
@@ -354,6 +362,7 @@ export type DomainEventType =
   | "artifact.approved"
   | "artifact.sent"
   | "artifact.blocked"
+  | "seller_update.drafted"
   | "email.reply"
   | "task.due"
   | "watcher.hit"
