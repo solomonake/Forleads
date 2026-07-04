@@ -12,10 +12,10 @@ import { getRepo } from "@/lib/db";
 import { nowISO } from "@/lib/core/ids";
 import type { LeadContact, LeadSurface } from "@/lib/core/types";
 
-export const PATCH = withRoute(
+const contactPatch = withRoute<{ params: { id: string } }>(
   "lead.contact.patch",
-  async (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
-    const { id } = await ctx.params;
+  async (req: NextRequest, { params }) => {
+    const { id } = params;
     const body = await validateBody(req, (b) => ({
       name: optStr(b, "name", { max: 200 }),
       email: optStr(b, "email", { max: 200 }),
@@ -58,3 +58,10 @@ export const PATCH = withRoute(
     return NextResponse.json({ lead: updated });
   },
 );
+
+export async function PATCH(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  return contactPatch(req, { params: await context.params });
+}
