@@ -123,8 +123,8 @@ export class GoHighLevelConnector implements Connector {
         this.mode === "live"
           ? "Connected — notes/tasks."
           : this.mockWritesEnabled
-            ? "Local mock mode — add GHL_API_KEY + GHL_LOCATION_ID."
-            : "Setup required — add GHL_API_KEY + GHL_LOCATION_ID; production mock writes are disabled.",
+            ? "Not connected — add your GoHighLevel API key and Location ID in the Connector Hub."
+            : "Not connected — add your GoHighLevel API key and Location ID in the Connector Hub.",
       capabilities: this.capabilities,
     };
   }

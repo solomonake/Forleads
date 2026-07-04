@@ -107,8 +107,8 @@ export class GoogleCalendarConnector implements Connector {
       detail: this.accessToken
         ? "Connected — Calendar events."
         : this.mockWritesEnabled
-          ? "Local mock mode — connect Google OAuth to go live."
-          : "Setup required — connect Google OAuth; production mock writes are disabled.",
+          ? "Not connected — connect Google in the Connector Hub to hold time on your calendar."
+          : "Not connected — connect Google in the Connector Hub to hold time on your calendar.",
       capabilities: this.capabilities,
     };
   }

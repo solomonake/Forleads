@@ -5,6 +5,7 @@
 // ============================================================================
 
 import type { EvidenceCard } from "@/lib/core/types";
+import { log } from "@/lib/observability";
 import type {
   GeocodeProvider,
   GeoResult,
@@ -438,7 +439,7 @@ export class OSMPropertyProvider implements PropertyDataProvider {
         sources: [],
         confidence: "D",
         reasoning:
-          "OSM carries no sale-price data. Connect an open sales/assessor feed for this market to ground comps.",
+          "Public map data doesn't include sale prices. Once public sale records cover this market, comps appear here automatically.",
       },
     ];
   }
@@ -501,7 +502,7 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
           sources: [],
           confidence: "D",
           reasoning:
-            "No open sales/assessor feed is configured for this market. Add a regional open feed URL or OPERATOR_SALES_IMPORT_URL.",
+            "Public sale records don't cover this market yet. Forleads shows a verified gap instead of a guessed price.",
         },
       ];
     }
@@ -526,7 +527,7 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
             value: null,
             sources: [],
             confidence: "D",
-            reasoning: "The configured open sales feed returned no matching record for this address.",
+            reasoning: "No public sale record matches this address yet.",
           },
         ];
       }
@@ -548,7 +549,11 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
               : "Single public sale record matched this address; useful, but not enough for a modeled ARV.",
         },
       ];
-    } catch {
+    } catch (e) {
+      log("warn", "provider.sales.failed", {
+        error: e instanceof Error ? e.message : String(e),
+        urls: this.salesUrls.length,
+      });
       return [
         {
           scout: "market",
@@ -556,7 +561,7 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
           value: null,
           sources: [],
           confidence: "D",
-          reasoning: "Could not read the configured open sales feed.",
+          reasoning: "Public sale records weren't reachable just now — they'll load on the next look.",
         },
       ];
     }
@@ -606,7 +611,7 @@ export class OpenRiskDataProvider implements RiskDataProvider {
           sources: [],
           confidence: "D",
           reasoning:
-            "No open hazard layer is configured. Add FEMA_NFHL_URL or OPEN_HAZARD_LAYER_URL for this market.",
+            "No public hazard map covers this point yet. Forleads reports the gap rather than guessing risk.",
         },
       ];
     }
@@ -629,7 +634,7 @@ export class OpenRiskDataProvider implements RiskDataProvider {
             value: null,
             sources: [],
             confidence: "D",
-            reasoning: "Could not read the configured open hazard layers.",
+            reasoning: "Public hazard maps weren't reachable just now — they'll load on the next look.",
           },
         ];
   }
@@ -644,7 +649,7 @@ export class OpenRiskDataProvider implements RiskDataProvider {
           sources: [],
           confidence: "D",
           reasoning:
-            "No open distress feed is configured. Add county/city tax delinquency, code violation, or vacant registry data.",
+            "Public distress records (tax delinquency, code violations, vacancy) don't cover this area yet.",
         },
       ];
     }
@@ -669,7 +674,7 @@ export class OpenRiskDataProvider implements RiskDataProvider {
             value: null,
             sources: [],
             confidence: "D",
-            reasoning: "Configured open distress feeds returned no matching record for this address.",
+            reasoning: "No public distress record matches this address — a quiet signal, honestly reported.",
           },
         ];
       }
@@ -699,7 +704,11 @@ export class OpenRiskDataProvider implements RiskDataProvider {
               : "Single public distress record matched this address; verify before prioritizing outreach.",
         },
       ];
-    } catch {
+    } catch (e) {
+      log("warn", "provider.distress.failed", {
+        error: e instanceof Error ? e.message : String(e),
+        urls: this.distressUrls.length,
+      });
       return [
         {
           scout: "risk",
@@ -707,7 +716,7 @@ export class OpenRiskDataProvider implements RiskDataProvider {
           value: null,
           sources: [],
           confidence: "D",
-          reasoning: "Could not read the configured open distress feed.",
+          reasoning: "Public distress records weren't reachable just now — they'll load on the next look.",
         },
       ];
     }
@@ -724,7 +733,7 @@ export class OpenRiskDataProvider implements RiskDataProvider {
             value: null,
             sources: [],
             confidence: "D",
-            reasoning: "The configured hazard layer is not a queryable ArcGIS REST layer.",
+            reasoning: "This hazard map source can't be queried at a single point — reported as a gap, not a guess.",
           },
         ];
       }

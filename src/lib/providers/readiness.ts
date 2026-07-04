@@ -87,7 +87,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       configuredBy: ["Nominatim", "Photon", "OpenAddresses", "Census TIGER/Line", "self-hosted OSM extracts"],
       detail:
         config.geocoder === "mock"
-          ? "Set FORLEADS_GEOCODER=nominatim for solo testing or photon-nominatim for self-hosted scale."
+          ? "Address search is being prepared for this workspace."
           : `Live via ${config.geocoder}.`,
       env: ["FORLEADS_GEOCODER", "NOMINATIM_URL", "PHOTON_URL", "OPEN_ADDRESSES_URL", "CENSUS_TIGER_LINE_URL"],
     },
@@ -100,7 +100,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       detail:
         config.propertyProvider === "osm"
           ? "Live global floor. It is excellent for presence/context, but not owner or sale-price truth."
-          : "Set FORLEADS_PROPERTY_PROVIDER=osm for the open public-record floor.",
+          : "Public building facts are being prepared for this workspace.",
       env: ["FORLEADS_PROPERTY_PROVIDER", "OVERPASS_URL"],
     },
     {
@@ -121,7 +121,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       configuredBy: ["Microsoft Building Footprints", "Google Open Buildings", "local open GIS"],
       detail: openBuildingsLive
         ? "Open building footprint source configured."
-        : "Add an open building-footprint dataset URL or ETL output before grading footprint/size above D.",
+        : "Building footprints aren't available in this market yet — coverage grows as public datasets land.",
       env: ["MICROSOFT_BUILDING_FOOTPRINTS_URL", "GOOGLE_OPEN_BUILDINGS_URL", "LOCAL_BUILDINGS_GEOJSON_URL", "AFRICA_BUILDINGS_DATA_URL"],
     }),
     openSource({
@@ -132,7 +132,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       configuredBy: ["HM Land Registry Price Paid", "county open-data portals", "local assessor CSV exports"],
       detail: openSalesLive
         ? "At least one open sale/assessor source is configured."
-        : "Add a global, regional, or operator-imported public feed before upgrading ARV/comps.",
+        : "Public sale records aren't available in this market yet. Prices stay honestly unverified until they are.",
       env: [
         "OPEN_SALES_DATA_URL",
         "OPEN_SALES_DATA_URLS",
@@ -153,7 +153,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       configuredBy: ["county/city open data", "public tax delinquency CSVs", "court notice feeds"],
       detail: openDistressLive
         ? "At least one open distress source is configured."
-        : "Add open county/city data feeds before promoting distress flags above D.",
+        : "Public distress records aren't available in this market yet — flags stay honestly unverified.",
       env: [
         "OPEN_DISTRESS_DATA_URL",
         "OPEN_DISTRESS_DATA_URLS",
@@ -174,7 +174,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       configuredBy: ["FEMA NFHL", "local hazard GIS", "open environmental layers"],
       detail: openHazardLive
         ? "Open hazard source configured."
-        : "Add FEMA_NFHL_URL or OPEN_HAZARD_LAYER_URL before grading hazard risk above D.",
+        : "Public hazard maps aren't connected for this market yet — risk stays honestly unverified.",
       env: ["FEMA_NFHL_URL", "OPEN_HAZARD_LAYER_URL", "US_HAZARD_LAYER_URL", "UK_HAZARD_LAYER_URL", "EU_HAZARD_LAYER_URL", "AFRICA_HAZARD_LAYER_URL"],
     }),
     openSource({
@@ -185,7 +185,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       configuredBy: ["county open data", "Socrata", "FEMA NFHL", "operator CSV imports"],
       detail: americaLive
         ? "At least one America/US open source is configured."
-        : "Start with county/Socrata feeds plus FEMA_NFHL_URL. Use OPERATOR_SALES_IMPORT_URL when the county only exports CSV.",
+        : "US public records grow county by county. Coverage in your market expands as feeds come online.",
       env: ["US_OPEN_SALES_DATA_URL", "COUNTY_OPEN_DATA_URL", "FEMA_NFHL_URL", "US_DISTRESS_DATA_URL", "OPERATOR_SALES_IMPORT_URL"],
     }),
     openSource({
@@ -196,7 +196,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       configuredBy: ["HM Land Registry Price Paid Data", "data.gov.uk", "local council open data"],
       detail: englandLive
         ? "England/Wales price-paid source configured."
-        : "Add HMLR_PRICE_PAID_URL or UK_PRICE_PAID_DATA_URL. No-header HMLR CSV rows are supported.",
+        : "England & Wales price-paid data is being prepared for this workspace.",
       env: ["HMLR_PRICE_PAID_URL", "UK_PRICE_PAID_DATA_URL", "ENGLAND_PRICE_PAID_DATA_URL", "UK_HAZARD_LAYER_URL", "UK_DISTRESS_DATA_URL"],
     }),
     openSource({
@@ -207,7 +207,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       configuredBy: ["data.europa.eu discovery", "national cadastral portals", "municipal open data"],
       detail: europeLive
         ? "At least one Europe open-data source is configured."
-        : "Configure per-country EU_OPEN_SALES_DATA_URL, EU_CADASTRE_DATA_URL, EU_HAZARD_LAYER_URL, or EU_DISTRESS_DATA_URL.",
+        : "European open-data coverage varies by country and grows as national feeds come online.",
       env: ["EU_OPEN_SALES_DATA_URL", "EU_CADASTRE_DATA_URL", "EU_HAZARD_LAYER_URL", "EU_DISTRESS_DATA_URL"],
     }),
     {
@@ -218,7 +218,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       configuredBy: ["Google Open Buildings", "Microsoft Building Footprints", "local open data", "field capture"],
       detail: africaLive
         ? "At least one Africa open source is configured."
-        : "Formal sale/distress feeds are uneven by market. Use open buildings plus field capture and operator CSV imports first.",
+        : "Formal records are uneven in this region — field capture and your own imports carry the most weight here.",
       env: ["AFRICA_BUILDINGS_DATA_URL", "AFRICA_OPEN_SALES_DATA_URL", "AFRICA_DISTRESS_DATA_URL", "AFRICA_HAZARD_LAYER_URL", "GOOGLE_OPEN_BUILDINGS_URL"],
     },
     {

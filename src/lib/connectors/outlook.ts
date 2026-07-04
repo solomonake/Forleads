@@ -240,8 +240,8 @@ export class OutlookDraftConnector implements Connector {
       detail: this.accessToken
         ? "Connected — Outlook drafts + Calendar events."
         : this.mockWritesEnabled
-          ? "Local mock mode — connect Microsoft OAuth to go live."
-          : "Setup required — connect Microsoft OAuth; production mock writes are disabled.",
+          ? "Not connected — connect Microsoft in the Connector Hub to draft in Outlook."
+          : "Not connected — connect Microsoft in the Connector Hub to draft in Outlook.",
       capabilities: this.capabilities,
     };
   }

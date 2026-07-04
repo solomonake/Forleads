@@ -175,11 +175,6 @@ export function ConnectorHub() {
                   </div>
                   <div className="source-unlocks">{source.unlocks}</div>
                   <div className="rmeta">{source.detail}</div>
-                  <div className="source-env">
-                    {source.env.map((key) => (
-                      <code key={key}>{key}</code>
-                    ))}
-                  </div>
                 </div>
               ))}
             </div>
