@@ -11,6 +11,7 @@ import type {
   AgentTrace,
   Artifact,
   ConnectorAccount,
+  ConnectorProvider,
   ConnectorWrite,
   ConnectorCredential,
   DomainEvent,
@@ -90,6 +91,19 @@ export interface Repository {
   upsertConnectorAccount(a: ConnectorAccount): Promise<ConnectorAccount>;
   getConnectorCredential(id: string): Promise<ConnectorCredential | null>;
   upsertConnectorCredential(credential: ConnectorCredential): Promise<ConnectorCredential>;
+  /** Find the current live credential for a given tenant+provider — the
+   *  primary lookup for per-tenant connector adapters. Returns null when
+   *  no row exists or the row is revoked. */
+  findConnectorCredential(
+    agentId: string,
+    provider: ConnectorProvider,
+  ): Promise<ConnectorCredential | null>;
+  /** Mark this tenant+provider credential revoked. Returns the row or null
+   *  if there was nothing to revoke. */
+  revokeConnectorCredential(
+    agentId: string,
+    provider: ConnectorProvider,
+  ): Promise<ConnectorCredential | null>;
   getConnectorWrite(key: string): Promise<ConnectorWrite | null>;
   saveConnectorWrite(write: ConnectorWrite): Promise<ConnectorWrite>;
 
@@ -289,6 +303,30 @@ export class InMemoryRepository implements Repository {
   async upsertConnectorCredential(credential: ConnectorCredential) {
     this.s.connectorCredentials.set(credential.id, credential);
     return credential;
+  }
+  async findConnectorCredential(agentId: string, provider: ConnectorProvider) {
+    // Newest non-revoked row wins. Multiple historical rows may exist for a
+    // tenant/provider (Google refresh cycles); the live one is the highest
+    // `updated_at` with no `revoked_at`.
+    let best: ConnectorCredential | null = null;
+    for (const row of this.s.connectorCredentials.values()) {
+      if (row.agent_id !== agentId || row.provider !== provider) continue;
+      if (row.revoked_at) continue;
+      if (!best || row.updated_at > best.updated_at) best = row;
+    }
+    return best;
+  }
+  async revokeConnectorCredential(agentId: string, provider: ConnectorProvider) {
+    const now = new Date().toISOString();
+    let last: ConnectorCredential | null = null;
+    for (const row of [...this.s.connectorCredentials.values()]) {
+      if (row.agent_id !== agentId || row.provider !== provider) continue;
+      if (row.revoked_at) continue;
+      const revoked = { ...row, revoked_at: now, updated_at: now };
+      this.s.connectorCredentials.set(row.id, revoked);
+      last = revoked;
+    }
+    return last;
   }
   async getConnectorWrite(key: string) {
     return this.s.connectorWrites.get(key) ?? null;

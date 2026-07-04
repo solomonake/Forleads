@@ -1,7 +1,68 @@
 import { nowISO, uuid } from "@/lib/core/ids";
 import { getRepo } from "@/lib/db";
+import type { ConnectorProvider } from "@/lib/core/types";
 import type { GoogleTokens } from "./session";
 import { sealValue, unsealValue } from "./session";
+
+// ---- Generalized per-tenant credential store --------------------------------
+// The `connector_credential` table is keyed by (agent_id, provider). It stores
+// an opaque encrypted blob so OAuth tokens (Google/Microsoft) and API-key
+// bundles (FUB/GHL/Twilio) share the same row shape. Encryption is AES-256-GCM
+// via `sealValue`/`unsealValue` and the app's SESSION_SECRET — rotating that
+// secret invalidates every stored credential (see .agent/playbook.md).
+
+/** Save (or upgrade) a per-tenant credential. If a live row exists for this
+ *  agent+provider, revoke it and write a fresh row with `version` incremented.
+ *  Returns the new row's id. */
+export async function saveTenantCredential<T>(
+  agentId: string,
+  provider: ConnectorProvider,
+  payload: T,
+): Promise<string> {
+  const repo = await getRepo();
+  const existing = await repo.findConnectorCredential(agentId, provider);
+  const now = nowISO();
+  const id = uuid();
+  if (existing) {
+    await repo.upsertConnectorCredential({ ...existing, revoked_at: now, updated_at: now });
+  }
+  await repo.upsertConnectorCredential({
+    id,
+    agent_id: agentId,
+    provider,
+    encrypted_payload: sealValue(payload),
+    version: (existing?.version ?? 0) + 1,
+    created_at: now,
+    updated_at: now,
+  });
+  return id;
+}
+
+/** Load the live credential payload for this tenant+provider, or null. */
+export async function loadTenantCredential<T>(
+  agentId: string,
+  provider: ConnectorProvider,
+): Promise<T | null> {
+  const repo = await getRepo();
+  const row = await repo.findConnectorCredential(agentId, provider);
+  if (!row) return null;
+  return unsealValue<T>(row.encrypted_payload);
+}
+
+/** Revoke all live credential rows for this tenant+provider (idempotent). */
+export async function revokeTenantCredential(
+  agentId: string,
+  provider: ConnectorProvider,
+): Promise<boolean> {
+  const repo = await getRepo();
+  const revoked = await repo.revokeConnectorCredential(agentId, provider);
+  return Boolean(revoked);
+}
+
+// ---- Google-specific helpers (preserved for existing OAuth callback) --------
+// The Google OAuth flow stores the credential id in the session cookie so a
+// browser session can find it back. Other providers (API-key adapters) look
+// up by (agent_id, provider) instead and don't need this indirection.
 
 export async function saveGoogleCredential(
   agentId: string,

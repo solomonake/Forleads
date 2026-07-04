@@ -801,6 +801,54 @@ export class SupabaseRepository implements Repository {
     );
     return credential;
   }
+  async findConnectorCredential(agentId: string, provider: ConnectorProvider) {
+    const rows = unwrap(
+      await this.sb
+        .from("connector_credential")
+        .select("*")
+        .eq("agent_id", agentId)
+        .eq("provider", provider)
+        .is("revoked_at", null)
+        .order("updated_at", { ascending: false })
+        .limit(1),
+    );
+    const data = rows?.[0];
+    if (!data) return null;
+    return {
+      id: data.id,
+      agent_id: data.agent_id,
+      provider: data.provider,
+      encrypted_payload: data.encrypted_payload,
+      version: data.version,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      revoked_at: data.revoked_at ?? undefined,
+    } satisfies ConnectorCredential;
+  }
+  async revokeConnectorCredential(agentId: string, provider: ConnectorProvider) {
+    const now = new Date().toISOString();
+    const rows = unwrap(
+      await this.sb
+        .from("connector_credential")
+        .update({ revoked_at: now, updated_at: now })
+        .eq("agent_id", agentId)
+        .eq("provider", provider)
+        .is("revoked_at", null)
+        .select(),
+    );
+    const data = rows?.[0];
+    if (!data) return null;
+    return {
+      id: data.id,
+      agent_id: data.agent_id,
+      provider: data.provider,
+      encrypted_payload: data.encrypted_payload,
+      version: data.version,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      revoked_at: data.revoked_at ?? undefined,
+    } satisfies ConnectorCredential;
+  }
   async getConnectorWrite(key: string) {
     const data = unwrap(
       await this.sb

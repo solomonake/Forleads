@@ -610,7 +610,10 @@ export async function approveArtifact(
     throw new Error("Cannot approve: compliance linter blocked this artifact.");
   }
 
-  const connector = connectorForAction(artifact.type, opts);
+  const connector = await connectorForAction(artifact.type, {
+    ...opts,
+    agentId: artifact.agent_id,
+  });
   const key = idempotencyKey([
     artifact.id,
     String(artifact.revision),

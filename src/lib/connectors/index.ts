@@ -7,6 +7,7 @@
 
 import { config } from "@/lib/core/config";
 import type { ActionType, ConnectorProvider } from "@/lib/core/types";
+import { loadTenantCredential } from "@/lib/auth/credentials";
 import { GoogleCalendarConnector } from "./calendar";
 import { FollowUpBossConnector } from "./followupboss";
 import { GmailDraftConnector } from "./gmail";
@@ -25,6 +26,19 @@ function googleToken(override?: string): string | undefined {
 
 export interface ConnectorRouteOpts {
   googleAccessToken?: string;
+  /** If provided, per-tenant credentials for the routed provider are used
+   *  when present. Falls back to env-based config if the tenant hasn't
+   *  connected the provider yet. */
+  agentId?: string;
+}
+
+/** Load per-tenant creds for a paste-in provider, or null if none. */
+async function tenantApiCreds(
+  provider: ConnectorProvider,
+  agentId: string | undefined,
+): Promise<Record<string, string> | null> {
+  if (!agentId) return null;
+  return loadTenantCredential<Record<string, string>>(agentId, provider);
 }
 
 export function getConnector(provider: ConnectorProvider): Connector {
@@ -64,8 +78,53 @@ export function getConnector(provider: ConnectorProvider): Connector {
   }
 }
 
-/** Route an action type to the best available connector. */
-export function connectorForAction(type: ActionType, opts?: ConnectorRouteOpts): Connector {
+/** Per-tenant factory. Reads (agent_id, provider) creds where they apply,
+ *  falls back to global env config when the tenant hasn't connected yet. */
+export async function getConnectorForTenant(
+  provider: ConnectorProvider,
+  agentId: string | undefined,
+): Promise<Connector> {
+  switch (provider) {
+    case "followupboss": {
+      const creds = await tenantApiCreds("followupboss", agentId);
+      const apiKey = creds?.apiKey ?? config.followupboss.apiKey;
+      return new FollowUpBossConnector(
+        apiKey,
+        config.followupboss.baseUrl,
+        config.allowMockConnectorWrites,
+      );
+    }
+    case "gohighlevel": {
+      const creds = await tenantApiCreds("gohighlevel", agentId);
+      return new GoHighLevelConnector(
+        creds?.apiKey ?? config.gohighlevel.apiKey,
+        creds?.locationId ?? config.gohighlevel.locationId,
+        config.gohighlevel.baseUrl,
+        config.allowMockConnectorWrites,
+      );
+    }
+    case "twilio": {
+      const creds = await tenantApiCreds("twilio", agentId);
+      return new TwilioConnector(
+        creds?.accountSid ?? config.twilio.accountSid,
+        creds?.authToken ?? config.twilio.authToken,
+        creds?.fromNumber ?? config.twilio.fromNumber,
+        config.allowMockConnectorWrites,
+      );
+    }
+    default:
+      // Google/microsoft/zapier don't use the paste-in schema; env or OAuth
+      // token opts drive them.
+      return getConnector(provider);
+  }
+}
+
+/** Route an action type to the best available connector. Async because
+ *  per-tenant credential lookup is a repo read. */
+export async function connectorForAction(
+  type: ActionType,
+  opts?: ConnectorRouteOpts,
+): Promise<Connector> {
   switch (type) {
     case "email":
       return new GmailDraftConnector(
@@ -78,15 +137,21 @@ export function connectorForAction(type: ActionType, opts?: ConnectorRouteOpts):
         config.allowMockConnectorWrites,
       );
     case "sms":
-      return getConnector("twilio");
+      return getConnectorForTenant("twilio", opts?.agentId);
     case "crm_note":
-    case "task":
-      // Prefer a connected CRM. Production fails closed when none is configured.
-      return config.followupboss.apiKey
-        ? getConnector("followupboss")
-        : config.gohighlevel.apiKey
-          ? getConnector("gohighlevel")
-          : new MockConnector("followupboss", config.allowMockConnectorWrites);
+    case "task": {
+      // Prefer a connected CRM for THIS tenant; fall back to env. Fails closed
+      // downstream when nothing is configured.
+      const fub = await tenantApiCreds("followupboss", opts?.agentId);
+      if (fub?.apiKey || config.followupboss.apiKey) {
+        return getConnectorForTenant("followupboss", opts?.agentId);
+      }
+      const ghl = await tenantApiCreds("gohighlevel", opts?.agentId);
+      if (ghl?.apiKey || config.gohighlevel.apiKey) {
+        return getConnectorForTenant("gohighlevel", opts?.agentId);
+      }
+      return new MockConnector("followupboss", config.allowMockConnectorWrites);
+    }
     default:
       return new MockConnector("google", config.allowMockConnectorWrites);
   }
