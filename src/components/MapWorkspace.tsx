@@ -23,6 +23,7 @@ type ToastValue =
   | { kind: "ok"; text: string }
   | { kind: "err"; text: string; requestId?: string; retry?: () => void };
 import { ReviewTray } from "./ReviewTray";
+import { ContactEditor } from "./ContactEditor";
 
 const SCOUT_GROUPS: { key: ScoutType; label: string }[] = [
   { key: "property", label: "Property" },
@@ -655,6 +656,17 @@ export function MapWorkspace({
               ))}
             </div>
           </div>
+
+          {lead && lead.id !== "pending" ? (
+            <ContactEditor
+              lead={lead}
+              onSaved={(updated) => {
+                setLead(updated);
+                setToast({ kind: "ok", text: "Contact updated." });
+              }}
+              onError={(text) => setToast({ kind: "err", text })}
+            />
+          ) : null}
 
           {grouped.map((group) => (
             <div key={group.key}>

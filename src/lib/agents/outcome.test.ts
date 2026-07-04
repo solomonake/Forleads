@@ -40,22 +40,25 @@ beforeEach(() => {
 });
 
 async function setup(address: string) {
-  const lead = await ensureLead(DEMO_AGENT_ID, {
+  const bare = await ensureLead(DEMO_AGENT_ID, {
     address,
     lng: -73.99,
     lat: 40.75,
   });
-  const swarm = await runSwarm(lead);
+  const swarm = await runSwarm(bare);
+  const repo = await getRepo();
+  await repo.upsertLead({ ...swarm.lead, contact: { email: "owner@example.test" } });
+  const lead = (await repo.getLead(swarm.lead.id))!;
   const artifact = await draftArtifact({
     agent: DEMO_AGENT,
-    lead: swarm.lead,
+    lead,
     situation: "no_contact",
     situationConfidence: 0.9,
     actionType: "email",
     evidence: swarm.summary.cards,
     trigger: "test",
   });
-  return { lead: swarm.lead, artifact };
+  return { lead, artifact };
 }
 
 describe("approveArtifact → outcome memory", () => {

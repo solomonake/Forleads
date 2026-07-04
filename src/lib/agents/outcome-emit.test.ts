@@ -49,9 +49,12 @@ describe("outcome.recorded always emits, even when persist fails", () => {
       lat: 40.75,
     });
     const swarm = await runSwarm(lead);
+    const setupRepo = await getRepo();
+    await setupRepo.upsertLead({ ...swarm.lead, contact: { email: "owner@example.test" } });
+    const contactful = (await setupRepo.getLead(swarm.lead.id))!;
     const artifact = await draftArtifact({
       agent: DEMO_AGENT,
-      lead: swarm.lead,
+      lead: contactful,
       situation: "no_contact",
       situationConfidence: 0.9,
       actionType: "email",
@@ -85,9 +88,12 @@ describe("outcome.recorded always emits, even when persist fails", () => {
       lat: 40.75,
     });
     const swarm = await runSwarm(lead);
+    const setupRepo = await getRepo();
+    await setupRepo.upsertLead({ ...swarm.lead, contact: { email: "owner@example.test" } });
+    const contactful = (await setupRepo.getLead(swarm.lead.id))!;
     const artifact = await draftArtifact({
       agent: DEMO_AGENT,
-      lead: swarm.lead,
+      lead: contactful,
       situation: "no_contact",
       situationConfidence: 0.9,
       actionType: "email",

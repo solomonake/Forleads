@@ -12,6 +12,16 @@ async function groundedLead(address: string, lng: number, lat: number) {
   return swarm.lead;
 }
 
+/** Grounded lead + a valid contact email so email drafts survive the
+ *  pipeline's channel-required gate. Use this in any test that runs the
+ *  draft→approve chain for an email artifact. */
+async function groundedLeadWithEmail(address: string, lng: number, lat: number) {
+  const bare = await groundedLead(address, lng, lat);
+  const repo = await getRepo();
+  await repo.upsertLead({ ...bare, contact: { email: "owner@example.test" } });
+  return (await repo.getLead(bare.id))!;
+}
+
 describe("Action Loop Engine", () => {
   beforeEach(() => resetIdempotencyLedger());
 
@@ -86,7 +96,7 @@ describe("draft state transitions + human gate", () => {
 
   it("draft → approve transitions an email to approved with an external draft ref", async () => {
     const repo = await getRepo();
-    const lead = await groundedLead("221B Baker Street", -0.1574, 51.5237);
+    const lead = await groundedLeadWithEmail("221B Baker Street", -0.1574, 51.5237);
     const evidence = await repo.listEvidence(lead.id);
     const artifact = await draftArtifact({
       agent: DEMO_AGENT,
@@ -108,7 +118,7 @@ describe("draft state transitions + human gate", () => {
 
   it("approving twice is idempotent (no duplicate connector write)", async () => {
     const repo = await getRepo();
-    const lead = await groundedLead("Plaka", 23.729, 37.9715);
+    const lead = await groundedLeadWithEmail("Plaka", 23.729, 37.9715);
     const artifact = await draftArtifact({
       agent: DEMO_AGENT,
       lead,
@@ -127,7 +137,7 @@ describe("draft state transitions + human gate", () => {
 
   it("an Agent Trace is created for every draft", async () => {
     const repo = await getRepo();
-    const lead = await groundedLead("Karen Road", 36.7073, -1.3318);
+    const lead = await groundedLeadWithEmail("Karen Road", 36.7073, -1.3318);
     const artifact = await draftArtifact({
       agent: DEMO_AGENT,
       lead,

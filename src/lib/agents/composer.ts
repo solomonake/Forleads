@@ -59,6 +59,30 @@ export interface ComposeOutput {
 const PROMPT_VERSION = "composer-1.2.0";
 const LIVE_PROMPT_VERSION = "composer-live-1.0.0";
 
+/** Defense in depth: pipeline.ts's channel-required gate is the primary check.
+ *  The composer must ALSO refuse to build an outbound payload with a friendly
+ *  label as the recipient — a "Gmail draft to 'Owner · 22125 Clarksburg Rd'"
+ *  is a 400 from Google's servers. Callers who bypass the pipeline see a clear
+ *  throw rather than a silently-broken draft. */
+function requireEmail(input: ComposeInput): string {
+  const value = input.recipientEmail?.trim();
+  if (!value || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    throw new Error(
+      "composer: recipientEmail is missing or not an email address — the pipeline's channel-required gate should have caught this.",
+    );
+  }
+  return value;
+}
+function requirePhone(input: ComposeInput): string {
+  const value = input.recipientPhone?.trim();
+  if (!value || (value.match(/\d/g) ?? []).length < 6) {
+    throw new Error(
+      "composer: recipientPhone is missing — the pipeline's channel-required gate should have caught this.",
+    );
+  }
+  return value;
+}
+
 // Phrases the composer proactively strips (familial status etc.). Mirrors the
 // canonical UC-1 rule: reference the home, never the children.
 const EXCLUDE_RULES: { pattern: RegExp; reason: string }[] = [
@@ -204,7 +228,7 @@ export function compose(input: ComposeInput): ComposeOutput {
       raw = `${subject}\n${clean.text}`;
       payload = {
         from: `${input.agent.name} <${input.agent.email}>`,
-        to: input.recipientEmail ?? input.recipientLabel,
+        to: requireEmail(input),
         subject,
         body: clean.text,
         signatureHtml: input.agent.signatureHtml,
@@ -219,7 +243,7 @@ export function compose(input: ComposeInput): ComposeOutput {
     case "sms": {
       const base = `Hi, it's ${input.agent.name}. Quick note about ${input.address} — no pressure, happy to share an honest picture whenever you like.`;
       const clean = applyComposerExclusions(base);
-      payload = { to: input.recipientPhone ?? input.recipientLabel, body: clean.text } satisfies SmsPayload;
+      payload = { to: requirePhone(input), body: clean.text } satisfies SmsPayload;
       return { payload, evidenceUsed: usable, excluded: clean.excluded, promptVersion: PROMPT_VERSION };
     }
     case "task": {
@@ -316,7 +340,7 @@ async function composeLive(input: ComposeInput): Promise<ComposeOutput> {
     const clean = applyComposerExclusions(String(out.body ?? "").trim());
     if (!clean.text) throw new Error("live composer returned empty sms");
     return {
-      payload: { to: input.recipientPhone ?? input.recipientLabel, body: clean.text } satisfies SmsPayload,
+      payload: { to: requirePhone(input), body: clean.text } satisfies SmsPayload,
       evidenceUsed: usable,
       excluded: clean.excluded,
       promptVersion: LIVE_PROMPT_VERSION,
@@ -340,7 +364,7 @@ async function composeLive(input: ComposeInput): Promise<ComposeOutput> {
   return {
     payload: {
       from: `${input.agent.name} <${input.agent.email}>`,
-      to: input.recipientEmail ?? input.recipientLabel,
+      to: requireEmail(input),
       subject,
       body: clean.text,
       signatureHtml: input.agent.signatureHtml,

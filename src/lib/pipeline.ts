@@ -12,6 +12,7 @@ import type {
   ActionType,
   Agent,
   Artifact,
+  ComplianceResult,
   DomainEvent,
   DomainEventType,
   EvidenceCard,
@@ -342,9 +343,146 @@ export interface DraftInput {
   trigger: string;
 }
 
+/** Basic RFC-5322-ish check: has one "@", no whitespace, at least one dot in
+ *  the domain. Deliberately permissive — the connector's real send is the
+ *  authority; this only rejects obviously-not-an-address strings so we don't
+ *  build a Gmail draft whose `To:` is a friendly label. */
+function isPlausibleEmail(value: string | undefined): boolean {
+  if (!value) return false;
+  const v = value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return false;
+  return true;
+}
+
+/** Very loose phone check: at least 6 digits total. Same reasoning as above —
+ *  the SMS provider is the authority for real deliverability. */
+function isPlausiblePhone(value: string | undefined): boolean {
+  if (!value) return false;
+  return (value.match(/\d/g) ?? []).length >= 6;
+}
+
+function requiredChannelGap(
+  actionType: ActionType,
+  lead: LeadSurface,
+): ComplianceResult | null {
+  const flag = (issue: string, fix: string) => ({
+    pass: false,
+    flags: [
+      {
+        span: "recipient",
+        category: "contact_channel_missing",
+        issue,
+        fix,
+        severity: "block" as const,
+      },
+    ],
+    checkedAt: nowISO(),
+    linterVersion: "channel-required-1.0.0",
+  });
+
+  if (actionType === "email" && !isPlausibleEmail(lead.contact?.email)) {
+    return flag(
+      "Cannot draft email: this lead has no owner email address.",
+      "Add an owner email on the lead card, then reopen the draft.",
+    );
+  }
+  if (actionType === "sms" && !isPlausiblePhone(lead.contact?.phone)) {
+    return flag(
+      "Cannot draft SMS: this lead has no owner phone number.",
+      "Add an owner phone on the lead card, then reopen the draft.",
+    );
+  }
+  return null;
+}
+
+async function persistBlockedArtifact(args: {
+  agent: Agent;
+  lead: LeadSurface;
+  actionType: ActionType;
+  loopRunId?: string;
+  situation: Situation;
+  situationConfidence: number;
+  trigger: string;
+  compliance: ComplianceResult;
+}): Promise<Artifact> {
+  const repo = await getRepo();
+  const artifactId = uuid();
+  const traceId = uuid();
+  const artifact: Artifact = {
+    id: artifactId,
+    agent_id: args.agent.id,
+    lead_surface_id: args.lead.id,
+    loop_run_id: args.loopRunId,
+    type: args.actionType,
+    status: "blocked",
+    // Empty typed payload — the client renders the compliance flag as
+    // "setup required" rather than showing a fake draft body.
+    payload:
+      args.actionType === "email"
+        ? { from: `${args.agent.name} <${args.agent.email}>`, to: "", subject: "", body: "" }
+        : args.actionType === "sms"
+          ? { to: "", body: "" }
+          : { body: "", tags: [] },
+    evidence_used: [],
+    compliance_result: args.compliance,
+    model_trace: {
+      model: "channel-required-gate",
+      promptVersion: "channel-required-1.0.0",
+      mode: "mock",
+    },
+    trace_id: traceId,
+    revision: 1,
+    created_at: nowISO(),
+    updated_at: nowISO(),
+  };
+  await repo.saveArtifact(artifact);
+  const trace = buildTrace({
+    agentId: args.agent.id,
+    artifact,
+    loopRunId: args.loopRunId,
+    trigger: args.trigger,
+    situation: args.situation,
+    situationConfidence: args.situationConfidence,
+    evidenceUsed: [],
+    excluded: [],
+    compliance: args.compliance,
+    cost: { claudeCalls: 0, paidDataCalls: 0, ms: 0 },
+  });
+  trace.id = traceId;
+  await repo.saveTrace(trace);
+  await emit(
+    args.agent.id,
+    "artifact.blocked",
+    { artifactId, type: args.actionType, situation: args.situation, reason: "contact_channel_missing" },
+    "pipeline",
+    args.lead.id,
+  );
+  return artifact;
+}
+
 export async function draftArtifact(input: DraftInput): Promise<Artifact> {
   const repo = await getRepo();
   const { agent, lead } = input;
+
+  // Channel-required gate: an email draft without an actual email address, or
+  // an SMS without an actual phone, would produce a MIME/payload the connector
+  // can't send (Gmail returns 400 on a non-RFC "To"). Fail closed here BEFORE
+  // the composer runs so the artifact is honestly `blocked` with a specific
+  // setup-required flag — no fake payload, no downstream 500.
+  const channelGap = requiredChannelGap(input.actionType, lead);
+  if (channelGap) {
+    const blocked = await persistBlockedArtifact({
+      agent,
+      lead,
+      actionType: input.actionType,
+      loopRunId: input.loopRunId,
+      situation: input.situation,
+      situationConfidence: input.situationConfidence,
+      trigger: input.trigger,
+      compliance: channelGap,
+    });
+    return blocked;
+  }
 
   // Outcome recall — what did the human ALREADY do with prior drafts for this
   // lead+actionType? Best-effort: if recall fails, draft with no prior context

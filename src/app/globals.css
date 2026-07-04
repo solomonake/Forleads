@@ -639,6 +639,67 @@ button {
   flex-wrap: wrap;
   margin-top: 14px;
 }
+.contact-editor {
+  margin: 0 0 16px;
+  padding: 12px 14px 14px;
+  border-radius: var(--r-lg);
+  background: rgba(10, 14, 20, 0.44);
+  border: 1px solid var(--hairline);
+  display: grid;
+  gap: 10px;
+}
+.contact-editor-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim, #9aa4b2);
+}
+.contact-editor-hint {
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-dim, #9aa4b2);
+  text-align: right;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.contact-editor-row {
+  display: flex;
+  gap: 8px;
+}
+.contact-editor-row > input {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  font-size: 13px;
+}
+.contact-editor-row > input::placeholder {
+  color: var(--text-dim, #6f7684);
+}
+.contact-editor-row > input:focus {
+  outline: none;
+  border-color: var(--accent, #7c9cff);
+}
+.contact-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+@media (max-width: 520px) {
+  .contact-editor-row {
+    flex-direction: column;
+  }
+  .contact-editor-hint {
+    text-align: left;
+  }
+}
 .ops-steps {
   display: grid;
   gap: 10px;
