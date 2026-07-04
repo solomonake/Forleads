@@ -286,3 +286,27 @@ Orphan found in Phase B: no single deterministic test chained the whole loop.
 Filled in Phase C by `src/lib/loop-completeness.test.ts` (note → classification
 → trigger match → run → draft → approval → connector result → outcome memory →
 next run reads priorOutcomes → analytics report). Phase C exit criterion met.
+
+## Phase D–G status (2026-07-04, commit f5cda738)
+
+- **D (connector/live proof):** production policy verified live —
+  `/api/health` → `ok:true`, `mockConnectorWritesAllowed:false`,
+  `liveModeViolations:[]`. Setup-required honesty visible in Connector Hub
+  (exact env keys per connector, "production mock writes are disabled").
+  **Live Gmail draft = HUMAN BOUNDARY** (needs the user's signed-in Google
+  session); local fail-closed proof exists (`live-only.test.ts`,
+  approve-route setup-failure test).
+- **E (provider depth):** readiness/real/mock provider suites green; honest
+  not-configured D-cards asserted by tests and the two eval invariants.
+- **F (operator UX QA):** Vercel preview of f5cda738 QA'd via browser at
+  1512px and 1232px: map+launchpad, Pipeline (honest zeros), Action Inbox
+  (honest empty state), Loop Studio (4 seeded loops, schedule badges, 0-stats),
+  Connector Hub (all setup-required) — no overlap, no dead workflow, no
+  misleading status. **Remaining:** true mobile-width (~390px) pass — local
+  dev server + Playwright were environment-blocked (8GB machine, see
+  playbook gotcha); Chrome window would not shrink below 1232px.
+- **G (production-safe verification):** prod health probed; preview deployment
+  READY = the `next build` proof (local build intentionally skipped per
+  gotcha). GitHub checks on f5cda738: `agent proof` ✅, CodeQL ✅, Vercel ✅.
+- **Not done, human-gated:** merge/PR (PR needs the P1 Playwright video —
+  same environment blocker), live Gmail draft proof, mobile-width QA.
