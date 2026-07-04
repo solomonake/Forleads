@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Artifact, ArtifactStatus } from "@/lib/core/types";
-import { apiGet, apiPost, GradeChip } from "./ui";
+import { ApiError, apiGet, apiPost, GradeChip } from "./ui";
 
 interface Item {
   artifact: Artifact;
@@ -51,7 +51,11 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
       setMsg("Approved — written to its connector (idempotent).");
       await load();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : String(e));
+      if (e instanceof ApiError && e.status === 424) {
+        setMsg(`${e.message} Open Connector Hub to add the missing live integration.`);
+      } else {
+        setMsg(e instanceof Error ? e.message : String(e));
+      }
     }
     setTimeout(() => setMsg(null), 3000);
   };
@@ -63,7 +67,8 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
     <div className="panel">
       <h1>Action Inbox</h1>
       <div className="sub">
-        One place for all the work the agents prepared. Nothing sends without your approval.
+        Approval desk for real-world momentum: Gmail drafts, CRM tasks, calendar holds, SMS, and
+        webhook jobs wait here until a human approves them.
       </div>
       <div className="tabs">
         {TABS.map((t) => {
@@ -75,7 +80,7 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
           );
         })}
       </div>
-      {msg && <div className="row" style={{ marginBottom: 12 }}>{msg}</div>}
+      {msg && <div className="row notice-row" style={{ marginBottom: 12 }}>{msg}</div>}
       <div className="panel-grid">
         {filtered.length === 0 && (
           <div className="row">

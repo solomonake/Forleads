@@ -17,6 +17,7 @@ import type {
 import {
   getImageryProvider,
   getPropertyProvider,
+  getRiskProvider,
 } from "@/lib/providers";
 import type { PropertyQuery } from "@/lib/providers";
 
@@ -119,27 +120,41 @@ async function runMarket(input: ScoutInput): Promise<ScoutResult> {
 }
 
 async function runRisk(input: ScoutInput): Promise<ScoutResult> {
-  // No risk provider is configured yet. An honest gap is safer than deriving a
-  // plausible-looking flood result from coordinates.
-  const cards = stamp(
-    [
-      {
-        scout: "risk",
-        claim: "Flood risk",
-        value: null,
-        sources: [],
-        confidence: "D",
-        reasoning: "No verified hazard provider is configured for this market.",
-      },
-    ],
-    "risk"
-  );
+  const provider = getRiskProvider();
+  const q: PropertyQuery = { ...input, scout: "risk" };
+  const { value, timedOut, ms } = await withBudget(input.job.budget.maxMs, [], async () => {
+    const [hazards, distress] = await Promise.all([
+      provider.hazards(q).catch(() => [
+        {
+          scout: "risk" as const,
+          claim: "Flood risk",
+          value: null,
+          sources: [],
+          confidence: "D" as const,
+          reasoning: "Open hazard scout failed before it could return evidence.",
+        },
+      ]),
+      provider.distress(q).catch(() => [
+        {
+          scout: "risk" as const,
+          claim: "Open distress signals",
+          value: null,
+          sources: [],
+          confidence: "D" as const,
+          reasoning: "Open distress scout failed before it could return evidence.",
+        },
+      ]),
+    ]);
+    return [...hazards, ...distress];
+  });
+  const cards = stamp(value, "risk");
+  const insufficient = cards.every((c) => c.confidence === "D");
   return {
     scout: "risk",
     cards,
-    gaps: ["No verified risk provider configured"],
-    cost: { ms: 0, tokens: 0, calls: 0 },
-    status: "insufficient_evidence",
+    gaps: insufficient ? ["No open risk/distress source for this market"] : [],
+    cost: { ms, tokens: 0, calls: provider.mode === "live" ? 2 : 0 },
+    status: timedOut ? "budget_exceeded" : insufficient ? "insufficient_evidence" : "ok",
   };
 }
 
@@ -154,7 +169,8 @@ async function runPeople(input: ScoutInput): Promise<ScoutResult> {
         value: null,
         sources: [],
         confidence: "D",
-        reasoning: "No lawful public-record provider is configured.",
+        reasoning:
+          "No lawful public-record or consented contact source is configured. Use field capture, CRM import, or operator-owned contacts.",
       },
     ],
     "people"
@@ -162,7 +178,7 @@ async function runPeople(input: ScoutInput): Promise<ScoutResult> {
   return {
     scout: "people",
     cards,
-    gaps: ["No lawful people-data provider configured"],
+    gaps: ["No lawful people-data source configured"],
     cost: { ms: 0, tokens: 0, calls: 0 },
     status: "insufficient_evidence",
   };

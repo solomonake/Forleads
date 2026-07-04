@@ -44,6 +44,13 @@ export interface ImageryProvider {
   aerialAttribution(): string;
 }
 
+export interface RiskDataProvider {
+  readonly name: string;
+  readonly mode: "mock" | "live";
+  hazards(input: PropertyQuery): Promise<EvidenceCard[]>;
+  distress(input: PropertyQuery): Promise<EvidenceCard[]>;
+}
+
 export interface PropertyQuery {
   lng: number;
   lat: number;

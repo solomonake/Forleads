@@ -112,7 +112,7 @@ export function AgentTraceDrawer({
             <div className="tline" style={{ borderBottom: "none" }}>
               <span className="tk">Cost</span>
               <span className="tv">
-                {trace.cost.claudeCalls} Claude call(s) · {trace.cost.paidDataCalls} paid data
+                {trace.cost.claudeCalls} Claude call(s) · {trace.cost.paidDataCalls} external/open data
                 call(s)
                 {trace.cost.inputTokens !== undefined
                   ? ` · ${trace.cost.inputTokens} input / ${trace.cost.outputTokens ?? 0} output tokens`

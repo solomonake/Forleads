@@ -54,9 +54,14 @@ export function LoopStudio() {
     <div className="panel">
       <h1>Loop Studio</h1>
       <div className="sub">
-        Zapier-like power, shaped for real-estate work: WHEN something happens · IF the context
-        matches · LET the agent prepare something · REQUIRE approval for risky actions · THEN write
-        back · REPORT on a schedule. Every run is logged.
+        Follow-up loop workbench: choose the lead, prepare the next free action, inspect the trace,
+        and approve only the work that should leave Forleads.
+      </div>
+      <div className="loop-flow">
+        <div><b>1</b><span>Trigger: field note, stale lead, or manual run</span></div>
+        <div><b>2</b><span>Guardrail: opt-outs, evidence, and compliance</span></div>
+        <div><b>3</b><span>Prepare: Gmail draft, task, import request, or webhook job</span></div>
+        <div><b>4</b><span>Human gate: Action Inbox approval before writes</span></div>
       </div>
       {msg && <div className="row" style={{ marginBottom: 14 }}>{msg}</div>}
       <label className="row" style={{ display: "block", marginBottom: 14 }}>
@@ -102,6 +107,11 @@ export function LoopStudio() {
                 {d.description}
                 <br />
                 {s.runs} runs · {s.produced} produced · {s.approved} approved · {s.replies} replies · {s.blocked} blocked
+              </div>
+              <div className="loop-impact">
+                {d.cadence?.everyDays
+                  ? `Keeps leads from going stale every ${d.cadence.everyDays} day(s).`
+                  : "Turns a fresh field signal into prepared work or a setup-required task immediately."}
               </div>
               {open && (
                 <div className="rmeta" style={{ marginTop: 10, borderTop: "1px dashed var(--hairline)", paddingTop: 10 }}>

@@ -8,9 +8,12 @@ import {
   MockGeocodeProvider,
   MockImageryProvider,
   MockPropertyProvider,
+  MockRiskProvider,
 } from "./mock";
 import {
   MapillaryImageryProvider,
+  OpenDataPropertyProvider,
+  OpenRiskDataProvider,
   OSMPropertyProvider,
   PhotonNominatimGeocodeProvider,
   PublicNominatimGeocodeProvider,
@@ -19,6 +22,7 @@ import type {
   GeocodeProvider,
   ImageryProvider,
   PropertyDataProvider,
+  RiskDataProvider,
 } from "./types";
 
 export function getGeocodeProvider(): GeocodeProvider {
@@ -38,8 +42,8 @@ export function getGeocodeProvider(): GeocodeProvider {
 }
 
 export function getPropertyProvider(): PropertyDataProvider {
+  if (config.propertyProvider === "open-data") return new OpenDataPropertyProvider();
   if (config.propertyProvider === "osm") return new OSMPropertyProvider();
-  // "attom" / per-market live providers would be selected here when keyed.
   return new MockPropertyProvider();
 }
 
@@ -48,6 +52,28 @@ export function getImageryProvider(): ImageryProvider {
     return new MapillaryImageryProvider(process.env.MAPILLARY_TOKEN);
   }
   return new MockImageryProvider();
+}
+
+export function getRiskProvider(): RiskDataProvider {
+  if (
+    process.env.FEMA_NFHL_URL ||
+    process.env.OPEN_HAZARD_LAYER_URL ||
+    process.env.OPEN_DISTRESS_DATA_URL ||
+    process.env.TAX_DELINQUENCY_DATA_URL ||
+    process.env.CODE_VIOLATION_DATA_URL ||
+    process.env.VACANT_REGISTRY_DATA_URL ||
+    process.env.US_HAZARD_LAYER_URL ||
+    process.env.UK_HAZARD_LAYER_URL ||
+    process.env.EU_HAZARD_LAYER_URL ||
+    process.env.AFRICA_HAZARD_LAYER_URL ||
+    process.env.US_DISTRESS_DATA_URL ||
+    process.env.UK_DISTRESS_DATA_URL ||
+    process.env.EU_DISTRESS_DATA_URL ||
+    process.env.AFRICA_DISTRESS_DATA_URL
+  ) {
+    return new OpenRiskDataProvider();
+  }
+  return new MockRiskProvider();
 }
 
 export * from "./types";

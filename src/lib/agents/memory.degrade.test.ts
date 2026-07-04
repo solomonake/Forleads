@@ -3,6 +3,7 @@
 // memory layer must DEGRADE gracefully — recall returns empty, persist returns
 // null — so a schema gap or transient Supabase outage never blocks the loop.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Agent, ConnectorAccount, LoopDefinition } from "@/lib/core/types";
 
 // Force a thrown failure inside the repo for these tests. The repo factory
 // reads the singleton from globalThis, so we install a poisoned repo that
@@ -28,10 +29,20 @@ afterEach(() => {
 
 function poison(method: "recallMemories" | "recallNeighborhood" | "saveMemory") {
   g.__forleadsRepo = {
-    recallMemories: vi.fn().mockRejectedValue(new Error("simulated: function does not exist")),
-    recallNeighborhood: vi.fn().mockRejectedValue(new Error("simulated: table missing")),
-    saveMemory: vi.fn().mockRejectedValue(new Error("simulated: insert blocked")),
-    // Stubs for anything else recallForLead transitively touches via the embedder.
+    upsertAgent: async (agent: Agent) => agent,
+    listLoopDefs: async () => [],
+    upsertLoopDef: async (loop: LoopDefinition) => loop,
+    listConnectorAccounts: async () => [],
+    upsertConnectorAccount: async (account: ConnectorAccount) => account,
+    recallMemories: async () => {
+      throw new Error("simulated: function does not exist");
+    },
+    recallNeighborhood: async () => {
+      throw new Error("simulated: table missing");
+    },
+    saveMemory: async () => {
+      throw new Error("simulated: insert blocked");
+    },
   };
   // method param is illustrative — all three are stubbed to reject; the test
   // names which path it exercises.

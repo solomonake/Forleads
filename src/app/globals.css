@@ -1282,6 +1282,14 @@ button {
   font-size: 13.5px;
   margin-bottom: 22px;
 }
+.panel-section-title {
+  max-width: 1100px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 24px 0 10px;
+}
 .panel-grid {
   display: grid;
   gap: 14px;
@@ -1328,6 +1336,10 @@ button {
 .row:hover {
   border-color: var(--hairline-strong);
   box-shadow: var(--shadow-1);
+}
+.notice-row {
+  border-color: var(--warn);
+  color: var(--text);
 }
 .row .rtitle {
   font-size: 15px;
@@ -1418,6 +1430,92 @@ button {
   gap: 12px;
   margin-bottom: 20px;
 }
+.source-grid {
+  max-width: 1100px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.source-pack {
+  margin-bottom: 18px;
+}
+.source-pack h3 {
+  margin: 10px 0 10px;
+  color: var(--text-2);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+.source-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 15px 16px;
+}
+.source-card .rtitle {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.source-unlocks {
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.45;
+  margin-top: 8px;
+}
+.source-env {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.source-env code {
+  font-size: 10.5px;
+  color: var(--text-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-pill);
+  padding: 3px 7px;
+  background: var(--surface-2);
+}
+.loop-flow {
+  max-width: 1100px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.loop-flow div {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+}
+.loop-flow b {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  color: var(--bg);
+  background: var(--grad-signal);
+  font-size: 12px;
+}
+.loop-flow span,
+.loop-impact {
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.loop-impact {
+  margin-top: 10px;
+  color: var(--ok);
+}
 .pipeline-hero {
   max-width: 1100px;
   display: flex;
@@ -1502,6 +1600,12 @@ button {
   font-size: 12px;
   color: var(--text-2);
   margin-top: 4px;
+}
+.kcard .kvalue {
+  font-size: 12px;
+  color: var(--ok);
+  line-height: 1.4;
+  margin-top: 10px;
 }
 .kcard .kmeta {
   font-size: 12px;

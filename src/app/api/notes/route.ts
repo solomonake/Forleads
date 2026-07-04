@@ -7,9 +7,10 @@ import { enforceRateLimit } from "@/lib/ratelimit";
 import { optStr, str, validateBody } from "@/lib/validation";
 import { nowISO, uuid } from "@/lib/core/ids";
 import { classifyNoteBest } from "@/lib/agents/notes";
-import { persistNoteMemory } from "@/lib/agents/memory";
+import { persistEvidenceMemory, persistNoteMemory } from "@/lib/agents/memory";
 import { getRepo } from "@/lib/db";
 import { emit } from "@/lib/pipeline";
+import { extractFieldSignal, fieldSignalEvidence } from "@/lib/field-scout";
 
 export const POST = withRoute("notes", async (req: NextRequest) => {
   const body = await validateBody(req, (b) => ({
@@ -23,6 +24,9 @@ export const POST = withRoute("notes", async (req: NextRequest) => {
   if (limited) return limited;
   const repo = await getRepo();
   const classification = await classifyNoteBest(body.body);
+  const lead = await repo.getLead(body.leadId);
+  if (!lead) return NextResponse.json({ error: "lead not found" }, { status: 404 });
+  if (lead.agent_id !== agentId) return NextResponse.json({ error: "lead not found" }, { status: 404 });
 
   const note = await repo.addNote({
     id: uuid(),
@@ -37,10 +41,23 @@ export const POST = withRoute("notes", async (req: NextRequest) => {
   await emit(
     agentId,
     "note.created",
-    { noteId: note.id, situation: classification.situation, confidence: classification.confidence },
+    {
+      noteId: note.id,
+      situation: classification.situation,
+      confidence: classification.confidence,
+      fieldSignal: extractFieldSignal(body.body),
+    },
     "notes",
     body.leadId
   );
+
+  const fieldCards = fieldSignalEvidence(body.body, classification);
+  if (fieldCards.length > 0) {
+    const existing = await repo.listEvidence(body.leadId);
+    const stamped = fieldCards.map((card) => ({ ...card, lead_surface_id: body.leadId }));
+    await repo.saveEvidence(body.leadId, [...existing, ...stamped]);
+    await Promise.all(stamped.map((card) => persistEvidenceMemory(agentId, lead, card)));
+  }
 
   // Persist the note as a memory row so the dispatcher can recall it next tap.
   // Failure is non-fatal — the loop must still complete even if embedding fails.
