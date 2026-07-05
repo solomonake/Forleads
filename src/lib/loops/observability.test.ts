@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LeadSurface, LoopDefinition, LoopRun } from "@/lib/core/types";
-import { deriveLoopObservability, leadLabels } from "./observability";
+import { deriveLoopObservability, leadLabels, loopRunTriggerKind } from "./observability";
 
 const lead: LeadSurface = {
   id: "lead-1",
@@ -110,5 +110,21 @@ describe("loop observability", () => {
       "lead-2": "22125 Clarksburg Road",
     });
     expect(leadLabels([{ ...lead, id: "lead-3", address: "" }])["lead-3"]).toBe("Unknown lead");
+  });
+
+  it("classifies runs as scheduled or manual from the engine trigger step", () => {
+    const cronRun = run({
+      planner_trace: [
+        { at: "2026-06-20T12:00:00.000Z", stage: "trigger", detail: "Triggered by task.due via cron:2026-06-20.", outcome: "info" },
+      ],
+    });
+    const manualRun = run({
+      planner_trace: [
+        { at: "2026-06-20T12:00:00.000Z", stage: "trigger", detail: "Triggered by task.due via manual.", outcome: "info" },
+      ],
+    });
+    expect(loopRunTriggerKind(cronRun)).toBe("scheduled");
+    expect(loopRunTriggerKind(manualRun)).toBe("manual");
+    expect(loopRunTriggerKind(run({ planner_trace: [] }))).toBe("manual");
   });
 });

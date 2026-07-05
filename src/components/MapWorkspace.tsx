@@ -398,6 +398,15 @@ export function MapWorkspace({
     cards: cards.filter((card) => card.scout === group.key),
   })).filter((group) => group.cards.length > 0);
 
+  const hasContactChannel = Boolean(lead?.contact?.email || lead?.contact?.phone);
+  const needsContact = Boolean(lead && lead.id !== "pending" && !hasContactChannel);
+  const focusContactEditor = useCallback(() => {
+    document
+      .querySelector('[data-testid="contact-editor"]')
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.getElementById("contact-name")?.focus({ preventScroll: true });
+  }, []);
+
   const pipelineSteps = [
     {
       label: "Ground lead",
@@ -411,6 +420,15 @@ export function MapWorkspace({
         }
       },
       disabled: !lead,
+    },
+    {
+      label: "Add owner contact",
+      state: hasContactChannel ? "Done" : lead && lead.id !== "pending" ? "Next" : "Locked",
+      detail: hasContactChannel
+        ? "Contact on file — approved drafts can reach a real person."
+        : "Attach who you're talking to. Approvals can't send without an email or phone.",
+      action: focusContactEditor,
+      disabled: !lead || lead.id === "pending",
     },
     {
       label: "Capture note",
@@ -654,7 +672,16 @@ export function MapWorkspace({
               or run a follow-up loop.
             </div>
             <div className="ops-actions">
-              <button className="minibtn primary" onClick={focusComposer} disabled={!lead || lead.id === "pending"}>
+              {needsContact && (
+                <button className="minibtn primary" onClick={focusContactEditor}>
+                  Add owner contact
+                </button>
+              )}
+              <button
+                className={`minibtn ${needsContact ? "" : "primary"}`}
+                onClick={focusComposer}
+                disabled={!lead || lead.id === "pending"}
+              >
                 Capture field signal
               </button>
               <button className="minibtn" onClick={() => onNavigate("inbox")} disabled={!classification}>
@@ -750,7 +777,7 @@ export function MapWorkspace({
           ))}
           {summary?.breakout && (
             <div className="gap-note" style={{ margin: "12px 6px" }}>
-              Break-out ({summary.breakout.kind}): {summary.breakout.reason}
+              Break-out ({summary.breakout.kind === "deeper_scout" ? "deeper scout pass" : "needs your input"}): {summary.breakout.reason}
               {summary.breakout.question ? ` — "${summary.breakout.question}"` : ""}
             </div>
           )}

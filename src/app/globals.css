@@ -2347,3 +2347,12 @@ button {
   padding-top: 16px;
   border-top: 1px dashed var(--hairline);
 }
+
+/* ---- Contact editor attention state --------------------------------------- */
+.contact-editor.attention {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand), 0 0 18px rgba(124, 140, 255, 0.25);
+}
+.contact-editor.attention .contact-editor-hint {
+  color: var(--brand);
+}

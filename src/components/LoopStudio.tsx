@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { LeadSurface, LoopAnalytics, LoopDefinition, LoopRun } from "@/lib/core/types";
 import type { LoopObservability } from "@/lib/loops/observability";
+import { loopRunTriggerKind } from "@/lib/loops/observability";
+import { actionTypeLabel, humanizeToken, loopRunStatusLabel } from "@/lib/design/labels";
 import { apiGet, apiPost } from "./ui";
+
+const LAST_SEEN_KEY = "forleads.loops.lastSeen";
 
 function plural(count: number, singular: string, pluralWord = `${singular}s`) {
   return `${count} ${count === 1 ? singular : pluralWord}`;
@@ -55,6 +59,8 @@ export function LoopStudio({
   const [leadLabelMap, setLeadLabelMap] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<RunResult | null>(null);
+  // Scheduled runs that fired since the operator last opened this surface.
+  const [awaySummary, setAwaySummary] = useState<{ runs: number; prepared: number } | null>(null);
 
   const load = useCallback(async () => {
     const [d, l] = await Promise.all([
@@ -74,10 +80,37 @@ export function LoopStudio({
     setLeadLabelMap(d.leadLabels);
     setLeads(l.leads);
     setSelectedLeadId((current) => current || l.leads[0]?.id || "");
+    return d.runs;
   }, []);
 
   useEffect(() => {
-    load();
+    load().then((loadedRuns) => {
+      // Announce scheduled work that happened while the operator was away,
+      // then advance the marker so the same runs aren't announced twice.
+      try {
+        const lastSeen = window.localStorage.getItem(LAST_SEEN_KEY);
+        if (lastSeen) {
+          const fresh = loadedRuns.filter(
+            (run) => run.started_at > lastSeen && loopRunTriggerKind(run) === "scheduled"
+          );
+          if (fresh.length > 0) {
+            setAwaySummary({
+              runs: fresh.length,
+              prepared: fresh.reduce((sum, run) => sum + run.artifact_ids.length, 0),
+            });
+          }
+        }
+        window.localStorage.setItem(LAST_SEEN_KEY, new Date().toISOString());
+      } catch {
+        // Storage unavailable — skip the announcement rather than fail the surface.
+      }
+    }).catch((e) => {
+      setMsg(
+        e instanceof Error && /authentication/i.test(e.message)
+          ? "Sign in to see your follow-up loops."
+          : "Couldn't load loops right now — reload to try again."
+      );
+    });
   }, [load]);
 
   const runNow = async (loopId: string) => {
@@ -117,6 +150,29 @@ export function LoopStudio({
         <div><b>4</b><span>Human gate: Action Inbox approval before writes</span></div>
       </div>
       {msg && <div className="row" style={{ marginBottom: 14 }}>{msg}</div>}
+      {awaySummary && (
+        <div className="run-banner" role="status">
+          <div>
+            <div className="run-banner-title">
+              While you were away, scheduled loops ran {plural(awaySummary.runs, "time")} and
+              prepared {plural(awaySummary.prepared, "item")} for your approval.
+            </div>
+            <div className="run-banner-sub">
+              Every run is listed under Recent runs below with its full decision trail.
+            </div>
+          </div>
+          <div className="run-banner-actions">
+            {awaySummary.prepared > 0 && (
+              <button className="minibtn primary" onClick={() => onNavigate("inbox")}>
+                Review in Action Inbox
+              </button>
+            )}
+            <button className="minibtn" onClick={() => setAwaySummary(null)}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
       {lastRun && (
         <div className="run-banner" role="status">
           <div>
@@ -125,7 +181,7 @@ export function LoopStudio({
                 ? `Loop ran — ${lastRun.artifactCount} draft${lastRun.artifactCount === 1 ? "" : "s"} prepared for ${lastRun.leadLabel}.`
                 : lastRun.status === "blocked_compliance"
                   ? `Loop ran for ${lastRun.leadLabel} — blocked by a compliance guardrail. Details in the run trace below.`
-                  : `Loop ran for ${lastRun.leadLabel} — ${lastRun.status.replaceAll("_", " ")}. Details in the run trace below.`}
+                  : `Loop ran for ${lastRun.leadLabel} — ${loopRunStatusLabel(lastRun.status).toLowerCase()}. Details in the run trace below.`}
             </div>
             <div className="run-banner-sub">
               Nothing leaves Forleads until you approve it in the Action Inbox.
@@ -184,29 +240,37 @@ export function LoopStudio({
                 {d.description}
                 <br />
                 {scheduleLine(o)}
-                {o?.lastRunAt ? ` Last run ${formatWhen(o.lastRunAt)}${o.lastRunStatus ? ` (${o.lastRunStatus})` : ""}.` : " No runs yet."}
+                {o?.lastRunAt ? ` Last run ${formatWhen(o.lastRunAt)}${o.lastRunStatus ? ` (${loopRunStatusLabel(o.lastRunStatus).toLowerCase()})` : ""}.` : " No runs yet."}
                 {o?.lastLeadId ? ` Last lead: ${leadLabelMap[o.lastLeadId] ?? "Unknown lead"}.` : ""}
                 <br />
                 {s.runs} runs · {s.produced} produced · {s.approved} approved · {s.replies} replies · {s.blocked} blocked
               </div>
               <div className="loop-impact">
                 {d.cadence?.everyDays
-                  ? `Keeps leads from going stale every ${d.cadence.everyDays} day(s).`
+                  ? `Keeps leads from going stale — checks in every ${plural(d.cadence.everyDays, "day")}.`
                   : "Turns a fresh field signal into prepared work or a setup-required task immediately."}
               </div>
               {open && (
                 <div className="rmeta" style={{ marginTop: 10, borderTop: "1px dashed var(--hairline)", paddingTop: 10 }}>
-                  <b style={{ color: "var(--text-2)" }}>WHEN</b> {d.trigger.event}
-                  {d.trigger.match ? ` matches ${JSON.stringify(d.trigger.match)}` : ""}
+                  <b style={{ color: "var(--text-2)" }}>WHEN</b> {humanizeToken(d.trigger.event)}
+                  {d.trigger.match
+                    ? ` matches ${Object.entries(d.trigger.match)
+                        .map(([key, value]) => `${humanizeToken(key)} = ${humanizeToken(String(value))}`)
+                        .join(", ")}`
+                    : ""}
                   <br />
                   <b style={{ color: "var(--text-2)" }}>IF</b>{" "}
-                  {d.conditions.map((c) => c.kind + (c.value != null ? `=${JSON.stringify(c.value)}` : "")).join(" · ")}
+                  {d.conditions
+                    .map((c) => humanizeToken(c.kind) + (c.value != null ? ` = ${humanizeToken(String(c.value))}` : ""))
+                    .join(" · ")}
                   <br />
                   <b style={{ color: "var(--text-2)" }}>DO</b>{" "}
-                  {d.actions.map((a) => `${a.type}${a.requiresApproval ? " (needs approval)" : " (auto)"}`).join(" · ")}
+                  {d.actions
+                    .map((a) => `${actionTypeLabel(a.type)}${a.requiresApproval ? " (needs your approval)" : " (automatic)"}`)
+                    .join(" · ")}
                   <br />
                   <b style={{ color: "var(--text-2)" }}>REPORT</b> {d.cadence?.reportDay ?? "—"}
-                  {d.cadence?.everyDays ? ` · every ${d.cadence.everyDays}d` : ""}
+                  {d.cadence?.everyDays ? ` · every ${plural(d.cadence.everyDays, "day")}` : ""}
                 </div>
               )}
               <div className="ractions">
@@ -232,27 +296,39 @@ export function LoopStudio({
             <div className="rmeta">No runs yet. Hit “Run now” on a loop above.</div>
           </div>
         )}
-        {runs.slice(0, 12).map((r) => (
-          <div className={`row ${lastRun?.runId === r.id ? "row-fresh" : ""}`} key={r.id}>
-            <div className="rtitle">
-              <span>{r.loop_definition_id}</span>
-              <span className={`pill-status ${r.status === "produced_artifact" ? "pill-live" : r.status === "blocked_compliance" ? "pill-blocked" : "pill-mock"}`}>
-                {r.status}
-              </span>
+        {runs.slice(0, 12).map((r) => {
+          const triggerKind = loopRunTriggerKind(r);
+          return (
+            <div className={`row ${lastRun?.runId === r.id ? "row-fresh" : ""}`} key={r.id}>
+              <div className="rtitle">
+                <span>
+                  {defs.find((d) => d.id === r.loop_definition_id)?.name ??
+                    humanizeToken(r.loop_definition_id)}
+                </span>
+                <span style={{ display: "flex", gap: 6 }}>
+                  <span className={`pill-status ${triggerKind === "scheduled" ? "pill-live" : "pill-mock"}`}>
+                    {triggerKind === "scheduled" ? "ran on schedule" : "manual run"}
+                  </span>
+                  <span className={`pill-status ${r.status === "produced_artifact" ? "pill-live" : r.status === "blocked_compliance" ? "pill-blocked" : "pill-mock"}`}>
+                    {loopRunStatusLabel(r.status).toLowerCase()}
+                  </span>
+                </span>
+              </div>
+              <div className="rmeta">
+                {formatWhen(r.started_at)} · {leadLabelMap[r.lead_surface_id ?? ""] ?? "Unknown lead"} ·{" "}
+                {plural(r.artifact_ids.length, "prepared item")}
+                {r.planner_trace.map((step, i) => (
+                  <div key={i} style={{ marginTop: 4 }}>
+                    <span style={{ color: step.outcome === "fail" ? "var(--danger)" : step.outcome === "pass" ? "var(--ok)" : "var(--text-muted)" }}>
+                      ▸ {humanizeToken(step.stage)}
+                    </span>{" "}
+                    — {step.detail}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="rmeta">
-              {formatWhen(r.started_at)} · {leadLabelMap[r.lead_surface_id ?? ""] ?? "Unknown lead"} · {r.artifact_ids.length} artifact(s)
-              {r.planner_trace.map((step, i) => (
-                <div key={i} style={{ marginTop: 4 }}>
-                  <span style={{ color: step.outcome === "fail" ? "var(--danger)" : step.outcome === "pass" ? "var(--ok)" : "var(--text-muted)" }}>
-                    ▸ {step.stage}
-                  </span>{" "}
-                  — {step.detail}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

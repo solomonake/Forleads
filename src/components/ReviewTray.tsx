@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Artifact, EmailPayload } from "@/lib/core/types";
+import { actionTypeLabel, humanizeToken } from "@/lib/design/labels";
 import { apiPatch, apiPost, GradeChip } from "./ui";
 
 export function ReviewTray({
@@ -64,8 +65,8 @@ export function ReviewTray({
       const c = d.connector;
       onApproved(
         isEmail
-          ? `Draft created in ${c.provider} (${c.mode})${c.deduped ? " · deduped" : ""} — logged to memory`
-          : `${current.type} written to ${c.provider} (${c.mode}) — logged to memory`,
+          ? `Draft created in ${humanizeToken(c.provider)} (${c.mode})${c.deduped ? " · already existed, not duplicated" : ""} — logged to memory`
+          : `${actionTypeLabel(current.type)} written to ${humanizeToken(c.provider)} (${c.mode}) — logged to memory`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

@@ -113,6 +113,9 @@ export function Pipeline({
           <button className="minibtn" onClick={() => onNavigate("connectors")}>
             Open source packs
           </button>
+          <button className="minibtn" onClick={() => onNavigate("report")}>
+            See weekly report
+          </button>
         </div>
       </div>
 
@@ -201,7 +204,7 @@ export function Pipeline({
                       <button className="ka ka-link" onClick={openOnMap} title="Open this lead on the map">
                         {lead.address}
                       </button>
-                      <div className="km">{lead.locality ?? lead.h3_index}</div>
+                      <div className="km">{lead.locality ?? "Neighborhood pending"}</div>
                       <div className="kvalue">{next.value}</div>
                       <div className="kmeta">{next.detail}</div>
                       <div className="kactions">

@@ -55,7 +55,7 @@ export default function Page() {
         {view === "loops" && <LoopStudio onNavigate={setView} />}
         {view === "pipeline" && <Pipeline onNavigate={setView} />}
         {view === "connectors" && <ConnectorHub />}
-        {view === "report" && <WeeklyReport />}
+        {view === "report" && <WeeklyReport onNavigate={setView} />}
         <GettingStarted view={view} onNavigate={setView} />
       </div>
 

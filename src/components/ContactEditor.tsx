@@ -66,14 +66,24 @@ export function ContactEditor({ lead, onSaved, onError }: Props) {
     }
   }
 
+  const missingChannel = !initial.email.trim() && !initial.phone.trim();
+
   return (
-    <div className="contact-editor" data-testid="contact-editor">
+    <div
+      className={`contact-editor ${missingChannel ? "attention" : ""}`}
+      data-testid="contact-editor"
+    >
       <div className="contact-editor-head">
         <span>Owner contact</span>
-        <span className="contact-editor-hint">Approval-gated drafts need a real email or phone.</span>
+        <span className="contact-editor-hint">
+          {missingChannel
+            ? "No contact yet — approved drafts can't send without an email or phone."
+            : "Approval-gated drafts need a real email or phone."}
+        </span>
       </div>
       <div className="contact-editor-row">
         <input
+          id="contact-name"
           type="text"
           placeholder="Owner name (optional)"
           value={name}
