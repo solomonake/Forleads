@@ -135,9 +135,14 @@ test("first-run activation checklist walks a new agent to the first approved dra
 });
 
 test("weekly report renders with actionable next moves", async ({ page }) => {
+  // The session fetch fires from a useEffect, so its response proves React is
+  // hydrated and nav clicks will register (an SSR input is "editable" earlier).
+  const sessionReady = page.waitForResponse(
+    (response) => response.url().includes("/api/auth/session"),
+    { timeout: COLD_API_TIMEOUT },
+  );
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  // Wait for hydration before clicking — a pre-hydration click is dropped.
-  await expect(page.locator("#search-input")).toBeEditable({ timeout: COLD_API_TIMEOUT });
+  await sessionReady;
   await page.locator('nav button[title="Weekly Report"]').click();
   await expect(
     page.getByRole("heading", { name: "Weekly Intelligence Report" })
