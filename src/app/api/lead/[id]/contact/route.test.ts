@@ -10,7 +10,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth/agent", () => ({
-  requireAgentId: async () => state.agentId,
+  ensureCurrentAgent: async () => state.agentId,
 }));
 
 vi.mock("@/lib/db", () => ({

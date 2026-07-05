@@ -31,6 +31,14 @@ function addDays(iso: string, days: number) {
   return new Date(new Date(iso).getTime() + days * DAY_MS).toISOString();
 }
 
+// The engine stamps the trigger source into the first planner-trace step
+// ("Triggered by <event> via manual." / "via cron:<day>."). This is the only
+// place that string is interpreted — keep in sync with engine.ts.
+export function loopRunTriggerKind(run: LoopRun): "scheduled" | "manual" {
+  const trigger = run.planner_trace.find((step) => step.stage === "trigger");
+  return trigger?.detail.includes("via cron") ? "scheduled" : "manual";
+}
+
 export function leadLabels(leads: LeadSurface[]): Record<string, string> {
   return Object.fromEntries(
     leads.map((lead) => [lead.id, lead.label || lead.address || "Unknown lead"]),

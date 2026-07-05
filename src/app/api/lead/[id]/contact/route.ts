@@ -4,7 +4,7 @@
 // signed-in agent may only update their own leads.
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAgentId } from "@/lib/auth/agent";
+import { ensureCurrentAgent } from "@/lib/auth/agent";
 import { withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { optStr, validateBody } from "@/lib/validation";
@@ -26,7 +26,9 @@ const contactPatch = withRoute<{ params: { id: string } }>(
         typeof b.optOutSms === "boolean" ? (b.optOutSms as boolean) : undefined,
     }));
 
-    const agentId = await requireAgentId();
+    // Same auth policy as the routes that create leads/notes/drafts:
+    // demo-workspace mutations allowed only where config permits them.
+    const agentId = await ensureCurrentAgent();
     if (!agentId) {
       return NextResponse.json({ error: "authentication required" }, { status: 401 });
     }

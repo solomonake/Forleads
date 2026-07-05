@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Artifact, ArtifactStatus } from "@/lib/core/types";
+import { actionTypeLabel } from "@/lib/design/labels";
 import { ApiError, apiGet, apiPost, GradeChip } from "./ui";
 
 interface Item {
@@ -102,7 +103,7 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
                 <span className={`pill-status ${statusPill[artifact.status]}`}>{artifact.status}</span>
               </div>
               <div className="rmeta">
-                {leadAddress} · {artifact.type}
+                {leadAddress} · {actionTypeLabel(artifact.type)}
                 {" · "}
                 {artifact.evidence_used.length > 0 ? (
                   artifact.evidence_used.slice(0, 3).map((e, i) => (
@@ -153,5 +154,5 @@ function labelFor(a: Artifact): string {
   if ("subject" in p) return String(p.subject);
   if ("title" in p) return String(p.title);
   if ("body" in p) return String(p.body).slice(0, 60);
-  return a.type;
+  return actionTypeLabel(a.type);
 }

@@ -43,6 +43,23 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
   await expect(leadRail.getByText("Grounded", { exact: true })).toBeVisible({ timeout: 45_000 });
   await expect(leadRail.locator(".card .chip").first()).toBeVisible();
 
+  // The owner-contact step is surfaced right after grounding — fill and save it.
+  const contactEditor = page.locator('[data-testid="contact-editor"]');
+  await expect(contactEditor).toBeVisible();
+  await contactEditor.locator("#contact-name").fill("Alex Owner");
+  await contactEditor.locator('input[type="email"]').fill("alex.owner@example.com");
+  const [contactResponse] = await Promise.all([
+    page.waitForResponse(
+      (response) => response.url().includes("/contact"),
+      { timeout: COLD_API_TIMEOUT },
+    ),
+    contactEditor.locator("button", { hasText: "Save contact" }).click(),
+  ]);
+  expect(
+    contactResponse.status(),
+    `contact API failed: ${await contactResponse.text()}`,
+  ).toBe(200);
+
   // Trigger the note → next-best-action loop via the "Knocked, no answer" quick chip.
   const knocked = page.locator(".quick button", { hasText: "Knocked, no answer" });
   await expect(knocked).toBeVisible();
@@ -115,6 +132,21 @@ test("first-run activation checklist walks a new agent to the first approved dra
   await expect(page.locator(".getstart-chip")).toBeVisible();
   await page.locator(".getstart-chip").click();
   await expect(checklist).toBeVisible();
+});
+
+test("weekly report renders with actionable next moves", async ({ page }) => {
+  // The session fetch fires from a useEffect, so its response proves React is
+  // hydrated and nav clicks will register (an SSR input is "editable" earlier).
+  const sessionReady = page.waitForResponse(
+    (response) => response.url().includes("/api/auth/session"),
+    { timeout: COLD_API_TIMEOUT },
+  );
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await sessionReady;
+  await page.locator('nav button[title="Weekly Report"]').click();
+  await expect(
+    page.getByRole("heading", { name: "Weekly Intelligence Report" })
+  ).toBeVisible({ timeout: COLD_API_TIMEOUT });
 });
 
 test("legal pages render publicly for OAuth verification", async ({ page }) => {

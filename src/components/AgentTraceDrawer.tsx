@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { AgentTrace } from "@/lib/core/types";
+import { humanizeToken } from "@/lib/design/labels";
 import { apiGet, GradeChip } from "./ui";
 
 export function AgentTraceDrawer({
@@ -35,13 +36,13 @@ export function AgentTraceDrawer({
           <>
             <div className="tline">
               <span className="tk">Trigger</span>
-              <span className="tv">{trace.trigger}</span>
+              <span className="tv">{humanizeToken(trace.trigger)}</span>
             </div>
             {trace.situation && (
               <div className="tline">
                 <span className="tk">Situation</span>
                 <span className="tv">
-                  {trace.situation}
+                  {humanizeToken(trace.situation)}
                   {trace.situationConfidence != null && (
                     <> · confidence {trace.situationConfidence.toFixed(2)}</>
                   )}
@@ -94,7 +95,7 @@ export function AgentTraceDrawer({
               <span className="tv">
                 {trace.policy.map((p, i) => (
                   <div key={i} className={p.result === "pass" ? "ok" : "fail"}>
-                    {p.name}: {p.result}
+                    {humanizeToken(p.name)}: {p.result}
                   </div>
                 ))}
               </span>
@@ -103,9 +104,9 @@ export function AgentTraceDrawer({
               <span className="tk">Connector</span>
               <span className="tv">
                 {trace.connector
-                  ? `${trace.connector.provider} · ${trace.connector.action} · ${
+                  ? `${humanizeToken(trace.connector.provider)} · ${humanizeToken(trace.connector.action)} · ${
                       trace.connector.sent ? "written" : "draft created, not sent"
-                    } · key ${trace.connector.idempotencyKey}`
+                    } · write-once key ${trace.connector.idempotencyKey}`
                   : "not yet dispatched (awaiting approval)"}
               </span>
             </div>
