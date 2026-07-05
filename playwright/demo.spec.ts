@@ -136,6 +136,8 @@ test("first-run activation checklist walks a new agent to the first approved dra
 
 test("weekly report renders with actionable next moves", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  // Wait for hydration before clicking — a pre-hydration click is dropped.
+  await expect(page.locator("#search-input")).toBeEditable({ timeout: COLD_API_TIMEOUT });
   await page.locator('nav button[title="Weekly Report"]').click();
   await expect(
     page.getByRole("heading", { name: "Weekly Intelligence Report" })
