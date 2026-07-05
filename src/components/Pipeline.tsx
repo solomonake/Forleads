@@ -179,17 +179,35 @@ export function Pipeline({
                 </div>
                 {colLeads.map((lead) => {
                   const next = NEXT_MOVE[lead.status];
+                  const openOnMap = () => {
+                    window.dispatchEvent(
+                      new CustomEvent("forleads:open-lead", {
+                        detail: {
+                          address: lead.address,
+                          locality: lead.locality,
+                          lng: lead.lng,
+                          lat: lead.lat,
+                        },
+                      })
+                    );
+                    onNavigate("map");
+                  };
                   return (
                     <div
                       className="kcard"
                       key={lead.id}
                       style={{ borderLeftColor: statusColor[lead.status] ?? "var(--st-new)" }}
                     >
-                      <div className="ka">{lead.address}</div>
+                      <button className="ka ka-link" onClick={openOnMap} title="Open this lead on the map">
+                        {lead.address}
+                      </button>
                       <div className="km">{lead.locality ?? lead.h3_index}</div>
                       <div className="kvalue">{next.value}</div>
                       <div className="kmeta">{next.detail}</div>
                       <div className="kactions">
+                        <button className="minibtn" onClick={openOnMap}>
+                          View on map
+                        </button>
                         <button className="minibtn" onClick={() => onNavigate(next.view)}>
                           {next.cta}
                         </button>

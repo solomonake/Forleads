@@ -9,6 +9,7 @@ import { WeeklyReport } from "@/components/WeeklyReport";
 import { Pipeline } from "@/components/Pipeline";
 import { AgentTraceDrawer } from "@/components/AgentTraceDrawer";
 import { AccountBar } from "@/components/AccountBar";
+import { GettingStarted } from "@/components/GettingStarted";
 
 type View = "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline";
 
@@ -51,10 +52,11 @@ export default function Page() {
         <MapWorkspace onOpenTrace={setTraceRef} onNavigate={setView} />
         <AccountBar />
         {view === "inbox" && <ActionInbox onOpenTrace={setTraceRef} />}
-        {view === "loops" && <LoopStudio />}
+        {view === "loops" && <LoopStudio onNavigate={setView} />}
         {view === "pipeline" && <Pipeline onNavigate={setView} />}
         {view === "connectors" && <ConnectorHub />}
         {view === "report" && <WeeklyReport />}
+        <GettingStarted view={view} onNavigate={setView} />
       </div>
 
       <AgentTraceDrawer traceRef={traceRef} onClose={() => setTraceRef(null)} />

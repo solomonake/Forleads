@@ -303,6 +303,29 @@ export function MapWorkspace({
     [makeBeacon, pulseToast, reduceMotion]
   );
 
+  // Other surfaces (Pipeline cards, the getting-started checklist) can ask
+  // the always-mounted map to open a lead via a window event.
+  useEffect(() => {
+    const onOpenLead = (event: Event) => {
+      const detail = (event as CustomEvent<Partial<GeoResult>>).detail;
+      if (
+        !detail ||
+        typeof detail.address !== "string" ||
+        !Number.isFinite(detail.lng) ||
+        !Number.isFinite(detail.lat)
+      )
+        return;
+      goTo({
+        address: detail.address,
+        locality: detail.locality,
+        lng: detail.lng as number,
+        lat: detail.lat as number,
+      });
+    };
+    window.addEventListener("forleads:open-lead", onOpenLead);
+    return () => window.removeEventListener("forleads:open-lead", onOpenLead);
+  }, [goTo]);
+
   // ---- Note → next-best-action -------------------------------------------
   const submitNote = useCallback(
     async (text: string) => {
@@ -479,6 +502,11 @@ export function MapWorkspace({
                 <div className="launch-step-copy">Draft first, review second, then move the lead through pipeline.</div>
               </div>
             </div>
+          </div>
+          <div className="launch-legal">
+            <a href="/privacy">Privacy Policy</a>
+            <span aria-hidden="true">·</span>
+            <a href="/terms">Terms of Service</a>
           </div>
         </div>
       )}

@@ -100,6 +100,10 @@ export function AccountBar() {
           <button className="ap-logout" onClick={logout}>
             Sign out
           </button>
+          <div className="ap-legal">
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
+          </div>
         </div>
       )}
 

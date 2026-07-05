@@ -1,22 +1,22 @@
 # Current agent checkpoint
 
-Generated: 2026-07-04T05:51:11.488Z
+Generated: 2026-07-05T03:55:14.869Z
 
 ## State
-- Branch: `codex/scheduled-loop-runner`
-- Commit: `b05e9a5c034b`
+- Branch: `claude/wonderful-mccarthy-4bc2b0`
+- Commit: `336b21066174`
 - Worktree: clean
 - Changed files:
   - none
 
 ## Goal
-Per-tenant connector hub complete; awaiting user Gmail-draft proof
+First-run activation sprint shipped as PR #37
 
 ## Completed
-Commit A: per-tenant credentials + FUB/GHL/Twilio pilot + Connector Hub redesign shipped (d0920f3, CI green). Commit C: Microsoft 365 OAuth (Outlook drafts + Calendar events) shipped (b05e9a5, CI green). 52 files/220 tests, coverage steady. New pattern: modern AI-app connector hub — Not connected/Connected as X + Connect/Test/Disconnect, per-tenant encrypted credential rows, connectorForAction routes by artifact.agent_id + prefers connected identity (Google or Microsoft) with tenant-owned CRM/SMS keys.
+none
 
 ## Next exact action
-User to (1) test Gmail draft path on preview URL (proves OAuth token path end-to-end), (2) connect FUB or other real cred in the new hub, (3) merge to main once verified. Then first real-estate agent onboarding.
+User: watch PR #37 demo video, merge, then run Google OAuth verification (console steps in PR body)
 
 ## Blockers
 none
