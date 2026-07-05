@@ -33,6 +33,9 @@ function scheduleLine(summary?: LoopObservability) {
   if (summary.state === "due_now") {
     return `${plural(summary.dueNow, "lead")} due now across ${plural(summary.trackedLeads, "tracked lead")}.`;
   }
+  if (summary.trackedLeads === 0) {
+    return "No tracked leads yet — ground a lead and this cadence starts on its own.";
+  }
   return `Next due ${formatWhen(summary.nextDueAt)} across ${plural(summary.trackedLeads, "tracked lead")}.`;
 }
 
