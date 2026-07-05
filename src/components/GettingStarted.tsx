@@ -50,11 +50,18 @@ export function GettingStarted({
   const [loaded, setLoaded] = useState(false);
   const [dismissed, setDismissed] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
+  // On work surfaces (Pipeline, Inbox, …) the full card would cover real
+  // content, so it renders as the chip there unless explicitly expanded.
+  const [expandedHere, setExpandedHere] = useState(false);
 
   useEffect(() => {
     setDismissed(readFlag(DISMISS_KEY));
     setCollapsed(readFlag(COLLAPSE_KEY));
   }, []);
+
+  useEffect(() => {
+    setExpandedHere(false);
+  }, [view]);
 
   const refresh = useCallback(async () => {
     const [session, leadData, inboxData] = await Promise.all([
@@ -174,13 +181,19 @@ export function GettingStarted({
 
   if (!loaded || dismissed) return null;
 
-  if (collapsed) {
+  const showCard = view === "map" ? !collapsed : expandedHere;
+
+  if (!showCard) {
     return (
       <button
         className="getstart-chip"
         onClick={() => {
-          setCollapsed(false);
-          writeFlag(COLLAPSE_KEY, false);
+          if (view === "map") {
+            setCollapsed(false);
+            writeFlag(COLLAPSE_KEY, false);
+          } else {
+            setExpandedHere(true);
+          }
           refresh();
         }}
       >
@@ -203,8 +216,12 @@ export function GettingStarted({
             className="getstart-min"
             title="Minimize"
             onClick={() => {
-              setCollapsed(true);
-              writeFlag(COLLAPSE_KEY, true);
+              if (view === "map") {
+                setCollapsed(true);
+                writeFlag(COLLAPSE_KEY, true);
+              } else {
+                setExpandedHere(false);
+              }
             }}
           >
             —
