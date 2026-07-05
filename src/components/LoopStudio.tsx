@@ -32,7 +32,19 @@ function scheduleLine(summary?: LoopObservability) {
   return `Next due ${formatWhen(summary.nextDueAt)} across ${plural(summary.trackedLeads, "tracked lead")}.`;
 }
 
-export function LoopStudio() {
+interface RunResult {
+  loopId: string;
+  runId: string;
+  status: string;
+  artifactCount: number;
+  leadLabel: string;
+}
+
+export function LoopStudio({
+  onNavigate,
+}: {
+  onNavigate: (view: "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline") => void;
+}) {
   const [defs, setDefs] = useState<LoopDefinition[]>([]);
   const [runs, setRuns] = useState<LoopRun[]>([]);
   const [leads, setLeads] = useState<LeadSurface[]>([]);
@@ -42,6 +54,7 @@ export function LoopStudio() {
   const [observability, setObservability] = useState<Record<string, LoopObservability>>({});
   const [leadLabelMap, setLeadLabelMap] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
+  const [lastRun, setLastRun] = useState<RunResult | null>(null);
 
   const load = useCallback(async () => {
     const [d, l] = await Promise.all([
@@ -76,12 +89,18 @@ export function LoopStudio() {
     }
     try {
       const d = await apiPost<{ run: LoopRun }>("/api/loops", { loopId, leadId: lead.id });
-      setMsg(`Ran "${loopId}" → status: ${d.run.status} (${d.run.artifact_ids.length} artifact(s)). See Action Inbox.`);
+      setLastRun({
+        loopId,
+        runId: d.run.id,
+        status: d.run.status,
+        artifactCount: d.run.artifact_ids.length,
+        leadLabel: lead.address,
+      });
       await load();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
+      setTimeout(() => setMsg(null), 4000);
     }
-    setTimeout(() => setMsg(null), 4000);
   };
 
   return (
@@ -98,6 +117,32 @@ export function LoopStudio() {
         <div><b>4</b><span>Human gate: Action Inbox approval before writes</span></div>
       </div>
       {msg && <div className="row" style={{ marginBottom: 14 }}>{msg}</div>}
+      {lastRun && (
+        <div className="run-banner" role="status">
+          <div>
+            <div className="run-banner-title">
+              {lastRun.status === "produced_artifact"
+                ? `Loop ran — ${lastRun.artifactCount} draft${lastRun.artifactCount === 1 ? "" : "s"} prepared for ${lastRun.leadLabel}.`
+                : lastRun.status === "blocked_compliance"
+                  ? `Loop ran for ${lastRun.leadLabel} — blocked by a compliance guardrail. Details in the run trace below.`
+                  : `Loop ran for ${lastRun.leadLabel} — ${lastRun.status.replaceAll("_", " ")}. Details in the run trace below.`}
+            </div>
+            <div className="run-banner-sub">
+              Nothing leaves Forleads until you approve it in the Action Inbox.
+            </div>
+          </div>
+          <div className="run-banner-actions">
+            {lastRun.artifactCount > 0 && (
+              <button className="minibtn primary" onClick={() => onNavigate("inbox")}>
+                Review in Action Inbox
+              </button>
+            )}
+            <button className="minibtn" onClick={() => setLastRun(null)}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
       <label className="row" style={{ display: "block", marginBottom: 14 }}>
         <span className="rmeta">Lead used by “Run now”</span>
         <select
@@ -188,7 +233,7 @@ export function LoopStudio() {
           </div>
         )}
         {runs.slice(0, 12).map((r) => (
-          <div className="row" key={r.id}>
+          <div className={`row ${lastRun?.runId === r.id ? "row-fresh" : ""}`} key={r.id}>
             <div className="rtitle">
               <span>{r.loop_definition_id}</span>
               <span className={`pill-status ${r.status === "produced_artifact" ? "pill-live" : r.status === "blocked_compliance" ? "pill-blocked" : "pill-mock"}`}>

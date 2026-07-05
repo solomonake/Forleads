@@ -78,9 +78,51 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
 
   // ReviewTray opens with the compliant draft.
   await expect(page.locator(".overlay .draft")).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(1200);
+
+  // Close the tray, then walk the new activation surfaces.
+  await page.locator(".overlay").click({ position: { x: 8, y: 8 } });
+
+  // Loop Studio: Run now produces a persistent, actionable result banner.
+  await page.locator('nav button[title="Loop Studio"]').click();
+  const runNowBtn = page.locator(".ractions .minibtn.primary", { hasText: "Run now" }).first();
+  await expect(runNowBtn).toBeVisible({ timeout: 30_000 });
+  await runNowBtn.click();
+  await expect(page.locator(".run-banner")).toBeVisible({ timeout: COLD_API_TIMEOUT });
+  await page.waitForTimeout(1200);
+
+  // Pipeline: the card's address clicks through to the lead on the map.
+  await page.locator('nav button[title="Pipeline"]').click();
+  const cardLink = page.locator(".kcard .ka-link").first();
+  await expect(cardLink).toBeVisible({ timeout: 30_000 });
+  await cardLink.click();
+  await expect(page.locator("#lead.open")).toBeVisible({ timeout: 30_000 });
 
   // Hold a beat so the recording captures the final frame.
   await page.waitForTimeout(1500);
+});
+
+test("first-run activation checklist walks a new agent to the first approved draft", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  const checklist = page.getByRole("region", { name: "Getting started checklist" });
+  await expect(checklist).toBeVisible({ timeout: COLD_API_TIMEOUT });
+  await expect(checklist.getByText("Connect Google")).toBeVisible();
+  await expect(checklist.getByText("Ground your first address")).toBeVisible();
+  await expect(checklist.getByText("Add a contact")).toBeVisible();
+  await expect(checklist.getByText("Approve your first draft")).toBeVisible();
+  // Minimize → progress chip, restore, and permanent dismiss all work.
+  await page.locator('.getstart-min[title="Minimize"]').click();
+  await expect(page.locator(".getstart-chip")).toBeVisible();
+  await page.locator(".getstart-chip").click();
+  await expect(checklist).toBeVisible();
+});
+
+test("legal pages render publicly for OAuth verification", async ({ page }) => {
+  await page.goto("/privacy", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "Privacy Policy" })).toBeVisible();
+  await expect(page.getByText("Limited Use requirements")).toBeVisible();
+  await page.goto("/terms", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "Terms of Service" })).toBeVisible();
 });
 
 test("core shell remains keyboard reachable and mobile-safe", async ({ page }) => {
