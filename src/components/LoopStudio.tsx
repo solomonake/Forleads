@@ -143,14 +143,15 @@ export function LoopStudio({
     <div className="panel">
       <h1>Loop Studio</h1>
       <div className="sub">
-        Follow-up loop workbench: choose the lead, prepare the next free action, inspect the trace,
-        and approve only the work that should leave Forleads.
+        Follow-up autopilot: after you approve an outreach email, these loops watch for silence,
+        prepare the bump, and draft the response the moment you log a reply — you approve
+        everything before it leaves Forleads.
       </div>
       <div className="loop-flow">
-        <div><b>1</b><span>Trigger: field note, stale lead, or manual run</span></div>
+        <div><b>1</b><span>Watch: approved outreach, field notes, stale leads, logged replies</span></div>
         <div><b>2</b><span>Guardrail: opt-outs, evidence, and compliance</span></div>
-        <div><b>3</b><span>Prepare: Gmail draft, task, import request, or webhook job</span></div>
-        <div><b>4</b><span>Human gate: Action Inbox approval before writes</span></div>
+        <div><b>3</b><span>Prepare: the bump or response draft, task, or calendar hold</span></div>
+        <div><b>4</b><span>Human gate: you approve in the Action Inbox, then hit send in Gmail</span></div>
       </div>
       {msg && <div className="row" style={{ marginBottom: 14 }}>{msg}</div>}
       {awaySummary && (

@@ -115,10 +115,12 @@ export async function runScheduledLoops(
   summary.scannedAgents = agents.length;
 
   for (const agent of agents) {
-    const [definitions, leads, runs] = await Promise.all([
+    const [definitions, leads, runs, artifacts, events] = await Promise.all([
       repo.listLoopDefs(agent.id),
       repo.listLeads(agent.id),
       repo.listLoopRuns(agent.id),
+      repo.listArtifacts(agent.id),
+      repo.listEvents(agent.id),
     ]);
     const scheduledDefinitions = definitions.filter(
       (definition) => definition.active && Boolean(definition.cadence?.everyDays),
@@ -167,6 +169,8 @@ export async function runScheduledLoops(
               evidence,
               triggerSource: `cron:${utcDayKey(now)}`,
               now,
+              artifacts,
+              events,
             },
             { runId },
           );

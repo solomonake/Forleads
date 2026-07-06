@@ -153,3 +153,79 @@ describe("draft state transitions + human gate", () => {
     expect(trace!.policy.some((p) => p.name === "fair_housing")).toBe(true);
   });
 });
+
+describe("awaiting_reply_days condition (reply-watch bump)", () => {
+  const bumpDef = (agentId: string) => ({
+    id: "loop-test-reply-watch",
+    agent_id: agentId,
+    name: "Reply watch · bump",
+    description: "test",
+    trigger: { event: "task.due" as const, match: { kind: "reply_check" } },
+    conditions: [{ kind: "awaiting_reply_days" as const, value: 3 }],
+    actions: [{ type: "email" as const, template: "reply_bump", requiresApproval: true }],
+    cadence: { everyDays: 2 },
+    active: true,
+    created_at: new Date().toISOString(),
+  });
+
+  it("skips when there is no approved outbound email to chase", async () => {
+    const lead = await groundedLeadWithEmail("40 Bump Court", -122.41, 37.77);
+    const run = await runLoop(bumpDef(lead.agent_id), {
+      lead,
+      evidence: [],
+      triggerSource: "test",
+      artifacts: [],
+      events: [],
+    });
+    expect(run.status).toBe("skipped_condition");
+    expect(run.planner_trace.some((s) => s.detail.includes("No approved outbound email"))).toBe(true);
+  });
+
+  it("prepares a bump when an approved email is old with no reply, and stands down once a reply is logged", async () => {
+    const repo = await getRepo();
+    const lead = await groundedLeadWithEmail("41 Bump Court", -122.412, 37.771);
+    const evidence = await repo.listEvidence(lead.id);
+    const drafted = await draftArtifact({
+      agent: DEMO_AGENT,
+      lead,
+      situation: "no_contact",
+      situationConfidence: 0.9,
+      actionType: "email",
+      evidence,
+      trigger: "test",
+    });
+    await approveArtifact(drafted.id, drafted.revision);
+    const approved = (await repo.getArtifact(drafted.id))!;
+    const fourDaysAgo = new Date(Date.now() - 4 * 86400000).toISOString();
+    const staleApproved = { ...approved, approved_at: fourDaysAgo, updated_at: fourDaysAgo };
+
+    const due = await runLoop(bumpDef(lead.agent_id), {
+      lead,
+      evidence,
+      triggerSource: "test",
+      artifacts: [staleApproved],
+      events: [],
+    });
+    expect(due.status).toBe("produced_artifact");
+
+    const afterReply = await runLoop(bumpDef(lead.agent_id), {
+      lead,
+      evidence,
+      triggerSource: "test",
+      artifacts: [staleApproved],
+      events: [
+        {
+          id: "evt-1",
+          agent_id: lead.agent_id,
+          lead_surface_id: lead.id,
+          type: "email.reply" as const,
+          payload: {},
+          source: "operator",
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+    expect(afterReply.status).toBe("skipped_condition");
+    expect(afterReply.planner_trace.some((s) => s.detail.includes("reply is already logged"))).toBe(true);
+  });
+});
