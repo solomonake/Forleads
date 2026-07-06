@@ -91,6 +91,9 @@ export function MapWorkspace({
         container: mapDiv.current,
         center: [10, 30],
         zoom: 2.2,
+        // Tiles top out at z19; without a cap the map renders blank "data not
+        // yet available" squares when the operator zooms past the imagery.
+        maxZoom: 19.4,
         pitch: 0,
         attributionControl: { compact: true },
         style: {
@@ -99,6 +102,7 @@ export function MapWorkspace({
             carto: {
               type: "raster",
               tileSize: 256,
+              maxzoom: 19,
               tiles: [
                 "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
                 "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
@@ -110,6 +114,7 @@ export function MapWorkspace({
             sat: {
               type: "raster",
               tileSize: 256,
+              maxzoom: 19,
               tiles: [
                 "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
               ],

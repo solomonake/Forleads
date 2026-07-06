@@ -81,5 +81,38 @@ export function defaultLoops(agentId: string, nowISO: string): LoopDefinition[] 
       created_at: nowISO,
       stats: { runs: 0, approved: 0, replies: 0, blocked: 0 },
     },
+    {
+      id: workspaceSeedId(agentId, "loop-reply-watch"),
+      agent_id: agentId,
+      name: "Reply watch · bump",
+      description:
+        "After you approve an outreach email, this watches for silence: no reply logged within a few days → a gentle bump draft lands in the Action Inbox.",
+      trigger: { event: "task.due", match: { kind: "reply_check" } },
+      conditions: [
+        { kind: "has_contact_channel" },
+        { kind: "awaiting_reply_days", value: 3 },
+        { kind: "status_not_in", value: ["won", "dead"] },
+        { kind: "not_opted_out" },
+      ],
+      actions: [{ type: "email", template: "reply_bump", requiresApproval: true }],
+      cadence: { everyDays: 2, reportDay: "Friday" },
+      active: true,
+      created_at: nowISO,
+      stats: { runs: 0, approved: 0, replies: 0, blocked: 0 },
+    },
+    {
+      id: workspaceSeedId(agentId, "loop-reply-response"),
+      agent_id: agentId,
+      name: "Reply arrived · response draft",
+      description:
+        "The moment you log a reply, this drafts the response and drops it in the Action Inbox — you just review and hit send in Gmail.",
+      trigger: { event: "email.reply" },
+      conditions: [{ kind: "not_opted_out" }],
+      actions: [{ type: "email", template: "reply_response", requiresApproval: true }],
+      cadence: { reportDay: "Friday" },
+      active: true,
+      created_at: nowISO,
+      stats: { runs: 0, approved: 0, replies: 0, blocked: 0 },
+    },
   ];
 }

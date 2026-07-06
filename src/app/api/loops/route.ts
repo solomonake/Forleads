@@ -36,14 +36,23 @@ export const POST = withRoute("loops.run", async (req: NextRequest) => {
   const repo = await getRepo();
   const def = await repo.getLoopDef(body.loopId);
   const lead = await repo.getLead(body.leadId);
-  if (!def || !lead) return NextResponse.json({ error: "loop or lead not found" }, { status: 404 });
-  const evidence = await repo.listEvidence(body.leadId);
+  // Tenant scope both lookups — same "not found" for missing and cross-tenant.
+  if (!def || !lead || def.agent_id !== agentId || lead.agent_id !== agentId) {
+    return NextResponse.json({ error: "loop or lead not found" }, { status: 404 });
+  }
+  const [evidence, artifacts, events] = await Promise.all([
+    repo.listEvidence(body.leadId),
+    repo.listArtifacts(agentId),
+    repo.listEvents(agentId),
+  ]);
   const run = await runLoop(def, {
     lead,
     situation: body.situation ?? "no_contact",
     situationConfidence: 0.9,
     evidence,
     triggerSource: "manual",
+    artifacts,
+    events,
   });
   return NextResponse.json({ run });
 });

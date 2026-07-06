@@ -69,10 +69,28 @@ function envUrls(...keys: string[]): string[] {
 
 function normalizeUrlList(value: string | string[] | undefined): string[] {
   if (!value) return [];
-  return (Array.isArray(value) ? value : [value])
+  const entries = (Array.isArray(value) ? value : [value])
     .flatMap((entry) => entry.split(","))
     .map((entry) => entry.trim())
     .filter(Boolean);
+  // Placeholder strings ("<your public sales CSV/JSON URL>") in env vars made
+  // the hub report a source as configured while every fetch failed. Only
+  // parseable http(s) URLs count; anything else is logged and dropped so the
+  // hub falls back to an honest "setup required".
+  const valid: string[] = [];
+  for (const entry of entries) {
+    try {
+      const parsed = new URL(entry);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        valid.push(entry);
+        continue;
+      }
+      throw new Error(`unsupported protocol ${parsed.protocol}`);
+    } catch {
+      log("warn", "provider.url.invalid", { entry: entry.slice(0, 120) });
+    }
+  }
+  return valid;
 }
 
 function normalizeAddress(value: string): string {

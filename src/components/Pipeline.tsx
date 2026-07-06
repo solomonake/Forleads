@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { LeadStatus, LeadSurface } from "@/lib/core/types";
 import { statusColor } from "@/lib/design/tokens";
-import { apiGet } from "./ui";
+import { apiGet, apiPatch } from "./ui";
 
 const COLUMNS: { status: LeadStatus; label: string }[] = [
   { status: "new", label: "New" },
@@ -68,10 +68,38 @@ export function Pipeline({
   onNavigate: (view: "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline") => void;
 }) {
   const [leads, setLeads] = useState<LeadSurface[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [undo, setUndo] = useState<{ lead: LeadSurface; prior: LeadSurface["status"] } | null>(null);
 
   useEffect(() => {
-    apiGet<{ leads: LeadSurface[] }>("/api/leads").then((d) => setLeads(d.leads));
+    apiGet<{ leads: LeadSurface[] }>("/api/leads")
+      .then((d) => setLeads(d.leads))
+      .catch(() => setNotice("Couldn't load leads right now — reload to try again."));
   }, []);
+
+  const setStatus = async (lead: LeadSurface, status: LeadSurface["status"]) => {
+    const prior = lead.status;
+    // Optimistic move; revert on failure with an honest message.
+    setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, status } : l)));
+    try {
+      await apiPatch<{ lead: LeadSurface }>(`/api/lead/${encodeURIComponent(lead.id)}/status`, {
+        status,
+      });
+      if (status === "dead") {
+        setUndo({ lead, prior });
+        setNotice(null);
+      } else {
+        setUndo(null);
+      }
+    } catch (e) {
+      setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, status: prior } : l)));
+      setNotice(
+        e instanceof Error && /authentication/i.test(e.message)
+          ? "Sign in to change lead stages."
+          : `Couldn't update ${lead.address} — ${e instanceof Error ? e.message : "try again"}.`
+      );
+    }
+  };
 
   const stats = useMemo(
     () => ({
@@ -118,6 +146,29 @@ export function Pipeline({
           </button>
         </div>
       </div>
+
+      {notice && <div className="row notice-row" style={{ marginBottom: 12 }}>{notice}</div>}
+      {undo && (
+        <div className="run-banner" role="status" style={{ marginBottom: 14 }}>
+          <div className="run-banner-title">
+            {undo.lead.address} archived — it&apos;s out of the board but nothing was deleted.
+          </div>
+          <div className="run-banner-actions">
+            <button
+              className="minibtn primary"
+              onClick={() => {
+                setStatus(undo.lead, undo.prior);
+                setUndo(null);
+              }}
+            >
+              Undo
+            </button>
+            <button className="minibtn" onClick={() => setUndo(null)}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="pipeline-stats">
         <div className="pipeline-stat">
@@ -201,6 +252,14 @@ export function Pipeline({
                       key={lead.id}
                       style={{ borderLeftColor: statusColor[lead.status] ?? "var(--st-new)" }}
                     >
+                      <button
+                        className="kcard-x"
+                        title="Archive this lead (undo available)"
+                        aria-label={`Archive ${lead.address}`}
+                        onClick={() => setStatus(lead, "dead")}
+                      >
+                        ✕
+                      </button>
                       <button className="ka ka-link" onClick={openOnMap} title="Open this lead on the map">
                         {lead.address}
                       </button>

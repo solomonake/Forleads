@@ -8,6 +8,7 @@
 import { nowISO, uuid } from "@/lib/core/ids";
 import type {
   Artifact,
+  DomainEvent,
   EvidenceCard,
   LeadSurface,
   LoopCondition,
@@ -27,6 +28,10 @@ export interface LoopContext {
   evidence: EvidenceCard[];
   triggerSource: string;
   now?: Date;
+  // Workspace-scoped history for reply-aware conditions. Callers pass the
+  // full agent lists; conditions filter by ctx.lead themselves.
+  artifacts?: Artifact[];
+  events?: DomainEvent[];
 }
 
 function evalCondition(c: LoopCondition, ctx: LoopContext): { pass: boolean; detail: string } {
@@ -59,6 +64,39 @@ function evalCondition(c: LoopCondition, ctx: LoopContext): { pass: boolean; det
       const ageDays = ((ctx.now?.getTime() ?? Date.now()) - last) / 86400000;
       const ok = ageDays >= days;
       return { pass: ok, detail: `Last worked ${ageDays.toFixed(1)}d ago (threshold ${days}d).` };
+    }
+    case "awaiting_reply_days": {
+      const days = (c.value as number) ?? 3;
+      const outbound = (ctx.artifacts ?? [])
+        .filter(
+          (a) =>
+            a.lead_surface_id === ctx.lead.id &&
+            a.type === "email" &&
+            (a.status === "approved" || a.status === "sent"),
+        )
+        .sort((a, b) =>
+          (b.approved_at ?? b.updated_at).localeCompare(a.approved_at ?? a.updated_at),
+        )[0];
+      if (!outbound) {
+        return { pass: false, detail: "No approved outbound email yet — nothing to chase." };
+      }
+      const sentAt = outbound.approved_at ?? outbound.updated_at;
+      const replied = (ctx.events ?? []).some(
+        (e) =>
+          e.lead_surface_id === ctx.lead.id &&
+          e.type === "email.reply" &&
+          e.created_at > sentAt,
+      );
+      if (replied) {
+        return { pass: false, detail: "A reply is already logged — no bump needed." };
+      }
+      const ageDays =
+        ((ctx.now?.getTime() ?? Date.now()) - new Date(sentAt).getTime()) / 86400000;
+      const ok = ageDays >= days;
+      return {
+        pass: ok,
+        detail: `Approved email went out ${ageDays.toFixed(1)}d ago (bump threshold ${days}d), no reply logged.`,
+      };
     }
     default:
       return { pass: true, detail: "Unknown condition — defaulting to pass." };

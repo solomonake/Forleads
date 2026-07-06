@@ -13,13 +13,15 @@ import { GettingStarted } from "@/components/GettingStarted";
 
 type View = "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline";
 
-const NAV: { key: View; icon: string; label: string }[] = [
-  { key: "map", icon: "🗺", label: "Map (home)" },
-  { key: "inbox", icon: "✉", label: "Action Inbox" },
-  { key: "loops", icon: "🔁", label: "Loop Studio" },
-  { key: "pipeline", icon: "▦", label: "Pipeline" },
-  { key: "connectors", icon: "🔌", label: "Connector Hub" },
-  { key: "report", icon: "📊", label: "Weekly Report" },
+// `label` renders under the icon; `title` keeps the full name for tooltips
+// and for stable test selectors.
+const NAV: { key: View; icon: string; label: string; title: string }[] = [
+  { key: "map", icon: "🗺", label: "Map", title: "Map (home)" },
+  { key: "inbox", icon: "✉", label: "Inbox", title: "Action Inbox" },
+  { key: "loops", icon: "🔁", label: "Loops", title: "Loop Studio" },
+  { key: "pipeline", icon: "▦", label: "Pipeline", title: "Pipeline" },
+  { key: "connectors", icon: "🔌", label: "Connect", title: "Connector Hub" },
+  { key: "report", icon: "📊", label: "Report", title: "Weekly Report" },
 ];
 
 export default function Page() {
@@ -39,7 +41,7 @@ export default function Page() {
             key={n.key}
             className={`navbtn ${view === n.key ? "on" : ""}`}
             onClick={() => setView(n.key)}
-            title={n.label}
+            title={n.title}
           >
             {n.icon}
             <span className="nlabel">{n.label}</span>

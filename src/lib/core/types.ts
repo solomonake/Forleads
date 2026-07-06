@@ -415,7 +415,10 @@ export interface LoopCondition {
     | "status_not_in"
     | "no_activity_days"
     | "status_in"
-    | "has_evidence";
+    | "has_evidence"
+    // True when an approved outbound email is ≥ N days old with no
+    // email.reply event logged after it — the reply-watch bump signal.
+    | "awaiting_reply_days";
   value?: unknown;
 }
 

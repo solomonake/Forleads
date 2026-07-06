@@ -775,10 +775,13 @@ export interface RejectResult {
 export async function rejectArtifact(
   artifactId: string,
   reason?: string,
+  opts?: { agentId?: string },
 ): Promise<RejectResult | null> {
   const repo = await getRepo();
   const artifact = await repo.getArtifact(artifactId);
   if (!artifact) return null;
+  // Tenant scope: same "not found" for missing and cross-tenant.
+  if (opts?.agentId && artifact.agent_id !== opts.agentId) return null;
   // Idempotent: rejecting an already-cancelled artifact is a no-op.
   if (artifact.status === "cancelled") return { artifact };
 

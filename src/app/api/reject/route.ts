@@ -2,7 +2,7 @@
 // cancelled and writes an outcome memory so the composer can learn that this
 // kind of message wasn't right for this lead. Idempotent.
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth/session";
+import { ensureCurrentAgent } from "@/lib/auth/agent";
 import { withRoute } from "@/lib/observability";
 import { optStr, str, validateBody } from "@/lib/validation";
 import { rejectArtifact } from "@/lib/pipeline";
@@ -13,12 +13,15 @@ export const POST = withRoute("reject", async (req: NextRequest) => {
     reason: optStr(b, "reason", { max: 2000 }),
   }));
 
-  // Reject is a state-changing per-agent action — authenticate.
-  if (!getSession()) {
+  // Reject is a state-changing per-agent action — same demo-aware auth policy
+  // as approve. (The old `if (!getSession())` never fired: getSession is
+  // async, so the un-awaited promise was always truthy.)
+  const agentId = await ensureCurrentAgent();
+  if (!agentId) {
     return NextResponse.json({ error: "authentication required" }, { status: 401 });
   }
 
-  const result = await rejectArtifact(body.artifactId, body.reason);
+  const result = await rejectArtifact(body.artifactId, body.reason, { agentId });
   if (!result) return NextResponse.json({ error: "artifact not found" }, { status: 404 });
 
   return NextResponse.json({

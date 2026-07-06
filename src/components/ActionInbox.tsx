@@ -61,6 +61,51 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
     setTimeout(() => setMsg(null), 3000);
   };
 
+  const dismiss = async (artifact: Artifact) => {
+    try {
+      await apiPost("/api/reject", {
+        artifactId: artifact.id,
+        reason: "Dismissed from the inbox",
+      });
+      setMsg("Dismissed — kept in the audit trail as cancelled.");
+      await load();
+    } catch (e) {
+      setMsg(
+        e instanceof ApiError && e.status === 401
+          ? "Sign in to dismiss items."
+          : e instanceof Error
+            ? e.message
+            : String(e)
+      );
+    }
+    setTimeout(() => setMsg(null), 3000);
+  };
+
+  const logReply = async (artifact: Artifact) => {
+    if (!artifact.lead_surface_id) return;
+    try {
+      const d = await apiPost<{ preparedCount: number }>(
+        `/api/lead/${encodeURIComponent(artifact.lead_surface_id)}/reply`,
+        {}
+      );
+      setMsg(
+        d.preparedCount > 0
+          ? `Reply logged — ${d.preparedCount} response draft${d.preparedCount === 1 ? "" : "s"} prepared below. Review, then hit send in Gmail.`
+          : "Reply logged — follow-up loops will stop chasing this lead."
+      );
+      await load();
+    } catch (e) {
+      setMsg(
+        e instanceof ApiError && e.status === 401
+          ? "Sign in to log replies."
+          : e instanceof Error
+            ? e.message
+            : String(e)
+      );
+    }
+    setTimeout(() => setMsg(null), 5000);
+  };
+
   const active = TABS.find((t) => t.key === tab)!;
   const filtered = items.filter((i) => active.match(i.artifact));
 
@@ -129,6 +174,17 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
                     Why this exists
                   </button>
                 )}
+                {artifact.type === "email" &&
+                  (artifact.status === "approved" || artifact.status === "sent") &&
+                  artifact.lead_surface_id && (
+                    <button
+                      className="minibtn"
+                      title="They answered your email — Forleads drafts the response for your approval"
+                      onClick={() => logReply(artifact)}
+                    >
+                      They replied
+                    </button>
+                  )}
                 {artifact.external_draft_ref?.url && (
                   <a className="minibtn" href={artifact.external_draft_ref.url} target="_blank" rel="noreferrer">
                     Open in {artifact.external_draft_ref.provider}
@@ -140,6 +196,16 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
                   </button>
                 )}
                 {blocked && <button className="minibtn danger">Fix required</button>}
+                {(artifact.status === "drafted" || artifact.status === "blocked") && (
+                  <button
+                    className="minibtn"
+                    title="Dismiss — marks this item cancelled, nothing is sent"
+                    aria-label="Dismiss this item"
+                    onClick={() => dismiss(artifact)}
+                  >
+                    ✕ Dismiss
+                  </button>
+                )}
               </div>
             </div>
           );

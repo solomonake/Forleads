@@ -102,7 +102,7 @@ describe("ensureCurrentAgent", () => {
     expect(row).not.toBeNull();
     expect(row?.name).toBe("New User");
     expect(row?.email).toBe("new@example.com");
-    expect(await repo.listLoopDefs(id)).toHaveLength(4);
+    expect(await repo.listLoopDefs(id)).toHaveLength(6);
     expect((await repo.listConnectorAccounts(id)).length).toBeGreaterThan(0);
   });
 

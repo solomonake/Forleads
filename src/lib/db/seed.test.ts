@@ -34,13 +34,13 @@ describe("workspace provisioning identities", () => {
       const loops = await repo.listLoopDefs(agent.id);
       const connectors = await repo.listConnectorAccounts(agent.id);
 
-      expect(loops).toHaveLength(4);
+      expect(loops).toHaveLength(6);
       expect(connectors).toHaveLength(ALL_PROVIDERS.length);
       loops.forEach((loop) => loopIds.add(loop.id));
       connectors.forEach((connector) => connectorIds.add(connector.id));
     }
 
-    expect(loopIds).toHaveLength(workspaces.length * 4);
+    expect(loopIds).toHaveLength(workspaces.length * 6);
     expect(connectorIds).toHaveLength(workspaces.length * ALL_PROVIDERS.length);
   });
 

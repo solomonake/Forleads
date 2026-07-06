@@ -24,9 +24,13 @@ export const DEMO_AGENT: Agent = {
 export async function provisionWorkspace(repo: Repository, agent: Agent): Promise<void> {
   await repo.upsertAgent(agent);
 
+  // Top-up: install any seeded loop the workspace doesn't have yet (ids are
+  // deterministic), never overwriting existing definitions or their stats.
+  // This is how existing tenants receive newly shipped autopilot loops.
   const existingLoops = await repo.listLoopDefs(agent.id);
-  if (existingLoops.length === 0) {
-    for (const loop of defaultLoops(agent.id, nowISO())) {
+  const existingLoopIds = new Set(existingLoops.map((loop) => loop.id));
+  for (const loop of defaultLoops(agent.id, nowISO())) {
+    if (!existingLoopIds.has(loop.id)) {
       await repo.upsertLoopDef(loop);
     }
   }
