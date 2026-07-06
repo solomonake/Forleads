@@ -1004,6 +1004,17 @@ button {
   color: var(--signal);
   cursor: pointer;
   flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  transition: border-color var(--dur-tap) ease, background var(--dur-tap) ease, opacity var(--dur-tap) ease;
+}
+.mic:hover:not(:disabled) {
+  border-color: var(--hairline-strong);
+  background: var(--signal-soft);
+}
+.mic:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .quick {
   display: flex;
@@ -1493,6 +1504,18 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.rtitle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.rtitle-ico {
+  display: grid;
+  place-items: center;
+  color: var(--signal);
+  flex-shrink: 0;
 }
 .row .rmeta {
   font-size: 12.5px;
@@ -2020,9 +2043,35 @@ button {
 }
 
 @media (max-width: 720px) {
+  /* The 76px side rail eats a fifth of a phone screen; on small viewports the
+     nav becomes a bottom tab bar and every surface offsets above it. */
+  #app {
+    flex-direction: column-reverse;
+  }
+  #navrail {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: stretch;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    gap: 0;
+    border-right: 0;
+    border-top: 1px solid var(--hairline);
+  }
+  #navrail .brand {
+    display: none;
+  }
+  .navbtn {
+    width: auto;
+    flex: 1;
+    min-height: 48px;
+    padding: 4px 2px;
+  }
   .launchpad {
     left: 16px;
     width: calc(100% - 32px);
+    max-height: calc(100% - 128px);
+    overflow-y: auto;
   }
   .launch-steps {
     grid-template-columns: 1fr;

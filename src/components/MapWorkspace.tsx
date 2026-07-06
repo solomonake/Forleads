@@ -15,6 +15,7 @@ import type {
 } from "@/lib/core/types";
 import type { GeoResult } from "@/lib/providers/types";
 import { apiGet, apiPost, ApiError, ConfidenceLegend, GradeChip } from "./ui";
+import { CrosshairIcon, SatelliteIcon, SendIcon } from "./icons";
 
 // Toast model: success path is a green pill; failure path is a red, actionable
 // pill that exposes the server's request id (so the user can paste it in a
@@ -61,6 +62,7 @@ export function MapWorkspace({
   const [query, setQuery] = useState("");
   const [suggest, setSuggest] = useState<GeoResult[]>([]);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [activeSuggest, setActiveSuggest] = useState(0);
   const [searchState, setSearchState] = useState<
     "idle" | "loading" | "empty" | "error"
   >("idle");
@@ -155,6 +157,7 @@ export function MapWorkspace({
         );
         if (active) {
           setSuggest(d.results);
+          setActiveSuggest(0);
           setSearchState(d.results.length > 0 ? "idle" : "empty");
         }
       } catch {
@@ -549,8 +552,21 @@ export function MapWorkspace({
               setSuggestOpen(true);
             }}
             onFocus={() => setSuggestOpen(true)}
+            role="combobox"
+            aria-expanded={suggestOpen && suggest.length > 0}
+            aria-controls="suggest"
+            aria-activedescendant={suggest.length > 0 ? `sug-${activeSuggest}` : undefined}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && suggest[0]) void goTo(suggest[0]);
+              if (e.key === "ArrowDown" && suggest.length > 0) {
+                e.preventDefault();
+                setSuggestOpen(true);
+                setActiveSuggest((i) => (i + 1) % suggest.length);
+              }
+              if (e.key === "ArrowUp" && suggest.length > 0) {
+                e.preventDefault();
+                setActiveSuggest((i) => (i - 1 + suggest.length) % suggest.length);
+              }
+              if (e.key === "Enter" && suggest[activeSuggest]) void goTo(suggest[activeSuggest]);
               if (e.key === "Escape") setSuggestOpen(false);
             }}
           />
@@ -579,13 +595,17 @@ export function MapWorkspace({
           )}
           {suggest.map((p, i) => (
             <div
-              className={`sug ${i === 0 ? "active" : ""}`}
+              className={`sug ${i === activeSuggest ? "active" : ""}`}
               key={`${p.address}-${i}`}
+              id={`sug-${i}`}
               onClick={() => void goTo(p)}
+              onMouseEnter={() => setActiveSuggest(i)}
               role="option"
-              aria-selected={i === 0}
+              aria-selected={i === activeSuggest}
             >
-              <span className="ico">⌖</span>
+              <span className="ico">
+                <CrosshairIcon size={14} />
+              </span>
               <div>
                 <div className="t">{p.address}</div>
                 <div className="s">{p.locality}</div>
@@ -596,9 +616,12 @@ export function MapWorkspace({
       </div>
 
       <div id="tools">
-        <div
+        <button
+          type="button"
           className={`tool ${sat ? "on" : ""}`}
           title="Aerial toggle"
+          aria-label="Toggle aerial imagery"
+          aria-pressed={sat}
           onClick={() => {
             const map = mapRef.current;
             if (!map) return;
@@ -607,19 +630,21 @@ export function MapWorkspace({
             map.setLayoutProperty("sat", "visibility", next ? "visible" : "none");
           }}
         >
-          🛰
-        </div>
-        <div
+          <SatelliteIcon />
+        </button>
+        <button
+          type="button"
           className="tool"
-          title="Recenter"
+          title="Recenter on lead"
+          aria-label="Recenter on lead"
           onClick={() => {
             if (lead && mapRef.current) {
               mapRef.current.flyTo({ center: [lead.lng, lead.lat], zoom: 16.4, pitch: 45, duration: 1000 });
             }
           }}
         >
-          ⌖
-        </div>
+          <CrosshairIcon />
+        </button>
       </div>
 
       <div id="lead" className={leadOpen ? "open" : ""}>
@@ -801,11 +826,12 @@ export function MapWorkspace({
             />
             <button
               className="mic"
-              title="Voice note (typed fallback)"
+              title="Log this field note (⌘⏎)"
+              aria-label="Log field note"
               onClick={() => void submitNote(note)}
-              disabled={!lead || lead.id === "pending"}
+              disabled={!lead || lead.id === "pending" || !note.trim()}
             >
-              🎤
+              <SendIcon size={16} />
             </button>
           </div>
           <div className="quick">
