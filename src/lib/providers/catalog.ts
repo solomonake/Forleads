@@ -135,7 +135,7 @@ export const OPEN_DATA_CATALOG: CatalogSource[] = [
   {
     id: "fema-nfhl-flood",
     region: "usa",
-    market: "United States (national)",
+    market: "United States",
     kind: "hazard",
     style: "arcgis-point",
     url: "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query",
@@ -207,7 +207,7 @@ export const OPEN_DATA_CATALOG: CatalogSource[] = [
   {
     id: "hmlr-price-paid",
     region: "europe",
-    market: "England & Wales (national)",
+    market: "England & Wales",
     kind: "sales",
     style: "hmlr-ppd",
     url: "https://landregistry.data.gov.uk/data/ppi/transaction-record.json",
@@ -220,7 +220,7 @@ export const OPEN_DATA_CATALOG: CatalogSource[] = [
   {
     id: "ea-flood-zone-3",
     region: "europe",
-    market: "England (national)",
+    market: "England",
     kind: "hazard",
     style: "arcgis-point",
     url: "https://environment.data.gov.uk/KB6uNVj5ZcJr7jUP/ArcGIS/rest/services/Flood_Map_for_Planning/FeatureServer/1/query",
@@ -233,7 +233,7 @@ export const OPEN_DATA_CATALOG: CatalogSource[] = [
   {
     id: "ea-flood-zone-2",
     region: "europe",
-    market: "England (national)",
+    market: "England",
     kind: "hazard",
     style: "arcgis-point",
     url: "https://environment.data.gov.uk/KB6uNVj5ZcJr7jUP/ArcGIS/rest/services/Flood_Map_for_Planning/FeatureServer/2/query",
@@ -246,7 +246,7 @@ export const OPEN_DATA_CATALOG: CatalogSource[] = [
   {
     id: "france-dvf",
     region: "europe",
-    market: "France (national)",
+    market: "France",
     kind: "sales",
     style: "dvf-commune",
     url: "https://files.data.gouv.fr/geo-dvf/latest/csv",

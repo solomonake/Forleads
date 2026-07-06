@@ -115,11 +115,12 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
     {
       id: "osm",
       label: "OpenStreetMap building facts",
-      status: config.propertyProvider === "osm" ? "live" : "setup_required",
+      // "open-data" wraps the OSM floor, so OSM facts are live in both modes.
+      status: config.propertyProvider === "osm" || config.propertyProvider === "open-data" ? "live" : "setup_required",
       unlocks: "Land use, building tags, address context, and the global free evidence floor.",
       configuredBy: ["OpenStreetMap", "Overpass", "self-hosted OSM extracts"],
       detail:
-        config.propertyProvider === "osm"
+        config.propertyProvider === "osm" || config.propertyProvider === "open-data"
           ? "Live global floor. It is excellent for presence/context, but not owner or sale-price truth."
           : "Public building facts are being prepared for this workspace.",
       env: ["FORLEADS_PROPERTY_PROVIDER", "OVERPASS_URL"],
