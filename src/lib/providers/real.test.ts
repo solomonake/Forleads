@@ -221,6 +221,25 @@ describe("OpenDataPropertyProvider", () => {
     expect(cards[0]?.confidence).toBe("D");
     expect(cards[0]?.reasoning).toContain("Public sale records don't cover this market yet");
   });
+
+  it("treats placeholder env values as not configured instead of failing every fetch", async () => {
+    const provider = new OpenDataPropertyProvider(
+      new OSMPropertyProvider(),
+      "<your public sales CSV/JSON URL>",
+    );
+
+    expect(await provider.hasCoverage()).toBe(false);
+
+    const cards = await provider.comps({
+      address: "22125 Clarksburg Road",
+      lng: -77.28,
+      lat: 39.23,
+      scout: "market",
+    });
+    // Falls into the honest "not configured" gap, not the "unreachable" retry path.
+    expect(cards[0]?.confidence).toBe("D");
+    expect(cards[0]?.reasoning).toContain("don't cover this market yet");
+  });
 });
 
 describe("OpenRiskDataProvider", () => {

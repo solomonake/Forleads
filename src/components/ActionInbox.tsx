@@ -61,6 +61,26 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
     setTimeout(() => setMsg(null), 3000);
   };
 
+  const dismiss = async (artifact: Artifact) => {
+    try {
+      await apiPost("/api/reject", {
+        artifactId: artifact.id,
+        reason: "Dismissed from the inbox",
+      });
+      setMsg("Dismissed — kept in the audit trail as cancelled.");
+      await load();
+    } catch (e) {
+      setMsg(
+        e instanceof ApiError && e.status === 401
+          ? "Sign in to dismiss items."
+          : e instanceof Error
+            ? e.message
+            : String(e)
+      );
+    }
+    setTimeout(() => setMsg(null), 3000);
+  };
+
   const active = TABS.find((t) => t.key === tab)!;
   const filtered = items.filter((i) => active.match(i.artifact));
 
@@ -140,6 +160,16 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
                   </button>
                 )}
                 {blocked && <button className="minibtn danger">Fix required</button>}
+                {(artifact.status === "drafted" || artifact.status === "blocked") && (
+                  <button
+                    className="minibtn"
+                    title="Dismiss — marks this item cancelled, nothing is sent"
+                    aria-label="Dismiss this item"
+                    onClick={() => dismiss(artifact)}
+                  >
+                    ✕ Dismiss
+                  </button>
+                )}
               </div>
             </div>
           );
