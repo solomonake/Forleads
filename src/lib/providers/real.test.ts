@@ -228,7 +228,7 @@ describe("OpenDataPropertyProvider", () => {
       "<your public sales CSV/JSON URL>",
     );
 
-    expect(await provider.hasCoverage()).toBe(false);
+    expect(await provider.hasCoverage(-77.28, 39.23)).toBe(false);
 
     const cards = await provider.comps({
       address: "22125 Clarksburg Road",
