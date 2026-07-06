@@ -1,22 +1,22 @@
 # Current agent checkpoint
 
-Generated: 2026-07-05T03:55:14.869Z
+Generated: 2026-07-06T02:07:06.991Z
 
 ## State
-- Branch: `claude/wonderful-mccarthy-4bc2b0`
-- Commit: `336b21066174`
+- Branch: `feat/agentic-data-ops`
+- Commit: `1efc9659d90a`
 - Worktree: clean
 - Changed files:
   - none
 
 ## Goal
-First-run activation sprint shipped as PR #37
+Agentic data-ops + reply autopilot merged (#39); prod deploying
 
 ## Completed
 none
 
 ## Next exact action
-User: watch PR #37 demo video, merge, then run Google OAuth verification (console steps in PR body)
+Verify Clarksburg tap shows Open sale record with real price on prod; then user gates: OAuth verification, FUB key, N8N_WEBHOOK_URL
 
 ## Blockers
 none
