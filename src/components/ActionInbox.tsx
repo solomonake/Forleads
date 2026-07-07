@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Artifact, ArtifactStatus } from "@/lib/core/types";
 import { actionTypeLabel } from "@/lib/design/labels";
 import { ApiError, apiGet, apiPost, GradeChip } from "./ui";
+import { CalendarIcon, CheckIcon, MailIcon, NoteIcon } from "./icons";
 
 interface Item {
   artifact: Artifact;
@@ -29,7 +30,13 @@ const statusPill: Record<ArtifactStatus, string> = {
   snoozed: "",
 };
 
-export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => void }) {
+export function ActionInbox({
+  onOpenTrace,
+  onNavigate,
+}: {
+  onOpenTrace: (ref: string) => void;
+  onNavigate: (view: "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline") => void;
+}) {
   const [items, setItems] = useState<Item[]>([]);
   const [tab, setTab] = useState("all");
   const [msg, setMsg] = useState<string | null>(null);
@@ -58,7 +65,7 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
         setMsg(e instanceof Error ? e.message : String(e));
       }
     }
-    setTimeout(() => setMsg(null), 3000);
+    setTimeout(() => setMsg(null), 5000);
   };
 
   const dismiss = async (artifact: Artifact) => {
@@ -78,7 +85,7 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
             : String(e)
       );
     }
-    setTimeout(() => setMsg(null), 3000);
+    setTimeout(() => setMsg(null), 5000);
   };
 
   const logReply = async (artifact: Artifact) => {
@@ -131,9 +138,17 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
         {filtered.length === 0 && (
           <div className="row">
             <div className="rmeta">
-              No items here yet. Open the Map, tap a lead, add a note, and draft an action — it
-              lands here.
+              {items.length === 0
+                ? "No drafted work yet. Ground an address on the map, log a field note, and the agent drafts the next touch for your approval."
+                : `Nothing under “${active.label}” right now — switch tabs to see the rest of the queue.`}
             </div>
+            {items.length === 0 && (
+              <div className="ractions">
+                <button className="minibtn primary" onClick={() => onNavigate("map")}>
+                  Open the map
+                </button>
+              </div>
+            )}
           </div>
         )}
         {filtered.map(({ artifact, leadAddress }) => {
@@ -141,8 +156,18 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
           return (
             <div className="row" key={artifact.id}>
               <div className="rtitle">
-                <span>
-                  {artifact.type === "email" ? "✉" : artifact.type === "task" ? "✓" : artifact.type === "calendar" ? "📅" : "📝"}{" "}
+                <span className="rtitle-label">
+                  <span className="rtitle-ico">
+                    {artifact.type === "email" ? (
+                      <MailIcon size={15} />
+                    ) : artifact.type === "task" ? (
+                      <CheckIcon size={15} />
+                    ) : artifact.type === "calendar" ? (
+                      <CalendarIcon size={15} />
+                    ) : (
+                      <NoteIcon size={15} />
+                    )}
+                  </span>
                   {labelFor(artifact)}
                 </span>
                 <span className={`pill-status ${statusPill[artifact.status]}`}>{artifact.status}</span>
@@ -195,7 +220,27 @@ export function ActionInbox({ onOpenTrace }: { onOpenTrace: (ref: string) => voi
                     Approve
                   </button>
                 )}
-                {blocked && <button className="minibtn danger">Fix required</button>}
+                {blocked && (
+                  <button
+                    className="minibtn danger"
+                    title="See why compliance blocked this draft"
+                    onClick={() => {
+                      if (artifact.trace_id) {
+                        onOpenTrace(artifact.trace_id);
+                        return;
+                      }
+                      const flag = artifact.compliance_result.flags[0];
+                      setMsg(
+                        flag
+                          ? `Blocked: ${flag.issue}. Fix: ${flag.fix}`
+                          : "Blocked by compliance. Dismiss the draft or adjust the lead before retrying."
+                      );
+                      window.setTimeout(() => setMsg(null), 8000);
+                    }}
+                  >
+                    Why blocked?
+                  </button>
+                )}
                 {(artifact.status === "drafted" || artifact.status === "blocked") && (
                   <button
                     className="minibtn"

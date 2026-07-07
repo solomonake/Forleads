@@ -10,18 +10,26 @@ import { Pipeline } from "@/components/Pipeline";
 import { AgentTraceDrawer } from "@/components/AgentTraceDrawer";
 import { AccountBar } from "@/components/AccountBar";
 import { GettingStarted } from "@/components/GettingStarted";
+import {
+  ChartIcon,
+  ColumnsIcon,
+  InboxIcon,
+  LoopIcon,
+  MapIcon,
+  PlugIcon,
+} from "@/components/icons";
 
 type View = "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline";
 
 // `label` renders under the icon; `title` keeps the full name for tooltips
 // and for stable test selectors.
-const NAV: { key: View; icon: string; label: string; title: string }[] = [
-  { key: "map", icon: "🗺", label: "Map", title: "Map (home)" },
-  { key: "inbox", icon: "✉", label: "Inbox", title: "Action Inbox" },
-  { key: "loops", icon: "🔁", label: "Loops", title: "Loop Studio" },
-  { key: "pipeline", icon: "▦", label: "Pipeline", title: "Pipeline" },
-  { key: "connectors", icon: "🔌", label: "Connect", title: "Connector Hub" },
-  { key: "report", icon: "📊", label: "Report", title: "Weekly Report" },
+const NAV: { key: View; icon: React.ReactNode; label: string; title: string }[] = [
+  { key: "map", icon: <MapIcon />, label: "Map", title: "Map (home)" },
+  { key: "inbox", icon: <InboxIcon />, label: "Inbox", title: "Action Inbox" },
+  { key: "loops", icon: <LoopIcon />, label: "Loops", title: "Loop Studio" },
+  { key: "pipeline", icon: <ColumnsIcon />, label: "Pipeline", title: "Pipeline" },
+  { key: "connectors", icon: <PlugIcon />, label: "Connect", title: "Connector Hub" },
+  { key: "report", icon: <ChartIcon />, label: "Report", title: "Weekly Report" },
 ];
 
 export default function Page() {
@@ -53,7 +61,7 @@ export default function Page() {
         {/* The map mounts once and stays alive; panels overlay it. The map is the home screen. */}
         <MapWorkspace onOpenTrace={setTraceRef} onNavigate={setView} />
         <AccountBar />
-        {view === "inbox" && <ActionInbox onOpenTrace={setTraceRef} />}
+        {view === "inbox" && <ActionInbox onOpenTrace={setTraceRef} onNavigate={setView} />}
         {view === "loops" && <LoopStudio onNavigate={setView} />}
         {view === "pipeline" && <Pipeline onNavigate={setView} />}
         {view === "connectors" && <ConnectorHub />}

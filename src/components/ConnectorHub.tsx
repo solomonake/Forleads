@@ -49,7 +49,7 @@ const SOURCE_PACKS: { title: string; ids: string[] }[] = [
   { title: "Field scout pack", ids: ["field-scout"] },
   {
     title: "Regional proof packs",
-    ids: ["region-america", "region-england-wales", "region-europe", "region-africa"],
+    ids: ["region-america", "region-canada", "region-europe", "region-africa"],
   },
   { title: "Consented contact pack", ids: ["consented-contact"] },
   { title: "Automation bridge", ids: ["open-automation"] },
