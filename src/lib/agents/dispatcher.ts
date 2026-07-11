@@ -22,10 +22,36 @@ const BUDGETS: Record<ScoutType, ScoutBudget> = {
 };
 
 const ALLOWLISTS: Record<ScoutType, string[]> = {
-  property: ["OpenStreetMap", "OSM", "public records"],
-  imagery: ["Mapillary", "Esri", "Imagery Scout"],
+  property: [
+    "OpenStreetMap",
+    "OSM",
+    "public records",
+    "assessor",
+    "county",
+    "open property",
+    "ATTOM",
+    "RentCast",
+    "Regrid",
+    "ReportAll",
+    "RESO",
+    "MLS Grid",
+  ],
+  imagery: ["Mapillary", "Esri", "Imagery Scout", "CC-BY-SA", "Google Street View", "Google"],
   people: ["public records"],
-  market: ["OpenStreetMap", "OSM", "public records", "open sales", "price paid", "assessor"],
+  market: [
+    "OpenStreetMap",
+    "OSM",
+    "public records",
+    "open sales",
+    "price paid",
+    "assessor",
+    "ATTOM",
+    "RentCast",
+    "Regrid",
+    "ReportAll",
+    "RESO",
+    "MLS Grid",
+  ],
   risk: ["open hazard layer", "FEMA", "FEMA NFHL", "public records", "open county data", "Socrata"],
 };
 

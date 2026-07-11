@@ -53,9 +53,49 @@ interface OpenPublicRecord {
   url?: string;
 }
 
+type PublicRecordBag = OpenPublicRecord & Record<string, unknown>;
+
 interface ArcGisFeature {
   attributes?: Record<string, unknown>;
   properties?: Record<string, unknown>;
+}
+
+interface MapillaryImage {
+  id: string;
+  thumb_1024_url?: string;
+  captured_at?: string;
+}
+
+interface GoogleStreetViewMetadata {
+  status?: string;
+  date?: string;
+  copyright?: string;
+  pano_id?: string;
+  location?: { lat?: number; lng?: number };
+}
+
+function queryProblem(input: PropertyQuery, options: { requireAddress?: boolean } = {}): string | null {
+  if (!Number.isFinite(input.lng) || input.lng < -180 || input.lng > 180) {
+    return "Longitude is outside the valid world range.";
+  }
+  if (!Number.isFinite(input.lat) || input.lat < -90 || input.lat > 90) {
+    return "Latitude is outside the valid world range.";
+  }
+  if (options.requireAddress && input.address.trim() === "") {
+    return "Address is required before matching public records.";
+  }
+  return null;
+}
+
+function gapCard(scout: EvidenceCard["scout"], claim: string, reasoning: string): EvidenceCard {
+  return {
+    scout,
+    claim,
+    value: null,
+    sources: [],
+    confidence: "D",
+    reasoning,
+  };
 }
 
 function envUrls(...keys: string[]): string[] {
@@ -213,11 +253,68 @@ function dateFrom(record: OpenSaleRecord): string | undefined {
   return record.sale_date ?? record.date;
 }
 
+function validPastDate(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const normalized = value.slice(0, 10);
+  const parsed = new Date(`${normalized}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  const today = new Date();
+  const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  if (parsed.getTime() > todayUtc.getTime()) return undefined;
+  return normalized;
+}
+
+function validPrice(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const digits = value.replace(/[^0-9.]/g, "");
+  const amount = Number(digits);
+  if (!Number.isFinite(amount) || amount <= 0) return undefined;
+  return value.trim();
+}
+
+function saleRecordUsable(record: OpenSaleRecord): boolean {
+  return Boolean(validPrice(priceFrom(record)) && validPastDate(dateFrom(record)));
+}
+
 function sourceFrom(record: OpenSaleRecord, fallbackUrl: string) {
   return {
     name: record.source || "Open sales record",
-    url: record.source_url ?? record.url ?? fallbackUrl,
+    url: safeSourceUrl(record.source_url ?? record.url, fallbackUrl),
+    as_of: validPastDate(dateFrom(record)),
   };
+}
+
+function publicRecordDate(record: PublicRecordBag): string | undefined {
+  return validPastDate(
+    firstString(record, [
+      "as_of",
+      "as_of_date",
+      "updated_at",
+      "last_updated",
+      "record_date",
+      "date",
+      "sale_date",
+    ]),
+  );
+}
+
+function publicRecordSource(record: PublicRecordBag, fallbackUrl: string) {
+  return {
+    name: firstString(record, ["source", "agency", "jurisdiction", "county"]) ?? "Open property record",
+    url: safeSourceUrl(firstString(record, ["source_url", "url", "record_url"]), fallbackUrl),
+    as_of: publicRecordDate(record),
+  };
+}
+
+function safeSourceUrl(candidate: string | undefined, fallbackUrl: string): string {
+  if (!candidate) return fallbackUrl;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return fallbackUrl;
+    return parsed.toString();
+  } catch {
+    return fallbackUrl;
+  }
 }
 
 function recordAddress(record: OpenPublicRecord): string | undefined {
@@ -258,6 +355,31 @@ function addressMatches(record: OpenPublicRecord, targetAddress: string): boolea
   if (shared < 2) return false;
   if (targetStreet.slice(0, 2).join(" ") === candidateStreet.slice(0, 2).join(" ")) return true;
   return targetStreet.slice(0, shared).join(" ") === candidateStreet.slice(0, shared).join(" ");
+}
+
+function propertyCardsFromRecord(record: PublicRecordBag, fallbackUrl: string): EvidenceCard[] {
+  const source = publicRecordSource(record, fallbackUrl);
+  const cards: EvidenceCard[] = [];
+  const add = (claim: string, keys: string[], suffix = "") => {
+    const value = firstString(record, keys);
+    if (!value) return;
+    cards.push({
+      scout: "property",
+      claim,
+      value: `${value}${suffix}`,
+      sources: [source],
+      confidence: "B",
+      reasoning:
+        "Matched an operator-configured public assessor/property record by address. Verify locally before using for legal or valuation decisions.",
+    });
+  };
+
+  add("Year built", ["year_built", "yr_built", "built_year", "build_year", "effective_year_built"]);
+  add("Building area", ["building_area", "building_sqft", "living_area", "living_sqft", "gross_area", "bldg_sqft"], " sq ft");
+  add("Land area", ["land_area", "lot_area", "lot_sqft", "land_sqft", "parcel_area"], " sq ft");
+  add("Property use", ["property_use", "land_use", "use_code", "zoning_use", "property_type"]);
+  add("Assessor parcel id", ["parcel_id", "apn", "pin", "tax_id", "account_number"]);
+  return cards;
 }
 
 function firstString(record: Record<string, unknown>, keys: string[]): string | undefined {
@@ -403,6 +525,9 @@ export class OSMPropertyProvider implements PropertyDataProvider {
   }
 
   async facts(q: PropertyQuery): Promise<EvidenceCard[]> {
+    const problem = queryProblem(q);
+    if (problem) return [gapCard("property", "Building facts", problem)];
+
     const radius = 40;
     const query = `[out:json][timeout:8];(way(around:${radius},${q.lat},${q.lng})["building"];);out tags center 1;`;
     try {
@@ -482,9 +607,10 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
   readonly name = "open-data";
   readonly mode = "live" as const;
   private readonly salesUrls: string[];
+  private readonly propertyUrls: string[];
 
   constructor(
-    private readonly base = new OSMPropertyProvider(process.env.OVERPASS_URL),
+    private readonly base: PropertyDataProvider = new OSMPropertyProvider(process.env.OVERPASS_URL),
     salesUrls: string | string[] | undefined = envUrls(
       "OPEN_SALES_DATA_URL",
       "OPEN_SALES_DATA_URLS",
@@ -498,19 +624,62 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
       "AFRICA_OPEN_SALES_DATA_URL",
       "OPERATOR_SALES_IMPORT_URL",
     ),
+    propertyUrls: string | string[] | undefined = envUrls(
+      "COUNTY_ASSESSOR_DATA_URL",
+      "COUNTY_PROPERTY_DATA_URL",
+      "OPERATOR_PROPERTY_IMPORT_URL",
+      "OPEN_PROPERTY_DATA_URL",
+    ),
   ) {
     this.salesUrls = normalizeUrlList(salesUrls);
+    this.propertyUrls = normalizeUrlList(propertyUrls);
   }
 
   async hasCoverage(): Promise<boolean> {
-    return this.salesUrls.length > 0;
+    return this.salesUrls.length > 0 || this.propertyUrls.length > 0;
   }
 
-  facts(input: PropertyQuery): Promise<EvidenceCard[]> {
-    return this.base.facts(input);
+  async facts(input: PropertyQuery): Promise<EvidenceCard[]> {
+    const baseCards = await this.base.facts(input);
+    const problem = queryProblem(input, { requireAddress: true });
+    if (problem || this.propertyUrls.length === 0) return baseCards;
+
+    try {
+      const loaded = await Promise.all(
+        this.propertyUrls.map(async (url) => ({
+          url,
+          records: await loadOpenRecords(url),
+        })),
+      );
+      const matches = loaded.flatMap(({ url, records }) =>
+        records
+          .filter((record) => addressMatches(record, input.address))
+          .map((record) => ({ url, record: record as PublicRecordBag })),
+      );
+      if (matches.length === 0) return baseCards;
+
+      const cards = matches.flatMap(({ url, record }) => propertyCardsFromRecord(record, url));
+      return cards.length > 0 ? [...baseCards, ...cards] : baseCards;
+    } catch (e) {
+      log("warn", "provider.property.failed", {
+        error: e instanceof Error ? e.message : String(e),
+        urls: this.propertyUrls.length,
+      });
+      return [
+        ...baseCards,
+        gapCard(
+          "property",
+          "Open property records",
+          "Public assessor/property records weren't reachable just now — they'll load on the next look.",
+        ),
+      ];
+    }
   }
 
   async comps(input: PropertyQuery): Promise<EvidenceCard[]> {
+    const problem = queryProblem(input, { requireAddress: true });
+    if (problem) return [gapCard("market", "Open sale records", problem)];
+
     if (this.salesUrls.length === 0) {
       return [
         {
@@ -532,11 +701,25 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
           records: await loadOpenSaleRecords(url),
         })),
       );
-      const matches = loaded.flatMap(({ url, records }) =>
+      const rawMatches = loaded.flatMap(({ url, records }) =>
         records
           .filter((record) => addressMatches(record, input.address))
           .map((record) => ({ url, record })),
       );
+      const matches = rawMatches.filter(({ record }) => saleRecordUsable(record));
+      if (rawMatches.length > 0 && matches.length === 0) {
+        return [
+          {
+            scout: "market",
+            claim: "Open sale records",
+            value: null,
+            sources: [],
+            confidence: "D",
+            reasoning:
+              "A matching public sale row was found, but it was missing a valid past sale date or positive sale price.",
+          },
+        ];
+      }
       if (matches.length === 0) {
         return [
           {
@@ -553,12 +736,13 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
       const latest = matches
         .slice()
         .sort((a, b) => (dateFrom(b.record) ?? "").localeCompare(dateFrom(a.record) ?? ""))[0]!;
-      const price = priceFrom(latest.record);
+      const price = validPrice(priceFrom(latest.record))!;
+      const saleDate = validPastDate(dateFrom(latest.record))!;
       return [
         {
           scout: "market",
           claim: "Open sale record",
-          value: price ? `${price}${dateFrom(latest.record) ? ` on ${dateFrom(latest.record)}` : ""}` : "record found",
+          value: `${price} on ${saleDate}`,
           sources: [sourceFrom(latest.record, latest.url)],
           confidence: matches.length >= 3 ? "B" : "C",
           reasoning:
@@ -583,6 +767,102 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
         },
       ];
     }
+  }
+}
+
+type LicensedProviderKind = "attom" | "rentcast" | "regrid" | "reportall" | "reso" | "mls-grid";
+
+interface LicensedProviderSpec {
+  label: string;
+  env: string[];
+  facts: string;
+  comps: string;
+}
+
+const LICENSED_PROVIDER_SPECS: Record<LicensedProviderKind, LicensedProviderSpec> = {
+  attom: {
+    label: "ATTOM Property Data",
+    env: ["ATTOM_API_KEY"],
+    facts: "ATTOM property characteristics",
+    comps: "ATTOM valuation/comparable-sales context",
+  },
+  rentcast: {
+    label: "RentCast",
+    env: ["RENTCAST_API_KEY"],
+    facts: "RentCast property facts",
+    comps: "RentCast sale/rent comps",
+  },
+  regrid: {
+    label: "Regrid parcels",
+    env: ["REGRID_API_KEY"],
+    facts: "Regrid parcel facts",
+    comps: "Regrid parcel context",
+  },
+  reportall: {
+    label: "ReportAll parcels",
+    env: ["REPORTALL_API_KEY"],
+    facts: "ReportAll parcel facts",
+    comps: "ReportAll parcel context",
+  },
+  reso: {
+    label: "RESO Web API",
+    env: ["RESO_WEB_API_URL", "RESO_ACCESS_TOKEN"],
+    facts: "RESO listing/property facts",
+    comps: "RESO listing and market context",
+  },
+  "mls-grid": {
+    label: "MLS Grid",
+    env: ["MLS_GRID_URL", "MLS_GRID_ACCESS_TOKEN"],
+    facts: "MLS Grid listing/property facts",
+    comps: "MLS Grid listing and market context",
+  },
+};
+
+export class LicensedPropertyProvider implements PropertyDataProvider {
+  readonly mode = "live" as const;
+  readonly name: string;
+  private readonly spec: LicensedProviderSpec;
+
+  constructor(
+    private readonly kind: LicensedProviderKind,
+    private readonly base: PropertyDataProvider = new OpenDataPropertyProvider(),
+  ) {
+    this.name = kind;
+    this.spec = LICENSED_PROVIDER_SPECS[kind];
+  }
+
+  async hasCoverage(lng: number, lat: number): Promise<boolean> {
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return false;
+    return this.configured();
+  }
+
+  async facts(input: PropertyQuery): Promise<EvidenceCard[]> {
+    const baseCards = await this.base.facts(input);
+    return [...baseCards, this.gap("property", this.spec.facts)];
+  }
+
+  async comps(input: PropertyQuery): Promise<EvidenceCard[]> {
+    const problem = queryProblem(input, { requireAddress: true });
+    if (problem) return [gapCard("market", this.spec.comps, problem)];
+    return [this.gap("market", this.spec.comps)];
+  }
+
+  private configured(): boolean {
+    return this.spec.env.every((key) => {
+      const value = process.env[key];
+      return Boolean(value && value.trim() !== "");
+    });
+  }
+
+  private gap(scout: EvidenceCard["scout"], claim: string): EvidenceCard {
+    const setup = this.spec.env.join(" + ");
+    return gapCard(
+      scout,
+      claim,
+      this.configured()
+        ? `${this.spec.label} credentials are configured, but this adapter still needs provider-specific response mapping before it can surface facts. Forleads reports the gap instead of guessing.`
+        : `${this.spec.label} is not connected. Configure ${setup} before Forleads can use this licensed source.`,
+    );
   }
 }
 
@@ -620,6 +900,9 @@ export class OpenRiskDataProvider implements RiskDataProvider {
   }
 
   async hazards(input: PropertyQuery): Promise<EvidenceCard[]> {
+    const problem = queryProblem(input);
+    if (problem) return [gapCard("risk", "Flood risk", problem)];
+
     if (this.hazardUrls.length === 0) {
       return [
         {
@@ -658,6 +941,9 @@ export class OpenRiskDataProvider implements RiskDataProvider {
   }
 
   async distress(input: PropertyQuery): Promise<EvidenceCard[]> {
+    const problem = queryProblem(input, { requireAddress: true });
+    if (problem) return [gapCard("risk", "Open distress signals", problem)];
+
     if (this.distressUrls.length === 0) {
       return [
         {
@@ -850,10 +1136,18 @@ export class MapillaryImageryProvider implements ImageryProvider {
   constructor(private token: string) {}
 
   async street(q: PropertyQuery): Promise<EvidenceCard[]> {
+    const problem = queryProblem(q);
+    if (problem) return [gapCard("imagery", "Street imagery", problem)];
+
     const bbox = [q.lng - 0.0006, q.lat - 0.0006, q.lng + 0.0006, q.lat + 0.0006].join(",");
-    const url = `https://graph.mapillary.com/images?access_token=${this.token}&fields=id&bbox=${bbox}&limit=5`;
+    const url = `https://graph.mapillary.com/images?access_token=${this.token}&fields=id,thumb_1024_url,captured_at&bbox=${bbox}&limit=5`;
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": "Forleads/1.0 (street-imagery scout; +https://forleads.vercel.app)",
+          Accept: "application/json",
+        },
+      });
       if (!res.ok) {
         return [
           {
@@ -866,8 +1160,9 @@ export class MapillaryImageryProvider implements ImageryProvider {
           },
         ];
       }
-      const data = (await res.json()) as { data?: { id: string }[] };
-      const n = data.data?.length ?? 0;
+      const data = (await res.json()) as { data?: MapillaryImage[] };
+      const images = data.data ?? [];
+      const n = images.length;
       if (n === 0) {
         return [
           {
@@ -880,13 +1175,40 @@ export class MapillaryImageryProvider implements ImageryProvider {
           },
         ];
       }
+      const datedImages = images.filter((image) => image.captured_at);
+      const latestCapture = datedImages
+        .slice()
+        .sort((a, b) => String(b.captured_at).localeCompare(String(a.captured_at)))[0]?.captured_at;
+      const firstImage = images[0]!;
       return [
         {
           scout: "imagery",
           claim: "Street imagery",
           value: `${n} frame${n > 1 ? "s" : ""}`,
-          sources: [{ name: "Mapillary", url: "https://mapillary.com" }, { name: "CC-BY-SA" }],
+          sources: [
+            {
+              name: "Mapillary",
+              url: `https://www.mapillary.com/app/?pKey=${encodeURIComponent(firstImage.id)}`,
+              as_of: latestCapture?.slice(0, 10),
+            },
+            { name: "CC-BY-SA" },
+          ],
           confidence: "A",
+          media: images
+            .filter((image) => image.thumb_1024_url)
+            .slice(0, 3)
+            .map((image, index) => ({
+              kind: "image" as const,
+              url: image.thumb_1024_url!,
+              alt: `Street-level property imagery frame ${index + 1}`,
+              source: "Mapillary",
+              captured_at: image.captured_at?.slice(0, 10),
+              attribution: "© Mapillary contributors, CC-BY-SA",
+            })),
+          reasoning:
+            latestCapture
+              ? `Nearest Mapillary frame captured ${latestCapture.slice(0, 10)}. Coverage is community-driven and may not show the current condition.`
+              : "Nearest Mapillary frames found. Coverage is community-driven and may not show the current condition.",
         },
       ];
     } catch {
@@ -905,5 +1227,79 @@ export class MapillaryImageryProvider implements ImageryProvider {
 
   aerialAttribution(): string {
     return "Imagery © Esri";
+  }
+}
+
+// ---- Google Street View imagery --------------------------------------------
+
+export class GoogleStreetViewImageryProvider implements ImageryProvider {
+  readonly name = "google-street-view";
+  readonly mode = "live" as const;
+
+  constructor(private apiKey: string) {}
+
+  async street(q: PropertyQuery): Promise<EvidenceCard[]> {
+    const problem = queryProblem(q);
+    if (problem) return [gapCard("imagery", "Street imagery", problem)];
+
+    const metadataUrl = new URL("https://maps.googleapis.com/maps/api/streetview/metadata");
+    metadataUrl.searchParams.set("location", `${q.lat},${q.lng}`);
+    metadataUrl.searchParams.set("radius", "50");
+    metadataUrl.searchParams.set("source", "outdoor");
+    metadataUrl.searchParams.set("key", this.apiKey);
+
+    try {
+      const res = await fetch(metadataUrl, {
+        headers: {
+          "User-Agent": "Forleads/1.0 (street-view imagery scout; +https://forleads.vercel.app)",
+          Accept: "application/json",
+        },
+      });
+      if (!res.ok) return [this.gap("Google Street View metadata was not reachable.")];
+
+      const metadata = (await res.json()) as GoogleStreetViewMetadata;
+      if (metadata.status !== "OK") {
+        return [this.gap(`Google Street View returned ${metadata.status ?? "no result"} for this point.`)];
+      }
+
+      const mediaUrl = `/api/imagery/google-street-view?lat=${encodeURIComponent(String(q.lat))}&lng=${encodeURIComponent(String(q.lng))}`;
+      return [
+        {
+          scout: "imagery",
+          claim: "Street imagery",
+          value: metadata.date ? `Google Street View · ${metadata.date}` : "Google Street View frame",
+          sources: [
+            {
+              name: "Google Street View",
+              url: "https://developers.google.com/maps/documentation/streetview/overview",
+              as_of: metadata.date,
+            },
+          ],
+          confidence: "A",
+          media: [
+            {
+              kind: "image",
+              url: mediaUrl,
+              alt: `Google Street View image near ${q.address}`,
+              source: "Google Street View",
+              captured_at: metadata.date,
+              attribution: metadata.copyright ?? "© Google",
+            },
+          ],
+          reasoning:
+            "Google metadata confirmed street-view imagery near this point. Treat it as visual context, not proof of current property condition.",
+        },
+      ];
+    } catch {
+      return [this.gap("Network error reaching Google Street View.")];
+    }
+  }
+
+  aerialAttribution(): string {
+    return "Street imagery © Google";
+  }
+
+  private gap(reasoning: string): EvidenceCard {
+    return gapCard("imagery", "Street imagery", reasoning);
   }
 }

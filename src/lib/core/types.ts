@@ -23,6 +23,15 @@ export interface EvidenceSource {
   as_of?: string;
 }
 
+export interface EvidenceMedia {
+  kind: "image";
+  url: string;
+  alt: string;
+  source: string;
+  captured_at?: string;
+  attribution?: string;
+}
+
 export interface EvidenceCard {
   id?: UUID;
   lead_surface_id?: UUID;
@@ -31,6 +40,7 @@ export interface EvidenceCard {
   value: string | number | null; // null allowed ONLY with confidence 'D'
   sources: EvidenceSource[]; // >= 1 unless confidence 'D'
   confidence: Confidence;
+  media?: EvidenceMedia[];
   reasoning?: string; // shown on "why this grade"
   created_at?: ISODate;
 }

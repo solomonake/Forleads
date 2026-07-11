@@ -21,11 +21,15 @@ function configured(...keys: string[]): boolean {
   return keys.some(has);
 }
 
-function openSource(input: Omit<DataSourceReadiness, "status"> & { live: boolean }): DataSourceReadiness {
+function configuredAll(...keys: string[]): boolean {
+  return keys.every(has);
+}
+
+function source(input: Omit<DataSourceReadiness, "status"> & { live: boolean; planned?: boolean }): DataSourceReadiness {
   return {
     id: input.id,
     label: input.label,
-    status: input.live ? "live" : "setup_required",
+    status: input.live ? "live" : input.planned ? "planned" : "setup_required",
     unlocks: input.unlocks,
     configuredBy: input.configuredBy,
     detail: input.detail,
@@ -34,6 +38,12 @@ function openSource(input: Omit<DataSourceReadiness, "status"> & { live: boolean
 }
 
 export function dataSourceReadiness(): DataSourceReadiness[] {
+  const nominatimLive = config.geocoder === "nominatim" || config.geocoder === "photon-nominatim";
+  const photonLive = config.geocoder === "photon-nominatim";
+  const mapillaryLive = config.imageryProvider === "mapillary" && configured("MAPILLARY_TOKEN");
+  const googleStreetViewLive =
+    config.imageryProvider === "google-street-view" && configured("GOOGLE_MAPS_API_KEY");
+  const fieldPhotoLive = configured("FIELD_PHOTO_STORAGE", "NEXT_PUBLIC_FIELD_PHOTOS");
   const openSalesLive = configured(
     "OPEN_SALES_DATA_URL",
     "OPEN_SALES_DATA_URLS",
@@ -58,7 +68,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
     "EU_DISTRESS_DATA_URL",
     "AFRICA_DISTRESS_DATA_URL",
   );
-  const openHazardLive = configured(
+  const hazardLive = configured(
     "FEMA_NFHL_URL",
     "OPEN_HAZARD_LAYER_URL",
     "US_HAZARD_LAYER_URL",
@@ -66,181 +76,302 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
     "EU_HAZARD_LAYER_URL",
     "AFRICA_HAZARD_LAYER_URL",
   );
-  const openBuildingsLive = configured(
+  const buildingsLive = configured(
     "MICROSOFT_BUILDING_FOOTPRINTS_URL",
     "GOOGLE_OPEN_BUILDINGS_URL",
     "LOCAL_BUILDINGS_GEOJSON_URL",
     "AFRICA_BUILDINGS_DATA_URL",
   );
-  const openMailLive = configured("N8N_WEBHOOK_URL", "ZAPIER_WEBHOOK_URL");
-  const americaLive = configured("US_OPEN_SALES_DATA_URL", "COUNTY_OPEN_DATA_URL", "FEMA_NFHL_URL", "US_DISTRESS_DATA_URL");
-  const englandLive = configured("HMLR_PRICE_PAID_URL", "UK_PRICE_PAID_DATA_URL", "ENGLAND_PRICE_PAID_DATA_URL");
-  const europeLive = configured("EU_OPEN_SALES_DATA_URL", "EU_CADASTRE_DATA_URL", "EU_HAZARD_LAYER_URL", "EU_DISTRESS_DATA_URL");
-  const africaLive = configured("AFRICA_OPEN_SALES_DATA_URL", "AFRICA_DISTRESS_DATA_URL", "AFRICA_HAZARD_LAYER_URL", "AFRICA_BUILDINGS_DATA_URL");
+  const automationLive = configured("N8N_WEBHOOK_URL", "ZAPIER_WEBHOOK_URL");
 
   return [
-    {
-      id: "geocode",
-      label: "Open address search",
-      status: config.geocoder === "mock" ? "setup_required" : "live",
-      unlocks: "Find and ground addresses without buying a geocoding vendor.",
-      configuredBy: ["Nominatim", "Photon", "OpenAddresses", "Census TIGER/Line", "self-hosted OSM extracts"],
-      detail:
-        config.geocoder === "mock"
-          ? "Address search is being prepared for this workspace."
-          : `Live via ${config.geocoder}.`,
-      env: ["FORLEADS_GEOCODER", "NOMINATIM_URL", "PHOTON_URL", "OPEN_ADDRESSES_URL", "CENSUS_TIGER_LINE_URL"],
-    },
-    {
-      id: "osm",
-      label: "OpenStreetMap building facts",
-      status: config.propertyProvider === "osm" ? "live" : "setup_required",
-      unlocks: "Land use, building tags, address context, and the global free evidence floor.",
+    source({
+      id: "osm-overpass",
+      label: "OpenStreetMap / Overpass",
+      live: config.propertyProvider === "osm" || config.propertyProvider === "open-data",
+      unlocks: "Building tags, land use, address context, and the global free map floor.",
       configuredBy: ["OpenStreetMap", "Overpass", "self-hosted OSM extracts"],
-      detail:
-        config.propertyProvider === "osm"
-          ? "Live global floor. It is excellent for presence/context, but not owner or sale-price truth."
-          : "Public building facts are being prepared for this workspace.",
+      detail: "Good for map/building context, not owner identity, legal parcel truth, or sale-price truth.",
       env: ["FORLEADS_PROPERTY_PROVIDER", "OVERPASS_URL"],
-    },
-    {
-      id: "field-scout",
-      label: "Field-scout evidence",
-      status: "live",
-      unlocks: "Operator notes such as tall grass, boarded windows, vacancy signs, repairs, or owner intent.",
-      configuredBy: ["Forleads notes", "future photo/GPS capture"],
-      detail:
-        "Live today through field notes. Photo upload, GPS route coverage, and offline queue are next build slices.",
-      env: ["FIELD_PHOTO_STORAGE", "NEXT_PUBLIC_ENABLE_ROUTE_TRACKING"],
-    },
-    openSource({
-      id: "open-buildings",
-      label: "Open building footprints",
-      live: openBuildingsLive,
-      unlocks: "Footprints, approximate structure size, and coverage where OSM tags are sparse.",
-      configuredBy: ["Microsoft Building Footprints", "Google Open Buildings", "local open GIS"],
-      detail: openBuildingsLive
-        ? "Open building footprint source configured."
-        : "Building footprints aren't available in this market yet — coverage grows as public datasets land.",
-      env: ["MICROSOFT_BUILDING_FOOTPRINTS_URL", "GOOGLE_OPEN_BUILDINGS_URL", "LOCAL_BUILDINGS_GEOJSON_URL", "AFRICA_BUILDINGS_DATA_URL"],
     }),
-    openSource({
-      id: "open-sales",
-      label: "Open sale and valuation records",
-      live: openSalesLive,
-      unlocks: "Last sale, price-paid, public comps, and transparent valuation context where open data exists.",
-      configuredBy: ["HM Land Registry Price Paid", "county open-data portals", "local assessor CSV exports"],
-      detail: openSalesLive
-        ? "At least one open sale/assessor source is configured."
-        : "Public sale records aren't available in this market yet. Prices stay honestly unverified until they are.",
-      env: [
-        "OPEN_SALES_DATA_URL",
-        "OPEN_SALES_DATA_URLS",
-        "HMLR_PRICE_PAID_URL",
-        "COUNTY_OPEN_DATA_URL",
-        "US_OPEN_SALES_DATA_URL",
-        "UK_PRICE_PAID_DATA_URL",
-        "EU_OPEN_SALES_DATA_URL",
-        "AFRICA_OPEN_SALES_DATA_URL",
-        "OPERATOR_SALES_IMPORT_URL",
-      ],
+    source({
+      id: "nominatim",
+      label: "Nominatim geocoding",
+      live: nominatimLive,
+      unlocks: "Address search and reverse geocoding with OSM attribution and strict fair-use limits.",
+      configuredBy: ["Public Nominatim", "self-hosted Nominatim"],
+      detail: nominatimLive ? `Live via ${config.geocoder}.` : "Configure Nominatim or a self-hosted endpoint before relying on address search.",
+      env: ["FORLEADS_GEOCODER", "NOMINATIM_URL"],
     }),
-    openSource({
-      id: "open-distress",
-      label: "Open distress signals",
-      live: openDistressLive,
-      unlocks: "Tax delinquency, code violations, vacant registry, nuisance, or foreclosure notices where public.",
-      configuredBy: ["county/city open data", "public tax delinquency CSVs", "court notice feeds"],
-      detail: openDistressLive
-        ? "At least one open distress source is configured."
-        : "Public distress records aren't available in this market yet — flags stay honestly unverified.",
-      env: [
-        "OPEN_DISTRESS_DATA_URL",
-        "OPEN_DISTRESS_DATA_URLS",
-        "TAX_DELINQUENCY_DATA_URL",
-        "CODE_VIOLATION_DATA_URL",
-        "VACANT_REGISTRY_DATA_URL",
-        "US_DISTRESS_DATA_URL",
-        "UK_DISTRESS_DATA_URL",
-        "EU_DISTRESS_DATA_URL",
-        "AFRICA_DISTRESS_DATA_URL",
-      ],
+    source({
+      id: "photon",
+      label: "Photon autocomplete",
+      live: photonLive,
+      unlocks: "Fast search-as-you-type when backed by a self-hosted Photon index.",
+      configuredBy: ["Photon", "self-hosted OSM extracts"],
+      detail: photonLive ? "Photon is configured for autocomplete." : "Planned for self-hosted autocomplete; public Nominatim must not be used as client autocomplete.",
+      env: ["FORLEADS_GEOCODER", "PHOTON_URL"],
     }),
-    openSource({
-      id: "open-hazard",
-      label: "Open hazard and flood layers",
-      live: openHazardLive,
-      unlocks: "Flood, hazard, and environmental risk cards with cited public sources.",
-      configuredBy: ["FEMA NFHL", "local hazard GIS", "open environmental layers"],
-      detail: openHazardLive
-        ? "Open hazard source configured."
-        : "Public hazard maps aren't connected for this market yet — risk stays honestly unverified.",
-      env: ["FEMA_NFHL_URL", "OPEN_HAZARD_LAYER_URL", "US_HAZARD_LAYER_URL", "UK_HAZARD_LAYER_URL", "EU_HAZARD_LAYER_URL", "AFRICA_HAZARD_LAYER_URL"],
+    source({
+      id: "openaddresses",
+      label: "OpenAddresses",
+      live: configured("OPEN_ADDRESSES_URL"),
+      unlocks: "Structured open address points where country/region coverage exists.",
+      configuredBy: ["OpenAddresses extract", "operator-hosted mirror"],
+      detail: "Use as a cached address reference, not as a replacement for local assessor or MLS truth.",
+      env: ["OPEN_ADDRESSES_URL"],
     }),
-    openSource({
-      id: "region-america",
-      label: "America / US public-record pack",
-      live: americaLive,
-      unlocks: "County sales/assessor CSVs, FEMA NFHL, code violations, tax delinquency, and vacant registries.",
-      configuredBy: ["county open data", "Socrata", "FEMA NFHL", "operator CSV imports"],
-      detail: americaLive
-        ? "At least one America/US open source is configured."
-        : "US public records grow county by county. Coverage in your market expands as feeds come online.",
-      env: ["US_OPEN_SALES_DATA_URL", "COUNTY_OPEN_DATA_URL", "FEMA_NFHL_URL", "US_DISTRESS_DATA_URL", "OPERATOR_SALES_IMPORT_URL"],
+    source({
+      id: "census-tiger",
+      label: "US Census TIGER/Line",
+      live: configured("CENSUS_TIGER_LINE_URL"),
+      unlocks: "US streets, boundaries, and geographic context for routing and market areas.",
+      configuredBy: ["US Census TIGER/Line"],
+      detail: "Useful for US geography context; does not prove property ownership or condition.",
+      env: ["CENSUS_TIGER_LINE_URL"],
     }),
-    openSource({
-      id: "region-england-wales",
-      label: "England / Wales price-paid pack",
-      live: englandLive,
-      unlocks: "HM Land Registry Price Paid rows, planning/open council feeds, flood layers, and operator imports.",
-      configuredBy: ["HM Land Registry Price Paid Data", "data.gov.uk", "local council open data"],
-      detail: englandLive
-        ? "England/Wales price-paid source configured."
-        : "England & Wales price-paid data is being prepared for this workspace.",
-      env: ["HMLR_PRICE_PAID_URL", "UK_PRICE_PAID_DATA_URL", "ENGLAND_PRICE_PAID_DATA_URL", "UK_HAZARD_LAYER_URL", "UK_DISTRESS_DATA_URL"],
+    source({
+      id: "mapillary",
+      label: "Mapillary street imagery",
+      live: mapillaryLive,
+      unlocks: "Real street-level images where community coverage exists, with CC-BY-SA attribution.",
+      configuredBy: ["Mapillary API"],
+      detail: mapillaryLive ? "Mapillary is configured." : "Add MAPILLARY_TOKEN. Where coverage is missing, Forleads shows a gap.",
+      env: ["FORLEADS_IMAGERY_PROVIDER", "MAPILLARY_TOKEN"],
     }),
-    openSource({
-      id: "region-europe",
-      label: "Europe open-data pack",
-      live: europeLive,
-      unlocks: "Per-country cadastral/open-sales feeds, INSPIRE-style hazard layers, and municipal distress datasets.",
-      configuredBy: ["data.europa.eu discovery", "national cadastral portals", "municipal open data"],
-      detail: europeLive
-        ? "At least one Europe open-data source is configured."
-        : "European open-data coverage varies by country and grows as national feeds come online.",
-      env: ["EU_OPEN_SALES_DATA_URL", "EU_CADASTRE_DATA_URL", "EU_HAZARD_LAYER_URL", "EU_DISTRESS_DATA_URL"],
+    source({
+      id: "google-street-view",
+      label: "Google Street View",
+      live: googleStreetViewLive,
+      unlocks: "Real Street View images when a licensed Google Maps key and billing are enabled.",
+      configuredBy: ["Google Street View Static API"],
+      detail: googleStreetViewLive ? "Google Street View is configured through the server-side proxy." : "Requires GOOGLE_MAPS_API_KEY and billing; never expose the key or show placeholder images as proof.",
+      env: ["FORLEADS_IMAGERY_PROVIDER", "GOOGLE_MAPS_API_KEY"],
     }),
     {
-      id: "region-africa",
-      label: "Africa field-first open-data pack",
-      status: africaLive ? "live" : "manual_capture",
-      unlocks: "Google/Microsoft open buildings, local open GIS where available, field-scout notes/photos, and operator imports.",
-      configuredBy: ["Google Open Buildings", "Microsoft Building Footprints", "local open data", "field capture"],
-      detail: africaLive
-        ? "At least one Africa open source is configured."
-        : "Formal records are uneven in this region — field capture and your own imports carry the most weight here.",
-      env: ["AFRICA_BUILDINGS_DATA_URL", "AFRICA_OPEN_SALES_DATA_URL", "AFRICA_DISTRESS_DATA_URL", "AFRICA_HAZARD_LAYER_URL", "GOOGLE_OPEN_BUILDINGS_URL"],
+      id: "field-photos",
+      label: "Agent-captured field photos",
+      status: fieldPhotoLive ? "live" : "manual_capture",
+      unlocks: "Current, first-party property photos captured during door knocking or field routes.",
+      configuredBy: ["Forleads mobile capture", "operator upload", "storage bucket"],
+      detail: fieldPhotoLive ? "Field photo storage is configured." : "Most trustworthy for current condition, but needs upload/storage wiring.",
+      env: ["FIELD_PHOTO_STORAGE", "NEXT_PUBLIC_FIELD_PHOTOS"],
     },
+    source({
+      id: "reso-web-api",
+      label: "RESO Web API / MLS",
+      live: configuredAll("RESO_WEB_API_URL", "RESO_ACCESS_TOKEN"),
+      unlocks: "Authorized listing facts, status, media, broker fields, and standardized property resources.",
+      configuredBy: ["RESO Web API", "broker/MLS agreement"],
+      detail: "Requires authorization. MLS media cannot be shown unless the agent/broker has rights.",
+      env: ["RESO_WEB_API_URL", "RESO_ACCESS_TOKEN"],
+    }),
+    source({
+      id: "mls-grid",
+      label: "MLS Grid",
+      live: configuredAll("MLS_GRID_URL", "MLS_GRID_ACCESS_TOKEN"),
+      unlocks: "Authorized MLS listing and media feed in participating markets.",
+      configuredBy: ["MLS Grid license", "broker/MLS approval"],
+      detail: "Setup required; never scrape MLS photos or display them without rights.",
+      env: ["MLS_GRID_URL", "MLS_GRID_ACCESS_TOKEN"],
+    }),
+    source({
+      id: "attom",
+      label: "ATTOM property data",
+      live: configured("ATTOM_API_KEY"),
+      unlocks: "US parcel, assessor, deed, mortgage, valuation, and property characteristics where licensed.",
+      configuredBy: ["ATTOM Property Data API"],
+      detail: "Paid/licensed source. Must show ATTOM provenance and cache within license terms.",
+      env: ["ATTOM_API_KEY"],
+    }),
+    source({
+      id: "rentcast",
+      label: "RentCast",
+      live: configured("RENTCAST_API_KEY"),
+      unlocks: "Rental estimates, sale comps, market rent context, and property data where covered.",
+      configuredBy: ["RentCast API"],
+      detail: "Useful for valuation context; estimates must not be presented as recorded sale facts.",
+      env: ["RENTCAST_API_KEY"],
+    }),
+    source({
+      id: "regrid",
+      label: "Regrid parcels",
+      live: configured("REGRID_API_KEY"),
+      unlocks: "Parcel boundaries, property records, zoning, and building data where licensed.",
+      configuredBy: ["Regrid API"],
+      detail: "Parcel truth source for US coverage when licensed; show source and freshness.",
+      env: ["REGRID_API_KEY"],
+    }),
+    source({
+      id: "reportall",
+      label: "ReportAll parcels",
+      live: configured("REPORTALL_API_KEY"),
+      unlocks: "Parcel boundaries, owner/assessor fields, and county property attributes where licensed.",
+      configuredBy: ["ReportAll API"],
+      detail: "Paid parcel source; owner/contact use must respect law and outreach policy.",
+      env: ["REPORTALL_API_KEY"],
+    }),
+    source({
+      id: "hmlr-price-paid",
+      label: "HM Land Registry Price Paid",
+      live: configured("HMLR_PRICE_PAID_URL", "UK_PRICE_PAID_DATA_URL", "ENGLAND_PRICE_PAID_DATA_URL"),
+      unlocks: "Recorded sale prices for England and Wales.",
+      configuredBy: ["HM Land Registry Price Paid Data"],
+      detail: "Official price-paid rows; still match addresses carefully and show as-of dates.",
+      env: ["HMLR_PRICE_PAID_URL", "UK_PRICE_PAID_DATA_URL", "ENGLAND_PRICE_PAID_DATA_URL"],
+    }),
+    source({
+      id: "county-assessor",
+      label: "County assessor feeds",
+      live: configured("COUNTY_ASSESSOR_DATA_URL", "COUNTY_OPEN_DATA_URL", "US_OPEN_SALES_DATA_URL"),
+      unlocks: "Assessed value, year built, building area, land area, use code, and owner/tax fields where public.",
+      configuredBy: ["county assessor", "county open data", "operator import"],
+      detail: "County-by-county source; do not generalize one county's schema to another without mapping.",
+      env: ["COUNTY_ASSESSOR_DATA_URL", "COUNTY_OPEN_DATA_URL", "US_OPEN_SALES_DATA_URL"],
+    }),
+    source({
+      id: "county-recorder",
+      label: "County recorder / deeds",
+      live: configured("COUNTY_RECORDER_DATA_URL", "DEED_RECORDS_DATA_URL"),
+      unlocks: "Recorded deeds, transfer dates, document references, and sale events where public.",
+      configuredBy: ["county recorder", "deed open data", "operator import"],
+      detail: "Best for transaction proof where available; document-level data needs careful matching.",
+      env: ["COUNTY_RECORDER_DATA_URL", "DEED_RECORDS_DATA_URL"],
+    }),
+    source({
+      id: "socrata",
+      label: "Socrata open-data portals",
+      live: configured("SOCRATA_OPEN_DATA_URL", "OPEN_DISTRESS_DATA_URLS"),
+      unlocks: "Municipal code cases, permits, 311 issues, vacant registries, and local datasets.",
+      configuredBy: ["Socrata", "city/county open-data portals"],
+      detail: "Good local public-record lane; each dataset needs its own schema mapping and freshness display.",
+      env: ["SOCRATA_OPEN_DATA_URL", "OPEN_DISTRESS_DATA_URLS"],
+    }),
+    source({
+      id: "fema-nfhl",
+      label: "FEMA NFHL flood layers",
+      live: configured("FEMA_NFHL_URL"),
+      unlocks: "US flood-zone evidence cards from official FEMA National Flood Hazard Layer services.",
+      configuredBy: ["FEMA NFHL ArcGIS service"],
+      detail: "Risk context only; not insurance, legal, or engineering advice.",
+      env: ["FEMA_NFHL_URL"],
+    }),
+    source({
+      id: "planning-zoning",
+      label: "Planning and zoning GIS",
+      live: configured("PLANNING_GIS_URL", "ZONING_GIS_URL", "OPEN_HAZARD_LAYER_URL"),
+      unlocks: "Zoning district, planning cases, permits, overlays, and land-use constraints where public.",
+      configuredBy: ["local planning GIS", "municipal open data"],
+      detail: "Local schema mapping required before claims become non-D evidence.",
+      env: ["PLANNING_GIS_URL", "ZONING_GIS_URL", "OPEN_HAZARD_LAYER_URL"],
+    }),
+    source({
+      id: "tax-delinquency",
+      label: "Tax delinquency records",
+      live: configured("TAX_DELINQUENCY_DATA_URL"),
+      unlocks: "Public tax-delinquency signals where legally available.",
+      configuredBy: ["county tax collector", "public tax sale lists"],
+      detail: "Sensitive lead signal; show source, date, and verify before outreach.",
+      env: ["TAX_DELINQUENCY_DATA_URL"],
+    }),
+    source({
+      id: "code-violations",
+      label: "Code violation records",
+      live: configured("CODE_VIOLATION_DATA_URL"),
+      unlocks: "Open code cases, nuisance records, inspection issues, and municipal enforcement signals.",
+      configuredBy: ["city/county code enforcement", "open-data portal"],
+      detail: "Public distress context only; never shame or imply protected characteristics.",
+      env: ["CODE_VIOLATION_DATA_URL"],
+    }),
+    source({
+      id: "vacant-registry",
+      label: "Vacant property registry",
+      live: configured("VACANT_REGISTRY_DATA_URL"),
+      unlocks: "Vacancy registry evidence where cities/counties publish it.",
+      configuredBy: ["municipal vacant registry", "open-data portal"],
+      detail: "Useful only in markets with a public registry; otherwise Forleads reports a gap.",
+      env: ["VACANT_REGISTRY_DATA_URL"],
+    }),
+    source({
+      id: "microsoft-buildings",
+      label: "Microsoft building footprints",
+      live: configured("MICROSOFT_BUILDING_FOOTPRINTS_URL"),
+      unlocks: "Open ML building footprints where OSM building coverage is sparse.",
+      configuredBy: ["Microsoft Global ML Building Footprints"],
+      detail: "Footprint evidence, not property ownership or sale value.",
+      env: ["MICROSOFT_BUILDING_FOOTPRINTS_URL"],
+    }),
+    source({
+      id: "google-open-buildings",
+      label: "Google Open Buildings",
+      live: configured("GOOGLE_OPEN_BUILDINGS_URL", "AFRICA_BUILDINGS_DATA_URL"),
+      unlocks: "Open building detections in regions where cadastral data is sparse.",
+      configuredBy: ["Google Open Buildings"],
+      detail: "Great for coverage in many global regions; must be labeled as ML-derived footprint evidence.",
+      env: ["GOOGLE_OPEN_BUILDINGS_URL", "AFRICA_BUILDINGS_DATA_URL"],
+    }),
+    source({
+      id: "operator-imports",
+      label: "Operator CSV proof packs",
+      live: configured("OPERATOR_SALES_IMPORT_URL", "OPERATOR_PROPERTY_IMPORT_URL"),
+      unlocks: "Agent-owned lists, title-company exports, permitted CSVs, and local source packs.",
+      configuredBy: ["operator import", "broker-owned data", "title partner export"],
+      detail: "Only use data the agent has rights to use; imports still become sourced evidence cards.",
+      env: ["OPERATOR_SALES_IMPORT_URL", "OPERATOR_PROPERTY_IMPORT_URL"],
+    }),
+    source({
+      id: "automation",
+      label: "Approved automation bridge",
+      live: automationLive,
+      unlocks: "Push approved tasks or outreach jobs into n8n/Zapier-style workflows.",
+      configuredBy: ["n8n", "webhook receiver", "Zapier-compatible endpoint"],
+      detail: automationLive ? "Automation bridge configured." : "Automation only runs after human-approved artifacts.",
+      env: ["N8N_WEBHOOK_URL", "ZAPIER_WEBHOOK_URL"],
+    }),
     {
       id: "consented-contact",
-      label: "Consented and operator-owned contacts",
+      label: "Consented/operator-owned contacts",
       status: "live",
-      unlocks: "Use Google profile/session, field notes, imported CRM contacts, and manually captured contact info.",
-      configuredBy: ["Google OAuth", "operator input", "CRM imports"],
-      detail:
-        "Free-first contact enrichment means consented or operator-owned data. Global free skip tracing is not a lawful assumption.",
+      unlocks: "CRM imports, manually captured contacts, Google/Microsoft account context, and consented records.",
+      configuredBy: ["operator input", "Google OAuth", "CRM imports"],
+      detail: "Forleads should not infer owner/occupant/contact details from an address alone.",
       env: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "FOLLOWUPBOSS_API_KEY", "GHL_API_KEY"],
     },
-    openSource({
-      id: "open-automation",
-      label: "Open automation bridge",
-      live: openMailLive,
-      unlocks: "Queue approved postcards, dialer tasks, or external jobs through self-hosted n8n/webhooks.",
-      configuredBy: ["n8n", "webhook receiver", "Zapier-compatible endpoint"],
-      detail: openMailLive
-        ? "Automation bridge configured."
-        : "Use N8N_WEBHOOK_URL or a webhook receiver for free/self-hosted outbound job queues.",
-      env: ["N8N_WEBHOOK_URL", "ZAPIER_WEBHOOK_URL"],
+    source({
+      id: "open-sales",
+      label: "Generic open sale records",
+      live: openSalesLive,
+      unlocks: "Open CSV/JSON sale rows in markets not covered by a dedicated provider adapter yet.",
+      configuredBy: ["public CSV/JSON feed", "operator-hosted source pack"],
+      detail: "Every row must pass address, sale date, price, source, and freshness checks before becoming evidence.",
+      env: ["OPEN_SALES_DATA_URL", "OPEN_SALES_DATA_URLS", "OPERATOR_SALES_IMPORT_URL"],
+    }),
+    source({
+      id: "open-distress",
+      label: "Generic open distress records",
+      live: openDistressLive,
+      unlocks: "Open distress rows for tax, vacancy, code, foreclosure, nuisance, or permit signals.",
+      configuredBy: ["public CSV/JSON feed", "municipal open data"],
+      detail: "Each dataset must be mapped and cited; unknown schemas stay D-grade.",
+      env: ["OPEN_DISTRESS_DATA_URL", "OPEN_DISTRESS_DATA_URLS"],
+    }),
+    source({
+      id: "open-hazard",
+      label: "Generic open hazard layers",
+      live: hazardLive,
+      unlocks: "Flood, fire, environmental, or local hazard context from public GIS layers.",
+      configuredBy: ["ArcGIS REST", "local hazard GIS", "open environmental layers"],
+      detail: "Risk evidence must cite the layer and avoid legal/insurance conclusions.",
+      env: ["OPEN_HAZARD_LAYER_URL", "US_HAZARD_LAYER_URL", "UK_HAZARD_LAYER_URL", "EU_HAZARD_LAYER_URL", "AFRICA_HAZARD_LAYER_URL"],
+    }),
+    source({
+      id: "open-buildings",
+      label: "Generic open building footprints",
+      live: buildingsLive,
+      unlocks: "Fallback footprint and structure-size context when OSM is sparse.",
+      configuredBy: ["Microsoft", "Google Open Buildings", "local GeoJSON"],
+      detail: "Building geometry is context, not sale/ownership truth.",
+      env: ["MICROSOFT_BUILDING_FOOTPRINTS_URL", "GOOGLE_OPEN_BUILDINGS_URL", "LOCAL_BUILDINGS_GEOJSON_URL", "AFRICA_BUILDINGS_DATA_URL"],
     }),
   ];
 }

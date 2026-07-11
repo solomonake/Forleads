@@ -25,6 +25,50 @@ type ToastValue =
 import { ReviewTray } from "./ReviewTray";
 import { ContactEditor } from "./ContactEditor";
 
+type MapLibreModule = typeof maplibregl;
+
+declare global {
+  interface Window {
+    maplibregl?: MapLibreModule;
+  }
+}
+
+const MAPLIBRE_VERSION = "4.7.1";
+const MAPLIBRE_JS = `/vendor/maplibre/maplibre-gl.js?v=${MAPLIBRE_VERSION}`;
+const MAPLIBRE_CSS = `/vendor/maplibre/maplibre-gl.css?v=${MAPLIBRE_VERSION}`;
+let maplibreLoad: Promise<MapLibreModule> | null = null;
+
+function loadMapLibre(): Promise<MapLibreModule> {
+  if (typeof window === "undefined") return Promise.reject(new Error("MapLibre requires a browser"));
+  if (window.maplibregl) return Promise.resolve(window.maplibregl);
+
+  if (!document.querySelector('link[data-forleads-maplibre="css"]')) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = MAPLIBRE_CSS;
+    link.dataset.forleadsMaplibre = "css";
+    document.head.appendChild(link);
+  }
+
+  if (maplibreLoad) return maplibreLoad;
+
+  maplibreLoad = new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[data-forleads-maplibre="js"]');
+    const script = existing ?? document.createElement("script");
+    script.src = MAPLIBRE_JS;
+    script.async = true;
+    script.dataset.forleadsMaplibre = "js";
+    script.onload = () => {
+      if (window.maplibregl) resolve(window.maplibregl);
+      else reject(new Error("MapLibre loaded without exposing window.maplibregl"));
+    };
+    script.onerror = () => reject(new Error("MapLibre failed to load"));
+    if (!existing) document.head.appendChild(script);
+  });
+
+  return maplibreLoad;
+}
+
 const SCOUT_GROUPS: { key: ScoutType; label: string }[] = [
   { key: "property", label: "Property" },
   { key: "imagery", label: "Imagery" },
@@ -84,7 +128,7 @@ export function MapWorkspace({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const ml = (await import("maplibre-gl")).default;
+      const ml = await loadMapLibre();
       if (cancelled || !mapDiv.current) return;
       mlRef.current = ml;
       const map = new ml.Map({
@@ -128,7 +172,14 @@ export function MapWorkspace({
         },
       });
       mapRef.current = map;
-    })();
+    })().catch((error) => {
+      if (!cancelled) {
+        setToast({
+          kind: "err",
+          text: error instanceof Error ? error.message : "The map failed to load.",
+        });
+      }
+    });
     return () => {
       cancelled = true;
       mapRef.current?.remove();
@@ -772,6 +823,19 @@ export function MapWorkspace({
                       )}
                     </div>
                     {card.confidence === "D" && card.reasoning && <div className="gap-note">{card.reasoning}</div>}
+                    {card.media?.length ? (
+                      <div className="evidence-media">
+                        {card.media.map((media, mediaIndex) => (
+                          <figure key={`${media.url}-${mediaIndex}`}>
+                            <img src={media.url} alt={media.alt} loading="lazy" />
+                            <figcaption>
+                              {media.captured_at ? `${media.captured_at} · ` : ""}
+                              {media.attribution ?? media.source}
+                            </figcaption>
+                          </figure>
+                        ))}
+                      </div>
+                    ) : null}
                     {isOpen && card.confidence !== "D" && card.reasoning && (
                       <div className="reasoning">{card.reasoning}</div>
                     )}

@@ -1,0 +1,144 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-07-11",
+  "goal": "Make Forleads production credible for real estate agents through grounded data, real imagery, approval-gated actions, and repeatable verification loops.",
+  "stopRules": [
+    "Stop before secrets, spending, production mutation, deployment, destructive actions, or external communication unless explicitly approved.",
+    "Do not advance from a phase when required gates are red or inconclusive unless the phase is a gate-diagnosis phase.",
+    "Never present mock connector success, guessed property facts, or placeholder imagery as real production proof.",
+    "Record a checkpoint and phase score after each meaningful phase."
+  ],
+  "proofFloor": [
+    "npm run agent:doctor",
+    "npm run typecheck",
+    "npm run lint",
+    "npm test",
+    "npm run agent:check -- --risk=high"
+  ],
+  "phases": [
+    {
+      "id": "phase-a-gate-stability",
+      "title": "Gate Stability",
+      "status": "done",
+      "risk": "high",
+      "packet": ".agent/plans/product-completion-loop.md",
+      "objective": "Make the current branch honestly gateable so real-data work can be committed and pushed without skipped proof.",
+      "files": [
+        "package.json",
+        "scripts/agent-check.mjs",
+        "src/lib/providers/real.ts",
+        "src/lib/providers/real.test.ts",
+        ".agent/handoffs/current.md"
+      ],
+      "acceptance": [
+        "Typecheck exits 0.",
+        "Focused tests for touched provider/readiness files pass.",
+        "Full lint either exits 0 or has a captured root-cause blocker.",
+        "Checkpoint records proof and the next exact action."
+      ]
+    },
+    {
+      "id": "phase-b-data-provenance",
+      "title": "Data Provenance And Source Readiness",
+      "status": "in_progress",
+      "risk": "high",
+      "packet": ".agent/plans/real-data-source-expansion.md",
+      "objective": "Ensure property facts, sales, risk, imagery, and licensed-source readiness are sourced, fresh, and fail closed.",
+      "files": [
+        "src/lib/providers/readiness.ts",
+        "src/lib/providers/real.ts",
+        "src/lib/providers/index.ts",
+        "src/lib/agents/dispatcher.ts",
+        "src/components/ConnectorHub.tsx"
+      ],
+      "acceptance": [
+        "At least 20 legitimate source lanes are visible.",
+        "Unconfigured paid/licensed sources show setup-required or grade-D gaps.",
+        "Assessor/open property feed facts include source and freshness.",
+        "Imagery cards render only real provider media with attribution."
+      ]
+    },
+    {
+      "id": "phase-c-action-loop",
+      "title": "Approval-Gated Action Loop",
+      "status": "planned",
+      "risk": "high",
+      "packet": ".agent/plans/product-completion-loop.md",
+      "objective": "Prove note to classification to artifact to approval to connector result to outcome memory without external side effects by default.",
+      "files": [
+        "src/lib/pipeline.ts",
+        "src/lib/loops/engine.ts",
+        "src/app/api/notes/route.ts",
+        "src/app/api/approve/route.ts",
+        "src/lib/agents/outcome.ts",
+        "src/lib/agents/memory.ts"
+      ],
+      "acceptance": [
+        "A deterministic test proves the core action loop.",
+        "Stale revisions and compliance-blocked artifacts cannot be approved.",
+        "Missing connector credentials produce setup-required, not fake success."
+      ]
+    },
+    {
+      "id": "phase-d-connector-live-posture",
+      "title": "Connector Live Posture",
+      "status": "planned",
+      "risk": "high",
+      "packet": ".agent/plans/live-only-production.md",
+      "objective": "Keep Gmail, CRM, SMS, calendar, and webhook writes honest: real only when configured and human-approved.",
+      "files": [
+        "src/lib/connectors/index.ts",
+        "src/lib/connectors/gmail.ts",
+        "src/lib/connectors/followupboss.ts",
+        "src/lib/connectors/gohighlevel.ts",
+        "src/lib/connectors/twilio.ts",
+        "src/app/api/connectors/route.ts"
+      ],
+      "acceptance": [
+        "Production factories do not allow mock connector writes.",
+        "Missing credentials return setup-required responses.",
+        "Idempotency prevents duplicate external writes."
+      ]
+    },
+    {
+      "id": "phase-e-operator-ux",
+      "title": "Operator UX And Evidence Review",
+      "status": "planned",
+      "risk": "medium",
+      "packet": ".agent/plans/product-completion-loop.md",
+      "objective": "Make the map, evidence, inbox, pipeline, loop studio, connector hub, and trace surfaces usable for real agents.",
+      "files": [
+        "src/components/MapWorkspace.tsx",
+        "src/components/ActionInbox.tsx",
+        "src/components/Pipeline.tsx",
+        "src/components/LoopStudio.tsx",
+        "src/components/AgentTraceDrawer.tsx",
+        "src/app/globals.css"
+      ],
+      "acceptance": [
+        "Setup-required states are visible and plain-English.",
+        "Evidence media, source, confidence, and reasoning fit on desktop and mobile.",
+        "No primary workflow has dead or misleading states."
+      ]
+    },
+    {
+      "id": "phase-f-production-verification",
+      "title": "Production Verification And Score",
+      "status": "planned",
+      "risk": "high",
+      "packet": ".agent/plans/product-completion-loop.md",
+      "objective": "Separate local proof, CI proof, production health, and human-blocked proof in a final readiness record.",
+      "files": [
+        ".agent/handoffs/current.md",
+        ".agent/metrics/runs.jsonl",
+        ".agent/metrics/phase-runs.jsonl",
+        "docs"
+      ],
+      "acceptance": [
+        "Production health is probed read-only.",
+        "A scorecard records gates, blockers, and next action.",
+        "Merge/deploy only happen after green gates and required approval."
+      ]
+    }
+  ]
+}

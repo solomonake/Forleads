@@ -11,6 +11,8 @@ import {
   MockRiskProvider,
 } from "./mock";
 import {
+  GoogleStreetViewImageryProvider,
+  LicensedPropertyProvider,
   MapillaryImageryProvider,
   OpenDataPropertyProvider,
   OpenRiskDataProvider,
@@ -42,6 +44,12 @@ export function getGeocodeProvider(): GeocodeProvider {
 }
 
 export function getPropertyProvider(): PropertyDataProvider {
+  if (config.propertyProvider === "attom") return new LicensedPropertyProvider("attom");
+  if (config.propertyProvider === "rentcast") return new LicensedPropertyProvider("rentcast");
+  if (config.propertyProvider === "regrid") return new LicensedPropertyProvider("regrid");
+  if (config.propertyProvider === "reportall") return new LicensedPropertyProvider("reportall");
+  if (config.propertyProvider === "reso") return new LicensedPropertyProvider("reso");
+  if (config.propertyProvider === "mls-grid") return new LicensedPropertyProvider("mls-grid");
   if (config.propertyProvider === "open-data") return new OpenDataPropertyProvider();
   if (config.propertyProvider === "osm") return new OSMPropertyProvider();
   return new MockPropertyProvider();
@@ -50,6 +58,9 @@ export function getPropertyProvider(): PropertyDataProvider {
 export function getImageryProvider(): ImageryProvider {
   if (config.imageryProvider === "mapillary" && process.env.MAPILLARY_TOKEN) {
     return new MapillaryImageryProvider(process.env.MAPILLARY_TOKEN);
+  }
+  if (config.imageryProvider === "google-street-view" && config.googleMapsKey) {
+    return new GoogleStreetViewImageryProvider(config.googleMapsKey);
   }
   return new MockImageryProvider();
 }
