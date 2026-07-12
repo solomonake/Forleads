@@ -35,3 +35,14 @@ look operational while no external system changed.
 - Configured live connectors continue unchanged.
 - Unit tests cover fail-closed behavior.
 - Typecheck, lint, tests, coverage, build, and relevant E2E gates pass.
+
+## Phase D proof update (2026-07-12)
+
+- `src/lib/connectors/live-only.test.ts` now resets the idempotency ledger before
+  each case and covers Gmail, Google Calendar, Outlook draft, Outlook calendar,
+  Follow Up Boss, GoHighLevel, Twilio, Zapier, and generic mock writes with
+  mock writes disabled.
+- `src/lib/connectors/production-policy.test.ts` imports the connector factory
+  under `NODE_ENV=production` with credential env vars unset, then proves
+  factory-selected email, calendar, SMS, CRM note, and task connectors fail
+  closed instead of reporting mock success.

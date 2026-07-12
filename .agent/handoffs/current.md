@@ -1,35 +1,35 @@
 # Current agent checkpoint
 
-Generated: 2026-07-12T18:43:32.573Z
+Generated: 2026-07-12T18:53:28.500Z
 
 ## State
-- Branch: `codex/action-loop-proof`
-- Commit: `4e6998c8c654`
+- Branch: `codex/connector-live-posture-proof`
+- Commit: `59e0b655002a`
 - Worktree: dirty
 - Changed files:
-  - M .agent/handoffs/current.md
-  -  M .agent/metrics/phase-runs.jsonl
+  - M .agent/metrics/phase-runs.jsonl
   -  M .agent/phase-manifest.json
-  -  M .agent/plans/product-completion-loop.md
-  - ?? src/app/api/notes/route.test.ts
+  -  M .agent/plans/live-only-production.md
+  -  M src/lib/connectors/live-only.test.ts
+  - ?? src/lib/connectors/production-policy.test.ts
 
 ## Goal
-Close Phase C approval-gated action loop proof and activate Phase D connector live posture.
+Close Phase D connector live-posture proof and activate Phase E operator UX.
 
 ## Completed
-Added src/app/api/notes/route.test.ts proving /api/notes front door -> field evidence -> loop match -> draft -> approval -> mock-mode connector -> outcome memory; updated product completion QA matrix; marked phase-c-action-loop done and phase-d-connector-live-posture in progress; recorded phase success.
+Strengthened src/lib/connectors/live-only.test.ts to reset idempotency and cover Gmail, Google Calendar, Outlook draft/calendar, CRM, SMS, Zapier, and mock writes with mock writes disabled; added src/lib/connectors/production-policy.test.ts proving production factory-selected email, calendar, SMS, CRM-note, and task connectors fail closed without credentials; updated live-only plan and marked Phase D done / Phase E active.
 
 ## Next exact action
-Start Phase D by auditing connector factories/routes for Gmail, Microsoft, FUB, GHL, Twilio, and Zapier setup-required behavior, then add/repair deterministic tests for missing credentials and idempotent no-fake-success.
+Start Phase E by reviewing MapWorkspace, ActionInbox, Pipeline, LoopStudio, ConnectorHub, and AgentTraceDrawer for setup-required, evidence media/source/freshness, and mobile/desktop workflow clarity.
 
 ## Blockers
-Live external connector writes still require human OAuth/API credentials or provider API keys; no production mutation or external communication performed.
+Real external connector writes require human OAuth/API credentials and explicit approval; no production mutation or external communication performed.
 
 ## Authority
 In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secrets, spending, destructive actions, and external communication require the user.
 
 ## Verification proof
-agent:doctor 78/78; focused Phase C suite 6 files/22 passed; typecheck passed; lint passed; npm test 59 files/269 passed/10 skipped; agent:eval 16/16; coverage passed; next build passed via npm run agent:check -- --risk=high.
+focused connector suite 4 files/22 passed; agent:doctor 78/78; typecheck passed; lint passed; npm test 60 files/276 passed/10 skipped; agent:eval 16/16; coverage passed; next build passed via npm run agent:check -- --risk=high.
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.
