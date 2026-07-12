@@ -20,6 +20,8 @@ const watchedKeys = [
   "AFRICA_HAZARD_LAYER_URL",
   "GOOGLE_MAPS_API_KEY",
   "MAPILLARY_TOKEN",
+  "OPERATOR_PROPERTY_MEDIA_URL",
+  "FIELD_PHOTO_MANIFEST_URL",
   "RESO_WEB_API_URL",
   "ATTOM_API_KEY",
   "REGRID_API_KEY",
@@ -81,6 +83,22 @@ describe("dataSourceReadiness", () => {
     expect(sources.find((source) => source.id === "field-photos")?.status).toBe("manual_capture");
     expect(sources.map((source) => source.id)).toEqual(
       expect.arrayContaining(["reso-web-api", "mls-grid", "attom", "regrid", "reportall"]),
+    );
+  });
+
+  it("marks operator-owned property photos live only when a media manifest is configured", () => {
+    clearWatchedEnv();
+
+    const missing = dataSourceReadiness().find((source) => source.id === "field-photos");
+    expect(missing?.status).toBe("manual_capture");
+
+    process.env.OPERATOR_PROPERTY_MEDIA_URL = "https://broker.example/media-manifest.json";
+    const configured = dataSourceReadiness().find((source) => source.id === "field-photos");
+
+    expect(configured?.status).toBe("live");
+    expect(configured?.detail).toContain("manifest row matches");
+    expect(configured?.env).toEqual(
+      expect.arrayContaining(["OPERATOR_PROPERTY_MEDIA_URL", "FIELD_PHOTO_MANIFEST_URL"]),
     );
   });
 
