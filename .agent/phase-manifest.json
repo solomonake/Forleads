@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-07-11",
+  "generatedAt": "2026-07-12",
   "goal": "Make Forleads production credible for real estate agents through grounded data, real imagery, approval-gated actions, and repeatable verification loops.",
   "stopRules": [
     "Stop before secrets, spending, production mutation, deployment, destructive actions, or external communication unless explicitly approved.",
@@ -61,7 +61,7 @@
     {
       "id": "phase-c-action-loop",
       "title": "Approval-Gated Action Loop",
-      "status": "in_progress",
+      "status": "done",
       "risk": "high",
       "packet": ".agent/plans/product-completion-loop.md",
       "objective": "Prove note to classification to artifact to approval to connector result to outcome memory without external side effects by default.",
@@ -82,7 +82,7 @@
     {
       "id": "phase-d-connector-live-posture",
       "title": "Connector Live Posture",
-      "status": "planned",
+      "status": "in_progress",
       "risk": "high",
       "packet": ".agent/plans/live-only-production.md",
       "objective": "Keep Gmail, CRM, SMS, calendar, and webhook writes honest: real only when configured and human-approved.",
