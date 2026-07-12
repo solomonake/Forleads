@@ -594,7 +594,7 @@ export interface ApproveResult {
 export async function approveArtifact(
   artifactId: string,
   expectedRevision: number,
-  opts?: { googleAccessToken?: string }
+  opts?: { googleAccessToken?: string; googleCredentialError?: string }
 ): Promise<ApproveResult | null> {
   const repo = await getRepo();
   const artifact = await repo.getArtifact(artifactId);
@@ -608,6 +608,14 @@ export async function approveArtifact(
   // Fail-closed: a blocked artifact can never be approved/sent.
   if (artifact.status === "blocked" || !artifact.compliance_result.pass) {
     throw new Error("Cannot approve: compliance linter blocked this artifact.");
+  }
+
+  if (
+    opts?.googleCredentialError &&
+    !opts.googleAccessToken &&
+    (artifact.type === "email" || artifact.type === "calendar")
+  ) {
+    throw new Error(`Connector write failed: ${opts.googleCredentialError}`);
   }
 
   const connector = await connectorForAction(artifact.type, {

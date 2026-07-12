@@ -164,6 +164,21 @@ describe("approveArtifact after revision", () => {
     expect((await repo.getArtifact(artifact.id))?.status).toBe("drafted");
     expect(await recallOutcomes(lead, "email")).toHaveLength(0);
   });
+
+  it("does not approve when Google credentials need reconnection", async () => {
+    const { lead, artifact } = await setup("18 Stale Google Credential Lane");
+    if (artifact.status === "blocked") throw new Error("setup blocked");
+
+    await expect(
+      approveArtifact(artifact.id, artifact.revision, {
+        googleCredentialError: "Google credential needs reconnection. invalid_grant",
+      }),
+    ).rejects.toThrow(/Google credential needs reconnection/);
+
+    const repo = await getRepo();
+    expect((await repo.getArtifact(artifact.id))?.status).toBe("drafted");
+    expect(await recallOutcomes(lead, "email")).toHaveLength(0);
+  });
 });
 
 describe("rejectArtifact → outcome memory + cancellation", () => {

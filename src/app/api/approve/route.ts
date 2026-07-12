@@ -1,6 +1,7 @@
 // POST /api/approve — the human gate. Idempotently writes the approved artifact
 // to its connector. If the user is signed in with Google, a fresh access token
-// is used so the result is a REAL Gmail draft; otherwise it falls back to mock.
+// is used so the result is a REAL Gmail draft; missing/stale credentials become
+// setup-required connector failures, not fake external success.
 // Fail-closed: a compliance-blocked artifact cannot be approved.
 import { NextRequest, NextResponse } from "next/server";
 import { freshAccessToken } from "@/lib/auth/google";
@@ -25,6 +26,7 @@ export const POST = withRoute("approve", async (req: NextRequest) => {
   const session = await getSession();
   // Use the signed-in user's Google token for real drafts (refresh if stale).
   let googleAccessToken: string | undefined;
+  let googleCredentialError: string | undefined;
   let refreshedSession = false;
   const storedGoogle = session?.googleCredentialRef
     ? await loadGoogleCredential(agentId, session.googleCredentialRef)
@@ -42,14 +44,19 @@ export const POST = withRoute("approve", async (req: NextRequest) => {
         session.google = undefined;
         refreshedSession = true;
       }
-    } catch {
-      // Token refresh failed → fall back to mock so the loop still completes.
+    } catch (e) {
+      googleCredentialError = `Google credential needs reconnection. ${
+        e instanceof Error ? e.message : "Refresh failed"
+      }`;
     }
   }
 
   let result;
   try {
-    result = await approveArtifact(body.artifactId, body.expectedRevision, { googleAccessToken });
+    result = await approveArtifact(body.artifactId, body.expectedRevision, {
+      googleAccessToken,
+      googleCredentialError,
+    });
   } catch (e) {
     // Fail-closed compliance is a client-correctable 422, not a server error;
     // anything else propagates to the route's error boundary (logged + 500).
@@ -59,6 +66,7 @@ export const POST = withRoute("approve", async (req: NextRequest) => {
     if (msg.includes("Connector write failed")) {
       return NextResponse.json(
         {
+          code: "connector_setup_required",
           error: msg.replace(
             /^Connector write failed:\s*/,
             "Setup required: ",
