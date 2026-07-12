@@ -82,7 +82,7 @@
     {
       "id": "phase-d-connector-live-posture",
       "title": "Connector Live Posture",
-      "status": "in_progress",
+      "status": "done",
       "risk": "high",
       "packet": ".agent/plans/live-only-production.md",
       "objective": "Keep Gmail, CRM, SMS, calendar, and webhook writes honest: real only when configured and human-approved.",
@@ -103,7 +103,7 @@
     {
       "id": "phase-e-operator-ux",
       "title": "Operator UX And Evidence Review",
-      "status": "planned",
+      "status": "in_progress",
       "risk": "medium",
       "packet": ".agent/plans/product-completion-loop.md",
       "objective": "Make the map, evidence, inbox, pipeline, loop studio, connector hub, and trace surfaces usable for real agents.",
