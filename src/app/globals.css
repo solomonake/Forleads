@@ -898,6 +898,27 @@ button {
 .card .src {
   color: var(--text-muted);
 }
+.source-freshness {
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.source-freshness.current {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 35%, var(--border));
+}
+.source-freshness.stale,
+.source-freshness.unknown {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
+}
+.source-freshness.future,
+.source-freshness.invalid {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+}
 .card .src a {
   color: var(--text-2);
   text-decoration: none;

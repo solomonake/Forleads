@@ -14,6 +14,7 @@ import type {
   SuggestedAction,
 } from "@/lib/core/types";
 import type { GeoResult } from "@/lib/providers/types";
+import { cardFreshness } from "@/lib/evidence/freshness";
 import { apiGet, apiPost, ApiError, ConfidenceLegend, GradeChip } from "./ui";
 import { CrosshairIcon, SatelliteIcon, SendIcon } from "./icons";
 
@@ -810,6 +811,7 @@ export function MapWorkspace({
               {group.cards.map((card, index) => {
                 const globalIdx = cards.indexOf(card);
                 const isOpen = expanded.has(globalIdx);
+                const freshness = cardFreshness(card);
                 return (
                   <div
                     id={`card-${globalIdx}`}
@@ -832,6 +834,7 @@ export function MapWorkspace({
                           ? `© ${card.sources.map((source) => source.name).join(" · ")}`
                           : "no source"}
                       </span>
+                      <span className={`source-freshness ${freshness.status}`}>{freshness.label}</span>
                       {card.reasoning && (
                         <button
                           className="why"
