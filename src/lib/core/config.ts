@@ -14,6 +14,11 @@ const production = process.env.NODE_ENV === "production";
 const supabaseConfigured = Boolean(
   env("NEXT_PUBLIC_SUPABASE_URL") && env("SUPABASE_SERVICE_ROLE_KEY"),
 );
+const operatorMediaConfigured = Boolean(
+  env("OPERATOR_PROPERTY_MEDIA_URL") ||
+    env("FIELD_PHOTO_MANIFEST_URL") ||
+    env("NEXT_PUBLIC_FIELD_PHOTOS"),
+);
 const appUrl =
   env("NEXT_PUBLIC_APP_URL") ??
   (env("VERCEL_PROJECT_PRODUCTION_URL")
@@ -48,7 +53,9 @@ export const config = {
   propertyProvider: env("FORLEADS_PROPERTY_PROVIDER") ?? (production ? "open-data" : "osm-mock"),
   imageryProvider:
     env("FORLEADS_IMAGERY_PROVIDER") ??
-    (production && env("MAPILLARY_TOKEN")
+    (production && operatorMediaConfigured
+      ? "operator-property-media"
+      : production && env("MAPILLARY_TOKEN")
       ? "mapillary"
       : production && env("GOOGLE_MAPS_API_KEY")
         ? "google-street-view"

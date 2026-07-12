@@ -14,8 +14,10 @@ import {
   GoogleStreetViewImageryProvider,
   LicensedPropertyProvider,
   MapillaryImageryProvider,
+  NoStreetImageryProvider,
   OpenDataPropertyProvider,
   OpenRiskDataProvider,
+  OperatorPropertyMediaProvider,
   OSMPropertyProvider,
   PhotonNominatimGeocodeProvider,
   PublicNominatimGeocodeProvider,
@@ -56,13 +58,22 @@ export function getPropertyProvider(): PropertyDataProvider {
 }
 
 export function getImageryProvider(): ImageryProvider {
+  const operatorMediaConfigured = Boolean(
+    process.env.OPERATOR_PROPERTY_MEDIA_URL ||
+      process.env.FIELD_PHOTO_MANIFEST_URL ||
+      process.env.NEXT_PUBLIC_FIELD_PHOTOS
+  );
+  let base: ImageryProvider;
   if (config.imageryProvider === "mapillary" && process.env.MAPILLARY_TOKEN) {
-    return new MapillaryImageryProvider(process.env.MAPILLARY_TOKEN);
+    base = new MapillaryImageryProvider(process.env.MAPILLARY_TOKEN);
+  } else if (config.imageryProvider === "google-street-view" && config.googleMapsKey) {
+    base = new GoogleStreetViewImageryProvider(config.googleMapsKey);
+  } else if (operatorMediaConfigured || config.production) {
+    base = new NoStreetImageryProvider();
+  } else {
+    base = new MockImageryProvider();
   }
-  if (config.imageryProvider === "google-street-view" && config.googleMapsKey) {
-    return new GoogleStreetViewImageryProvider(config.googleMapsKey);
-  }
-  return new MockImageryProvider();
+  return operatorMediaConfigured ? new OperatorPropertyMediaProvider(base) : base;
 }
 
 export function getRiskProvider(): RiskDataProvider {

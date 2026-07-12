@@ -1,51 +1,47 @@
 # Current agent checkpoint
 
-Generated: 2026-07-12T04:44:32.068Z
+Generated: 2026-07-12T05:21:20.000Z
 
 ## State
-- Branch: `feat/agentic-data-ops`
-- Commit: `8affb50365ab`
+- Branch: `codex/property-media-ingestion`
+- Commit: `daf4f5b85292` (pre-commit base; current worktree is ready to commit)
 - Worktree: dirty
 - Changed files:
-  - UU .agent/handoffs/current.md
-  - UU .agent/metrics/runs.jsonl
-  - A  .agent/notes/learnings-session-2026-07-05-catalog.md
-  - A  .agent/plans/builtin-region-catalog-ui-polish.md
-  - M  next.config.mjs
-  - M  src/app/globals.css
-  - UU src/app/page.tsx
-  - UU src/components/ActionInbox.tsx
-  - UU src/components/ConnectorHub.tsx
-  - M  src/components/MapWorkspace.tsx
-  - M  src/components/ReviewTray.tsx
-  - A  src/components/icons.tsx
-  - M  src/lib/core/config.ts
-  - A  src/lib/providers/catalog.live.test.ts
-  - A  src/lib/providers/catalog.test.ts
-  - A  src/lib/providers/catalog.ts
-  - M  src/lib/providers/index.ts
-  - UU src/lib/providers/readiness.test.ts
-  - UU src/lib/providers/readiness.ts
-  - UU src/lib/providers/real.test.ts
-  - UU src/lib/providers/real.ts
+  - M .agent/metrics/runs.jsonl
+  -  M docs/SETUP.md
+  -  M src/lib/core/config.ts
+  -  M src/lib/providers/index.ts
+  -  M src/lib/providers/readiness.test.ts
+  -  M src/lib/providers/readiness.ts
+  -  M src/lib/providers/real.test.ts
+  -  M src/lib/providers/real.ts
+  - ?? .agent/plans/operator-property-media-ingestion.md
 
 ## Goal
-Production-grade Forleads continuous implementation loop
+Continue the production loop for real, lawful property imagery and grounded data.
 
 ## Completed
-Merged main into feat/agentic-data-ops after Phase A success. Preserved main built-in open-data catalog and UI polish while keeping Phase A real-data provenance work: evidence media, Google Street View proxy, Mapillary media, assessor/property facts, licensed-provider fail-closed shells, deterministic linting, Turbopack build, MapLibre static asset sync, and phase loop runner.
+- Added `.agent/plans/operator-property-media-ingestion.md`.
+- Added `OperatorPropertyMediaProvider`, `NoStreetImageryProvider`, rights-gated media matching, safe media URLs, address/coordinate matching, and composed fallback imagery.
+- Wired operator media manifests through `getImageryProvider()` and production config.
+- Updated source readiness and setup docs for `OPERATOR_PROPERTY_MEDIA_URL` / `FIELD_PHOTO_MANIFEST_URL`.
+- Added tests proving operator-owned images render as image evidence, rows without rights are rejected, no-street imagery fails closed, and readiness flips live only when configured.
 
 ## Next exact action
-Resolve any remaining merge fallout with tests/typecheck, push the updated branch, wait for PR checks, merge PR #41 if green, then continue phase-b-data-provenance.
+Commit, push `codex/property-media-ingestion`, open PR, watch checks, merge if green, then continue to the next phase gap.
 
 ## Blockers
-none known after conflict resolution; verification pending after merge.
+none
 
 ## Authority
 In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secrets, spending, destructive actions, and external communication require the user.
 
 ## Verification proof
-Before merging main, npm run agent:check -- --risk=high passed end to end on commit 8affb50. Post-merge verification pending.
+- `npm run typecheck` passed.
+- `npm run lint` passed.
+- `./node_modules/.bin/vitest run src/lib/providers/real.test.ts src/lib/providers/readiness.test.ts --reporter=dot` passed: 2 files, 26 tests.
+- `npm run agent:check -- --risk=high` passed: doctor, typecheck, lint, 57 test files / 262 passed / 10 skipped, eval 16/16, coverage, and build.
+- Scorecard appended for `operator-property-media-ingestion` with 7/7 gates.
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.

@@ -184,5 +184,6 @@ Send me: the address you tried, a screenshot of the Lead Rail + a draft, and you
 | Real geocoding | `FORLEADS_GEOCODER=photon-nominatim`, `PHOTON_URL`, `NOMINATIM_URL` |
 | Real OSM facts | `FORLEADS_PROPERTY_PROVIDER=osm` |
 | Real street imagery | `FORLEADS_IMAGERY_PROVIDER=mapillary`, `MAPILLARY_TOKEN` |
+| Agent-owned property photos | `OPERATOR_PROPERTY_MEDIA_URL` or `FIELD_PHOTO_MANIFEST_URL` pointing to a JSON/CSV manifest with image URL, address or coordinates, captured date, and rights/license |
 | Real persistence | `FORLEADS_PERSIST=supabase`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
 | Real Gmail drafts | `GOOGLE_CLIENT_ID/SECRET`, `GOOGLE_REDIRECT_URI` (+ token) |

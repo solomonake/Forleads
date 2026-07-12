@@ -82,6 +82,20 @@ interface GoogleStreetViewMetadata {
   location?: { lat?: number; lng?: number };
 }
 
+type OperatorMediaRecord = PublicRecordBag & {
+  address?: string;
+  image_url?: string;
+  photo_url?: string;
+  media_url?: string;
+  thumbnail_url?: string;
+  captured_at?: string;
+  captured_date?: string;
+  rights?: string;
+  license?: string;
+  usage_rights?: string;
+  attribution?: string;
+};
+
 function queryProblem(input: PropertyQuery, options: { requireAddress?: boolean } = {}): string | null {
   if (!Number.isFinite(input.lng) || input.lng < -180 || input.lng > 180) {
     return "Longitude is outside the valid world range.";
@@ -313,6 +327,19 @@ function safeSourceUrl(candidate: string | undefined, fallbackUrl: string): stri
   }
 }
 
+function safeMediaUrl(candidate: string | undefined): string | undefined {
+  if (!candidate) return undefined;
+  const trimmed = candidate.trim();
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return trimmed;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function recordAddress(record: OpenPublicRecord): string | undefined {
   if (record.address) return record.address;
   if (record.property_address) return record.property_address;
@@ -337,6 +364,46 @@ function recordAddress(record: OpenPublicRecord): string | undefined {
 function addressMatches(record: OpenPublicRecord, targetAddress: string): boolean {
   const source = recordAddress(record);
   return source ? addressesMatch(source, targetAddress) : false;
+}
+
+function coordFrom(record: PublicRecordBag, keys: string[]): number | undefined {
+  const raw = firstString(record, keys);
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function distanceMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const earth = 6371000;
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return earth * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function mediaRecordMatches(record: OperatorMediaRecord, input: PropertyQuery): boolean {
+  if (addressMatches(record, input.address)) return true;
+  const lat = coordFrom(record, ["lat", "latitude", "y"]);
+  const lng = coordFrom(record, ["lng", "lon", "longitude", "x"]);
+  if (lat === undefined || lng === undefined) return false;
+  return distanceMeters({ lat, lng }, { lat: input.lat, lng: input.lng }) <= 75;
+}
+
+function mediaRights(record: OperatorMediaRecord): string | undefined {
+  return firstString(record, ["rights", "license", "usage_rights", "permission"]);
+}
+
+function mediaUrlFrom(record: OperatorMediaRecord): string | undefined {
+  return safeMediaUrl(firstString(record, ["image_url", "photo_url", "media_url", "thumbnail_url", "image", "url"]));
+}
+
+function mediaCapturedAt(record: OperatorMediaRecord): string | undefined {
+  return publicRecordDate(record) ?? validPastDate(firstString(record, ["captured_at", "captured_date"]));
 }
 
 function propertyCardsFromRecord(record: PublicRecordBag, fallbackUrl: string): EvidenceCard[] {
@@ -1163,6 +1230,135 @@ function sourceNameForHazard(url: string): string {
   if (/europa|inspire/i.test(url)) return "EU open hazard layer";
   if (/africa/i.test(url)) return "Africa open hazard layer";
   return "Open hazard layer";
+}
+
+// ---- Operator-owned property media -----------------------------------------
+
+export class NoStreetImageryProvider implements ImageryProvider {
+  readonly name = "no-street-imagery";
+  readonly mode = "live" as const;
+
+  async street(q: PropertyQuery): Promise<EvidenceCard[]> {
+    const problem = queryProblem(q);
+    if (problem) return [gapCard("imagery", "Street imagery", problem)];
+    return [
+      gapCard(
+        "imagery",
+        "Street imagery",
+        "No live street-imagery provider is configured. Add Mapillary, Google Street View, or operator-owned media before relying on property photos.",
+      ),
+    ];
+  }
+
+  aerialAttribution(): string {
+    return "No live street imagery configured";
+  }
+}
+
+export class OperatorPropertyMediaProvider implements ImageryProvider {
+  readonly name = "operator-property-media";
+  readonly mode = "live" as const;
+  private readonly manifestUrls: string[];
+
+  constructor(
+    private readonly base: ImageryProvider = new NoStreetImageryProvider(),
+    manifestUrls: string | string[] | undefined = envUrls(
+      "OPERATOR_PROPERTY_MEDIA_URL",
+      "FIELD_PHOTO_MANIFEST_URL",
+      "NEXT_PUBLIC_FIELD_PHOTOS",
+    ),
+  ) {
+    this.manifestUrls = normalizeUrlList(manifestUrls);
+  }
+
+  async street(q: PropertyQuery): Promise<EvidenceCard[]> {
+    const problem = queryProblem(q, { requireAddress: true });
+    if (problem) return [gapCard("imagery", "Agent-captured property photos", problem)];
+
+    const baseCards = await this.base.street(q);
+    if (this.manifestUrls.length === 0) return baseCards;
+
+    try {
+      const loaded = await Promise.all(
+        this.manifestUrls.map(async (url) => ({
+          url,
+          records: (await loadOpenRecords(url)) as OperatorMediaRecord[],
+        })),
+      );
+      const matches = loaded.flatMap(({ url, records }) =>
+        records
+          .filter((record) => mediaRecordMatches(record, q))
+          .map((record) => ({ url, record })),
+      );
+      const valid = matches
+        .map(({ url, record }) => ({
+          url,
+          record,
+          mediaUrl: mediaUrlFrom(record),
+          rights: mediaRights(record),
+        }))
+        .filter(
+          (match): match is { url: string; record: OperatorMediaRecord; mediaUrl: string; rights: string } =>
+            Boolean(match.mediaUrl && match.rights),
+        );
+
+      if (valid.length === 0) {
+        return [this.gap("No operator-owned or licensed property photo matched this address yet."), ...baseCards];
+      }
+
+      const sorted = valid
+        .slice()
+        .sort((a, b) => (mediaCapturedAt(b.record) ?? "").localeCompare(mediaCapturedAt(a.record) ?? ""));
+      const latest = mediaCapturedAt(sorted[0]!.record);
+      return [
+        {
+          scout: "imagery",
+          claim: "Agent-captured property photos",
+          value: `${valid.length} photo${valid.length === 1 ? "" : "s"}`,
+          sources: [
+            {
+              name: firstString(sorted[0]!.record, ["source", "provider", "photographer"]) ?? "Operator property media",
+              url: safeSourceUrl(firstString(sorted[0]!.record, ["source_url", "record_url"]), sorted[0]!.url),
+              as_of: latest,
+            },
+          ],
+          confidence: "A",
+          media: sorted.slice(0, 6).map(({ record, mediaUrl }, index) => ({
+            kind: "image" as const,
+            url: mediaUrl,
+            alt:
+              firstString(record, ["alt", "caption", "description"]) ??
+              `Agent-provided property photo ${index + 1} near ${q.address}`,
+            source: firstString(record, ["source", "provider", "photographer"]) ?? "Operator property media",
+            captured_at: mediaCapturedAt(record),
+            attribution:
+              firstString(record, ["attribution", "credit"]) ??
+              `${mediaRights(record) ?? "Operator-provided media"}`,
+          })),
+          reasoning:
+            "Matched configured operator-owned or licensed media by address or nearby coordinates. Treat photos as visual context and verify condition before advising a client.",
+        },
+        ...baseCards,
+      ];
+    } catch (e) {
+      log("warn", "provider.operator_media.failed", {
+        error: e instanceof Error ? e.message : String(e),
+        urls: this.manifestUrls.length,
+      });
+      return [
+        this.gap("Configured operator media was not reachable just now; Forleads kept other imagery sources and reported the gap."),
+        ...baseCards,
+      ];
+    }
+  }
+
+  aerialAttribution(): string {
+    return `${this.base.aerialAttribution()} · Operator media © rights holder`;
+  }
+
+  private gap(reasoning: string): EvidenceCard {
+    return gapCard("imagery", "Agent-captured property photos", reasoning);
+  }
 }
 
 // ---- Mapillary imagery ------------------------------------------------------

@@ -3,12 +3,14 @@ import {
   GoogleStreetViewImageryProvider,
   LicensedPropertyProvider,
   MapillaryImageryProvider,
+  NoStreetImageryProvider,
   OpenDataPropertyProvider,
   OpenRiskDataProvider,
+  OperatorPropertyMediaProvider,
   OSMPropertyProvider,
   PublicNominatimGeocodeProvider,
 } from "./real";
-import type { PropertyDataProvider } from "./types";
+import type { ImageryProvider, PropertyDataProvider } from "./types";
 
 const originalFetch = globalThis.fetch;
 const originalOpenSales = process.env.OPEN_SALES_DATA_URL;
@@ -16,6 +18,8 @@ const originalOpenSalesList = process.env.OPEN_SALES_DATA_URLS;
 const originalHmlr = process.env.HMLR_PRICE_PAID_URL;
 const originalFema = process.env.FEMA_NFHL_URL;
 const originalAttom = process.env.ATTOM_API_KEY;
+const originalOperatorMedia = process.env.OPERATOR_PROPERTY_MEDIA_URL;
+const originalFieldManifest = process.env.FIELD_PHOTO_MANIFEST_URL;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -24,6 +28,8 @@ afterEach(() => {
   restoreEnv("HMLR_PRICE_PAID_URL", originalHmlr);
   restoreEnv("FEMA_NFHL_URL", originalFema);
   restoreEnv("ATTOM_API_KEY", originalAttom);
+  restoreEnv("OPERATOR_PROPERTY_MEDIA_URL", originalOperatorMedia);
+  restoreEnv("FIELD_PHOTO_MANIFEST_URL", originalFieldManifest);
 });
 
 function restoreEnv(key: string, value: string | undefined) {
@@ -50,6 +56,26 @@ const basePropertyProvider: PropertyDataProvider = {
   },
   async comps() {
     return [];
+  },
+};
+
+const baseImageryProvider: ImageryProvider = {
+  name: "base-imagery",
+  mode: "live",
+  async street() {
+    return [
+      {
+        scout: "imagery",
+        claim: "Street imagery",
+        value: null,
+        sources: [],
+        confidence: "D",
+        reasoning: "No fallback imagery.",
+      },
+    ];
+  },
+  aerialAttribution() {
+    return "Fallback imagery";
   },
 };
 
@@ -415,6 +441,109 @@ describe("MapillaryImageryProvider", () => {
         }),
       ]),
     );
+  });
+});
+
+describe("OperatorPropertyMediaProvider", () => {
+  it("renders operator-owned property photos as image media when a manifest row matches", async () => {
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          records: [
+            {
+              address: "22125 Clarksburg Road",
+              image_url: "https://agent-media.example/photos/22125-front.jpg",
+              captured_at: "2026-07-01T14:30:00Z",
+              rights: "agent-owned",
+              source: "Agent field upload",
+              source_url: "https://broker.example/media/22125",
+              attribution: "Photo © Listing Team",
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+
+    const cards = await new OperatorPropertyMediaProvider(
+      baseImageryProvider,
+      "https://broker.example/media-manifest.json",
+    ).street({
+      address: "22125 Clarksburg Rd",
+      lng: -77.279,
+      lat: 39.238,
+      scout: "imagery",
+    });
+
+    expect(cards[0]).toMatchObject({
+      scout: "imagery",
+      claim: "Agent-captured property photos",
+      value: "1 photo",
+      confidence: "A",
+      sources: [{ name: "Agent field upload", url: "https://broker.example/media/22125", as_of: "2026-07-01" }],
+      media: [
+        {
+          kind: "image",
+          url: "https://agent-media.example/photos/22125-front.jpg",
+          source: "Agent field upload",
+          captured_at: "2026-07-01",
+          attribution: "Photo © Listing Team",
+        },
+      ],
+    });
+    expect(cards[1]?.claim).toBe("Street imagery");
+  });
+
+  it("does not display manifest images without explicit media rights", async () => {
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          records: [
+            {
+              address: "22125 Clarksburg Road",
+              image_url: "https://agent-media.example/photos/unsafe.jpg",
+              captured_at: "2026-07-01",
+              source: "Unknown upload",
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+
+    const cards = await new OperatorPropertyMediaProvider(
+      baseImageryProvider,
+      "https://broker.example/media-manifest.json",
+    ).street({
+      address: "22125 Clarksburg Rd",
+      lng: -77.279,
+      lat: 39.238,
+      scout: "imagery",
+    });
+
+    expect(cards[0]).toMatchObject({
+      scout: "imagery",
+      claim: "Agent-captured property photos",
+      value: null,
+      confidence: "D",
+    });
+    expect(cards[0]?.media).toBeUndefined();
+    expect(cards[0]?.reasoning).toContain("No operator-owned or licensed property photo matched");
+  });
+
+  it("returns an honest non-mock gap when no street imagery provider is configured", async () => {
+    const cards = await new NoStreetImageryProvider().street({
+      address: "22125 Clarksburg Rd",
+      lng: -77.279,
+      lat: 39.238,
+      scout: "imagery",
+    });
+
+    expect(cards[0]).toMatchObject({
+      scout: "imagery",
+      claim: "Street imagery",
+      value: null,
+      confidence: "D",
+    });
+    expect(cards[0]?.reasoning).toContain("No live street-imagery provider is configured");
   });
 });
 

@@ -64,7 +64,12 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
   const mapillaryLive = config.imageryProvider === "mapillary" && configured("MAPILLARY_TOKEN");
   const googleStreetViewLive =
     config.imageryProvider === "google-street-view" && configured("GOOGLE_MAPS_API_KEY");
-  const fieldPhotoLive = configured("FIELD_PHOTO_STORAGE", "NEXT_PUBLIC_FIELD_PHOTOS");
+  const fieldPhotoLive = configured(
+    "OPERATOR_PROPERTY_MEDIA_URL",
+    "FIELD_PHOTO_MANIFEST_URL",
+    "FIELD_PHOTO_STORAGE",
+    "NEXT_PUBLIC_FIELD_PHOTOS",
+  );
   const openSalesLive = configured(
     "OPEN_SALES_DATA_URL",
     "OPEN_SALES_DATA_URLS",
@@ -180,9 +185,11 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       label: "Agent-captured field photos",
       status: fieldPhotoLive ? "live" : "manual_capture",
       unlocks: "Current, first-party property photos captured during door knocking or field routes.",
-      configuredBy: ["Forleads mobile capture", "operator upload", "storage bucket"],
-      detail: fieldPhotoLive ? "Field photo storage is configured." : "Most trustworthy for current condition, but needs upload/storage wiring.",
-      env: ["FIELD_PHOTO_STORAGE", "NEXT_PUBLIC_FIELD_PHOTOS"],
+      configuredBy: ["Forleads mobile capture", "operator media manifest", "storage bucket"],
+      detail: fieldPhotoLive
+        ? "Operator-owned media can render as real image evidence when a manifest row matches the selected property."
+        : "Most trustworthy for current condition, but needs a media manifest or upload/storage wiring.",
+      env: ["OPERATOR_PROPERTY_MEDIA_URL", "FIELD_PHOTO_MANIFEST_URL", "FIELD_PHOTO_STORAGE", "NEXT_PUBLIC_FIELD_PHOTOS"],
     },
     source({
       id: "open-sales",
