@@ -18,17 +18,15 @@ Generated: 2026-07-12T06:30:43.625Z
   - ?? src/lib/evidence/freshness.ts
 
 ## Goal
-Continue the production loop for evidence freshness and source-date honesty.
+Continue the production loop from Phase C: prove the approval-gated action loop end to end without fake external side effects.
 
 ## Completed
-- Added `.agent/plans/evidence-source-freshness.md`.
-- Added `src/lib/evidence/freshness.ts` with deterministic current/stale/future/invalid/unknown source freshness classification.
-- Evidence validation now rejects malformed or future `source.as_of` values.
-- Map evidence cards now render a compact freshness badge (`as of`, `stale`, or `date unknown`) next to source names.
-- Added focused freshness and validation tests.
+- Phase B (`phase-b-data-provenance`) closed as success after merged PRs #41, #42, and #45.
+- Phase manifest now marks `phase-b-data-provenance` done and `phase-c-action-loop` in progress.
+- Phase run record appended with 7/7 gates and proof: 20+ source lanes, fail-closed licensed setup states, sourced assessor facts, real imagery media with attribution, and evidence freshness badges.
 
 ## Next exact action
-Commit, push `codex/evidence-source-freshness`, open PR, watch checks, merge if green, then continue to the next production gap.
+Commit, push `codex/phase-b-closeout`, open PR, watch checks, merge if green, then implement Phase C's highest-leverage action-loop proof.
 
 ## Blockers
 none
@@ -37,11 +35,8 @@ none
 In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secrets, spending, destructive actions, and external communication require the user.
 
 ## Verification proof
-- `npm run typecheck` passed.
-- `npm run lint` passed.
-- `./node_modules/.bin/vitest run src/lib/evidence/freshness.test.ts src/lib/evidence/validate.test.ts --reporter=dot` passed: 2 files, 11 tests.
-- `npm run agent:check -- --risk=high` passed: doctor, typecheck, lint, 58 test files / 268 passed / 10 skipped, eval 16/16, coverage, and build.
-- Scorecard appended for `evidence-source-freshness` with 7/7 gates.
+- Phase closeout is metadata-only; previous high-risk proof for the completed Phase B slice passed before merge: doctor, typecheck, lint, 58 test files / 268 passed / 10 skipped, eval 16/16, coverage, and build.
+- `npm run agent:phase:record -- --phase=phase-b-data-provenance ... --gates-passed=7 --gates-total=7` appended `.agent/metrics/phase-runs.jsonl`.
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.

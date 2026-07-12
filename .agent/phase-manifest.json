@@ -40,7 +40,7 @@
     {
       "id": "phase-b-data-provenance",
       "title": "Data Provenance And Source Readiness",
-      "status": "in_progress",
+      "status": "done",
       "risk": "high",
       "packet": ".agent/plans/real-data-source-expansion.md",
       "objective": "Ensure property facts, sales, risk, imagery, and licensed-source readiness are sourced, fresh, and fail closed.",
@@ -61,7 +61,7 @@
     {
       "id": "phase-c-action-loop",
       "title": "Approval-Gated Action Loop",
-      "status": "planned",
+      "status": "in_progress",
       "risk": "high",
       "packet": ".agent/plans/product-completion-loop.md",
       "objective": "Prove note to classification to artifact to approval to connector result to outcome memory without external side effects by default.",
