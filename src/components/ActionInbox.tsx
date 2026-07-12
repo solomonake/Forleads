@@ -59,8 +59,10 @@ export function ActionInbox({
       setMsg("Approved — written to its connector (idempotent).");
       await load();
     } catch (e) {
-      if (e instanceof ApiError && e.status === 424) {
-        setMsg(`${e.message} Open Connector Hub to add the missing live integration.`);
+      if (e instanceof ApiError && e.code === "connector_setup_required") {
+        setMsg(`${e.message} Nothing was sent. Open Connector Hub to connect the missing live integration.`);
+      } else if (e instanceof ApiError && e.status === 424) {
+        setMsg(`${e.message} Nothing was sent. Open Connector Hub to add the missing live integration.`);
       } else {
         setMsg(e instanceof Error ? e.message : String(e));
       }
