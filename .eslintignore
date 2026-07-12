@@ -1,0 +1,10 @@
+# Local/generated directories that are not part of this checkout's source.
+node_modules/
+.next/
+coverage/
+.vercel/
+.claude/
+.codex/
+.playwright/
+playwright-report/
+test-results/

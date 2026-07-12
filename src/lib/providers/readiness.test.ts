@@ -18,6 +18,11 @@ const watchedKeys = [
   "AFRICA_BUILDINGS_DATA_URL",
   "AFRICA_DISTRESS_DATA_URL",
   "AFRICA_HAZARD_LAYER_URL",
+  "GOOGLE_MAPS_API_KEY",
+  "MAPILLARY_TOKEN",
+  "RESO_WEB_API_URL",
+  "ATTOM_API_KEY",
+  "REGRID_API_KEY",
 ] as const;
 
 const original = Object.fromEntries(watchedKeys.map((key) => [key, process.env[key]])) as Record<
@@ -63,6 +68,22 @@ describe("dataSourceReadiness", () => {
     expect(distress?.detail).not.toContain("example.test");
   });
 
+  it("shows at least twenty legitimate source lanes without fake-live imagery", () => {
+    clearWatchedEnv();
+    process.env.HMLR_PRICE_PAID_URL = "https://example.test/hmlr.csv";
+
+    const sources = dataSourceReadiness();
+
+    expect(sources.length).toBeGreaterThanOrEqual(20);
+    expect(sources.find((source) => source.id === "hmlr-price-paid")?.status).toBe("live");
+    expect(sources.find((source) => source.id === "google-street-view")?.status).toBe("setup_required");
+    expect(sources.find((source) => source.id === "mapillary")?.status).toBe("setup_required");
+    expect(sources.find((source) => source.id === "field-photos")?.status).toBe("manual_capture");
+    expect(sources.map((source) => source.id)).toEqual(
+      expect.arrayContaining(["reso-web-api", "mls-grid", "attom", "regrid", "reportall"]),
+    );
+  });
+
   it("shows regional packs live by default and Africa honestly field-first", () => {
     clearWatchedEnv();
 
@@ -75,5 +96,23 @@ describe("dataSourceReadiness", () => {
     expect(sources.find((source) => source.id === "region-europe")?.status).toBe("live");
     expect(sources.find((source) => source.id === "region-europe")?.detail).toContain("England & Wales");
     expect(sources.find((source) => source.id === "region-africa")?.status).toBe("manual_capture");
+  });
+
+  it("does not mark licensed listing APIs live when only half the credentials exist", () => {
+    clearWatchedEnv();
+    process.env.RESO_WEB_API_URL = "https://reso.example.test";
+    process.env.MLS_GRID_ACCESS_TOKEN = "token";
+
+    const sources = dataSourceReadiness();
+
+    expect(sources.find((source) => source.id === "reso-web-api")?.status).toBe("setup_required");
+    expect(sources.find((source) => source.id === "mls-grid")?.status).toBe("setup_required");
+
+    process.env.RESO_ACCESS_TOKEN = "token";
+    process.env.MLS_GRID_URL = "https://mls-grid.example.test";
+
+    const configuredSources = dataSourceReadiness();
+    expect(configuredSources.find((source) => source.id === "reso-web-api")?.status).toBe("live");
+    expect(configuredSources.find((source) => source.id === "mls-grid")?.status).toBe("live");
   });
 });

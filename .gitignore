@@ -36,6 +36,7 @@ yarn-error.log*
 
 # test
 /coverage
+/public/vendor/maplibre
 
 # playwright
 /.playwright

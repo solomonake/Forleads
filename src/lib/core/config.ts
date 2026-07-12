@@ -48,8 +48,13 @@ export const config = {
   propertyProvider: env("FORLEADS_PROPERTY_PROVIDER") ?? (production ? "open-data" : "osm-mock"),
   imageryProvider:
     env("FORLEADS_IMAGERY_PROVIDER") ??
-    (production && env("MAPILLARY_TOKEN") ? "mapillary" : "mock"),
+    (production && env("MAPILLARY_TOKEN")
+      ? "mapillary"
+      : production && env("GOOGLE_MAPS_API_KEY")
+        ? "google-street-view"
+        : "mock"),
   geocoder: env("FORLEADS_GEOCODER") ?? (production ? "nominatim" : "mock"),
+  googleMapsKey: env("GOOGLE_MAPS_API_KEY"),
 
   supabase: {
     url: env("NEXT_PUBLIC_SUPABASE_URL"),

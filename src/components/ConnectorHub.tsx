@@ -43,16 +43,55 @@ interface ConnectorsResponse {
 
 const SOURCE_PACKS: { title: string; ids: string[] }[] = [
   {
-    title: "Open source pack",
-    ids: ["geocode", "osm", "open-buildings", "open-sales", "open-distress", "open-hazard"],
+    title: "Map and address",
+    ids: ["osm-overpass", "nominatim", "photon", "openaddresses", "census-tiger"],
   },
-  { title: "Field scout pack", ids: ["field-scout"] },
+  {
+    title: "Real property images",
+    ids: ["mapillary", "google-street-view", "field-photos"],
+  },
+  {
+    title: "Listings and media",
+    ids: ["reso-web-api", "mls-grid"],
+  },
+  {
+    title: "Sales, parcels, and comps",
+    ids: [
+      "attom",
+      "rentcast",
+      "regrid",
+      "reportall",
+      "hmlr-price-paid",
+      "county-assessor",
+      "county-recorder",
+      "open-sales",
+    ],
+  },
+  {
+    title: "Risk and distress",
+    ids: [
+      "socrata",
+      "fema-nfhl",
+      "planning-zoning",
+      "tax-delinquency",
+      "code-violations",
+      "vacant-registry",
+      "open-distress",
+      "open-hazard",
+    ],
+  },
+  {
+    title: "Global building coverage",
+    ids: ["microsoft-buildings", "google-open-buildings", "open-buildings"],
+  },
+  {
+    title: "Operator-owned data",
+    ids: ["operator-imports", "consented-contact", "automation"],
+  },
   {
     title: "Regional proof packs",
     ids: ["region-america", "region-canada", "region-europe", "region-africa"],
   },
-  { title: "Consented contact pack", ids: ["consented-contact"] },
-  { title: "Automation bridge", ids: ["open-automation"] },
 ];
 
 function statusLabel(status: DataSource["status"]): string {
@@ -174,6 +213,7 @@ export function ConnectorHub() {
                     </span>
                   </div>
                   <div className="source-unlocks">{source.unlocks}</div>
+                  <div className="source-backed">Backed by: {source.configuredBy.join(" · ")}</div>
                   <div className="rmeta">{source.detail}</div>
                 </div>
               ))}
