@@ -32,7 +32,7 @@ describe("apiPost", () => {
 
   it("throws ApiError with requestId from JSON body on 5xx", async () => {
     mockFetch(async () =>
-      new Response(JSON.stringify({ error: "internal error", requestId: "rid-body" }), {
+      new Response(JSON.stringify({ code: "connector_setup_required", error: "internal error", requestId: "rid-body" }), {
         status: 500,
         headers: { "content-type": "application/json", "x-request-id": "rid-header" },
       }),
@@ -45,6 +45,7 @@ describe("apiPost", () => {
       const err = e as ApiError;
       expect(err.status).toBe(500);
       expect(err.message).toBe("internal error");
+      expect(err.code).toBe("connector_setup_required");
       // Body wins over header — the route explicitly chose this id.
       expect(err.requestId).toBe("rid-body");
     }

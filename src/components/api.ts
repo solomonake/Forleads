@@ -3,18 +3,20 @@
 export class ApiError extends Error {
   status: number;
   requestId?: string;
+  code?: string;
 
-  constructor(message: string, status: number, requestId?: string) {
+  constructor(message: string, status: number, requestId?: string, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.requestId = requestId;
+    this.code = code;
   }
 }
 
 async function parseApiResponse<T>(res: Response, label: string): Promise<T> {
   const headerReqId = res.headers.get("x-request-id") ?? undefined;
-  let data: (T & { error?: string; requestId?: string }) | null = null;
+  let data: (T & { code?: string; error?: string; requestId?: string }) | null = null;
   try {
     data = (await res.json()) as T & { error?: string; requestId?: string };
   } catch {
@@ -22,7 +24,7 @@ async function parseApiResponse<T>(res: Response, label: string): Promise<T> {
   }
   if (!res.ok) {
     const message = data?.error ?? `${label} → ${res.status}`;
-    throw new ApiError(message, res.status, data?.requestId ?? headerReqId);
+    throw new ApiError(message, res.status, data?.requestId ?? headerReqId, data?.code);
   }
   return data as T;
 }

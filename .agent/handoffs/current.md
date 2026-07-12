@@ -1,30 +1,29 @@
 # Current agent checkpoint
 
-Generated: 2026-07-12T05:30:35.046Z
+Generated: 2026-07-12T05:40:52.990Z
 
 ## State
-- Branch: `codex/connector-live-posture`
-- Commit: `9cd0c81b8a76`
+- Branch: `codex/setup-required-ux`
+- Commit: `3ce8534b7662`
 - Worktree: dirty
 - Changed files:
-  - M src/app/api/approve/route.test.ts
-  -  M src/app/api/approve/route.ts
-  -  M src/lib/agents/outcome.test.ts
-  -  M src/lib/pipeline.ts
-  - ?? .agent/plans/connector-live-posture.md
+  - M .agent/metrics/runs.jsonl
+  -  M src/components/ActionInbox.tsx
+  -  M src/components/api.ts
+  -  M src/components/ui.test.ts
+  - ?? .agent/plans/setup-required-ux.md
 
 ## Goal
-Continue the production loop for live connector honesty and approval-gated external writes.
+Continue the production loop for actionable setup-required UX.
 
 ## Completed
-- Added `.agent/plans/connector-live-posture.md`.
-- Hardened `/api/approve` so stale Google refresh failures are passed as setup-required connector failures.
-- Added `code: "connector_setup_required"` to 424 approval responses.
-- Updated `approveArtifact()` so email/calendar artifacts remain drafted when Google credentials need reconnection and no fresh access token exists.
-- Added route and pipeline tests for setup-required/stale-OAuth failures.
+- Added `.agent/plans/setup-required-ux.md`.
+- Preserved API error `code` in client-side `ApiError`.
+- Updated Action Inbox approval failure copy for `connector_setup_required`: it now says nothing was sent and points the agent to Connector Hub.
+- Added client helper coverage proving server error codes survive failed API responses.
 
 ## Next exact action
-Commit, push `codex/connector-live-posture`, open PR, watch checks, merge if green, then continue to the next production gap.
+Commit, push `codex/setup-required-ux`, open PR, watch checks, merge if green, then continue to the next production gap.
 
 ## Blockers
 none
@@ -35,9 +34,9 @@ In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secre
 ## Verification proof
 - `npm run typecheck` passed.
 - `npm run lint` passed.
-- `./node_modules/.bin/vitest run src/app/api/approve/route.test.ts src/lib/agents/outcome.test.ts src/lib/connectors/live-only.test.ts --reporter=dot` passed: 3 files, 18 tests.
+- `./node_modules/.bin/vitest run src/components/ui.test.ts --reporter=dot` passed: 1 file, 5 tests.
 - `npm run agent:check -- --risk=high` passed: doctor, typecheck, lint, 57 test files / 264 passed / 10 skipped, eval 16/16, coverage, and build.
-- Scorecard appended for `connector-live-posture` with 7/7 gates.
+- Scorecard appended for `setup-required-ux` with 7/7 gates.
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.
