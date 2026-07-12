@@ -20,6 +20,7 @@ export type ScoutType = "property" | "imagery" | "people" | "market" | "risk";
 export interface EvidenceSource {
   name: string;
   url?: string;
+  /** ISO-like source date (`YYYY-MM` or `YYYY-MM-DD`). Future/malformed dates are rejected. */
   as_of?: string;
 }
 

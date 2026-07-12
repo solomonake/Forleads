@@ -9,6 +9,7 @@
 // ============================================================================
 
 import type { Confidence, EvidenceCard } from "@/lib/core/types";
+import { sourceFreshness } from "./freshness";
 
 export interface ValidationResult {
   valid: boolean;
@@ -66,6 +67,13 @@ export function validateEvidenceCard(card: EvidenceCard): ValidationResult {
     if (!s || !s.name || s.name.trim() === "") {
       errors.push("every source must have a name");
       break;
+    }
+    const freshness = sourceFreshness(s);
+    if (freshness.status === "invalid") {
+      errors.push(`source "${s.name}" has an invalid as_of date`);
+    }
+    if (freshness.status === "future") {
+      errors.push(`source "${s.name}" has a future as_of date`);
     }
   }
 

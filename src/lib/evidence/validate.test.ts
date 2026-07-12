@@ -68,4 +68,18 @@ describe("EvidenceCard contract", () => {
     expect(valid).toHaveLength(1);
     expect(rejected).toHaveLength(1);
   });
+
+  it("rejects malformed and future source dates", () => {
+    const malformed = {
+      ...base,
+      sources: [{ name: "County assessor", as_of: "last checked yesterday" }],
+    };
+    const future = {
+      ...base,
+      sources: [{ name: "County assessor", as_of: "2999-01-01" }],
+    };
+
+    expect(validateEvidenceCard(malformed).errors.join(" ")).toMatch(/invalid as_of/);
+    expect(validateEvidenceCard(future).errors.join(" ")).toMatch(/future as_of/);
+  });
 });
