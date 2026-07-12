@@ -1,42 +1,35 @@
 # Current agent checkpoint
 
-Generated: 2026-07-12T06:30:43.625Z
+Generated: 2026-07-12T18:43:32.573Z
 
 ## State
-- Branch: `codex/evidence-source-freshness`
-- Commit: `392905afa132`
+- Branch: `codex/action-loop-proof`
+- Commit: `4e6998c8c654`
 - Worktree: dirty
 - Changed files:
-  - M .agent/metrics/runs.jsonl
-  -  M src/app/globals.css
-  -  M src/components/MapWorkspace.tsx
-  -  M src/lib/core/types.ts
-  -  M src/lib/evidence/validate.test.ts
-  -  M src/lib/evidence/validate.ts
-  - ?? .agent/plans/evidence-source-freshness.md
-  - ?? src/lib/evidence/freshness.test.ts
-  - ?? src/lib/evidence/freshness.ts
+  - M .agent/handoffs/current.md
+  -  M .agent/metrics/phase-runs.jsonl
+  -  M .agent/phase-manifest.json
+  -  M .agent/plans/product-completion-loop.md
+  - ?? src/app/api/notes/route.test.ts
 
 ## Goal
-Continue the production loop from Phase C: prove the approval-gated action loop end to end without fake external side effects.
+Close Phase C approval-gated action loop proof and activate Phase D connector live posture.
 
 ## Completed
-- Phase B (`phase-b-data-provenance`) closed as success after merged PRs #41, #42, and #45.
-- Phase manifest now marks `phase-b-data-provenance` done and `phase-c-action-loop` in progress.
-- Phase run record appended with 7/7 gates and proof: 20+ source lanes, fail-closed licensed setup states, sourced assessor facts, real imagery media with attribution, and evidence freshness badges.
+Added src/app/api/notes/route.test.ts proving /api/notes front door -> field evidence -> loop match -> draft -> approval -> mock-mode connector -> outcome memory; updated product completion QA matrix; marked phase-c-action-loop done and phase-d-connector-live-posture in progress; recorded phase success.
 
 ## Next exact action
-Commit, push `codex/phase-b-closeout`, open PR, watch checks, merge if green, then implement Phase C's highest-leverage action-loop proof.
+Start Phase D by auditing connector factories/routes for Gmail, Microsoft, FUB, GHL, Twilio, and Zapier setup-required behavior, then add/repair deterministic tests for missing credentials and idempotent no-fake-success.
 
 ## Blockers
-none
+Live external connector writes still require human OAuth/API credentials or provider API keys; no production mutation or external communication performed.
 
 ## Authority
 In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secrets, spending, destructive actions, and external communication require the user.
 
 ## Verification proof
-- Phase closeout is metadata-only; previous high-risk proof for the completed Phase B slice passed before merge: doctor, typecheck, lint, 58 test files / 268 passed / 10 skipped, eval 16/16, coverage, and build.
-- `npm run agent:phase:record -- --phase=phase-b-data-provenance ... --gates-passed=7 --gates-total=7` appended `.agent/metrics/phase-runs.jsonl`.
+agent:doctor 78/78; focused Phase C suite 6 files/22 passed; typecheck passed; lint passed; npm test 59 files/269 passed/10 skipped; agent:eval 16/16; coverage passed; next build passed via npm run agent:check -- --risk=high.
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.

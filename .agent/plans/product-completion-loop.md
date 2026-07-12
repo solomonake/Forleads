@@ -267,8 +267,8 @@ suite that `npm test` runs green.
 
 | Dimension | Owner (test / probe) |
 |---|---|
-| Happy path (note→draft→approve→connector→trace) | `src/lib/loop-completeness.test.ts` (full chain), `src/lib/loops/engine.test.ts` (draft→approve, trace per draft) |
-| Classification | `src/lib/agents/notes.test.ts` |
+| Happy path (note→draft→approve→connector→trace) | `src/lib/loop-completeness.test.ts` (full chain), `src/app/api/notes/route.test.ts` (real note route front door), `src/lib/loops/engine.test.ts` (draft→approve, trace per draft) |
+| Classification | `src/lib/agents/notes.test.ts`, `src/app/api/notes/route.test.ts` |
 | Empty / honest gaps | `src/lib/scout-fanout.degrade.test.ts`, `src/lib/agents/memory.degrade.test.ts`, `src/lib/providers/real.test.ts` (not-configured D-cards), `agent:eval` invariants `honest-risk-gap` + `honest-risk-scout-fallback` |
 | Setup-required / failure | `src/app/api/approve/route.test.ts` (connector setup failure surfaced), `src/lib/connectors/live-only.test.ts` (no mock success in prod) |
 | Recovery: stale revision | `src/lib/artifacts/revise.test.ts` (stale approval rejected, compliance rerun) |
@@ -285,7 +285,10 @@ suite that `npm test` runs green.
 Orphan found in Phase B: no single deterministic test chained the whole loop.
 Filled in Phase C by `src/lib/loop-completeness.test.ts` (note → classification
 → trigger match → run → draft → approval → connector result → outcome memory →
-next run reads priorOutcomes → analytics report). Phase C exit criterion met.
+next run reads priorOutcomes → analytics report) and
+`src/app/api/notes/route.test.ts` (real note route → field evidence → loop
+match → draft → approval → local-only mock connector → outcome memory). Phase C
+exit criterion requires both focused tests plus the high-risk gate to pass.
 
 ## Phase D–G status (2026-07-04, commit f5cda738)
 
