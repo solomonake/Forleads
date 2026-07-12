@@ -6,6 +6,14 @@
 
 import type { EvidenceCard } from "@/lib/core/types";
 import { log } from "@/lib/observability";
+import {
+  addressesMatch,
+  catalogCovers,
+  catalogHazardEndpoints,
+  queryCatalogDistress,
+  queryCatalogSales,
+  type CatalogMatch,
+} from "./catalog";
 import type {
   GeocodeProvider,
   GeoResult,
@@ -131,18 +139,6 @@ function normalizeUrlList(value: string | string[] | undefined): string[] {
     }
   }
   return valid;
-}
-
-function normalizeAddress(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\b(road)\b/g, "rd")
-    .replace(/\b(street)\b/g, "st")
-    .replace(/\b(avenue)\b/g, "ave")
-    .replace(/\b(drive)\b/g, "dr")
-    .replace(/\b(lane)\b/g, "ln")
-    .trim();
 }
 
 function parseCsvRows(text: string): string[][] {
@@ -340,21 +336,7 @@ function recordAddress(record: OpenPublicRecord): string | undefined {
 
 function addressMatches(record: OpenPublicRecord, targetAddress: string): boolean {
   const source = recordAddress(record);
-  if (!source) return false;
-  const target = normalizeAddress(targetAddress);
-  const candidate = normalizeAddress(source);
-  if (candidate === target) return true;
-
-  const targetTokens = target.split(" ");
-  const candidateTokens = candidate.split(" ");
-  if (targetTokens.length < 3 || candidateTokens.length < 3) return false;
-  if (targetTokens[0] !== candidateTokens[0]) return false;
-  const targetStreet = targetTokens.slice(1);
-  const candidateStreet = candidateTokens.slice(1);
-  const shared = Math.min(targetStreet.length, candidateStreet.length);
-  if (shared < 2) return false;
-  if (targetStreet.slice(0, 2).join(" ") === candidateStreet.slice(0, 2).join(" ")) return true;
-  return targetStreet.slice(0, shared).join(" ") === candidateStreet.slice(0, shared).join(" ");
+  return source ? addressesMatch(source, targetAddress) : false;
 }
 
 function propertyCardsFromRecord(record: PublicRecordBag, fallbackUrl: string): EvidenceCard[] {
@@ -635,8 +617,8 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
     this.propertyUrls = normalizeUrlList(propertyUrls);
   }
 
-  async hasCoverage(): Promise<boolean> {
-    return this.salesUrls.length > 0 || this.propertyUrls.length > 0;
+  async hasCoverage(lng: number, lat: number): Promise<boolean> {
+    return this.salesUrls.length > 0 || this.propertyUrls.length > 0 || catalogCovers(lng, lat, ["sales", "assessment"]);
   }
 
   async facts(input: PropertyQuery): Promise<EvidenceCard[]> {
@@ -680,7 +662,8 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
     const problem = queryProblem(input, { requireAddress: true });
     if (problem) return [gapCard("market", "Open sale records", problem)];
 
-    if (this.salesUrls.length === 0) {
+    const covered = this.salesUrls.length > 0 || catalogCovers(input.lng, input.lat, ["sales", "assessment"]);
+    if (!covered) {
       return [
         {
           scout: "market",
@@ -694,6 +677,88 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
       ];
     }
 
+    const [envState, catalogMatches] = await Promise.all([
+      this.envSaleMatches(input),
+      queryCatalogSales(input).catch((e) => {
+        log("warn", "provider.catalog.sales.failed", { error: e instanceof Error ? e.message : String(e) });
+        return [] as CatalogMatch[];
+      }),
+    ]);
+
+    const cards: EvidenceCard[] = [];
+    const saleMatches = [
+      ...envState.usable.map((m) => ({
+        amount: priceFrom(m.record),
+        date: dateFrom(m.record),
+        source: sourceFrom(m.record, m.url),
+      })),
+      ...catalogMatches
+        .filter((m) => m.source.kind === "sales")
+        .map((m) => ({
+          amount: m.amount,
+          date: m.date,
+          source: { name: m.source.name, url: m.source.homepage },
+        })),
+    ];
+    if (saleMatches.length > 0) {
+      const latest = saleMatches.slice().sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))[0]!;
+      cards.push({
+        scout: "market",
+        claim: "Open sale record",
+        value: latest.amount ? `${latest.amount}${latest.date ? ` on ${latest.date}` : ""}` : "record found",
+        sources: [latest.source],
+        confidence: saleMatches.length >= 3 ? "B" : "C",
+        reasoning:
+          saleMatches.length >= 3
+            ? `${saleMatches.length} public sale record(s) matched this address.`
+            : "Single public sale record matched this address; useful, but not enough for a modeled ARV.",
+      });
+    }
+
+    const assessments = catalogMatches.filter((m) => m.source.kind === "assessment" && m.amount);
+    if (assessments.length > 0) {
+      const latest = assessments.slice().sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))[0]!;
+      cards.push({
+        scout: "market",
+        claim: "Assessed value",
+        value: `${latest.amount}${latest.date ? ` (${latest.date})` : ""}`,
+        sources: [{ name: latest.source.name, url: latest.source.homepage }],
+        confidence: "B",
+        reasoning:
+          "Official assessment register matched this address. Assessed value is a taxation figure, not a market price.",
+      });
+    }
+
+    if (cards.length > 0) return cards;
+    if (envState.unusableMatched) {
+      return [
+        {
+          scout: "market",
+          claim: "Open sale records",
+          value: null,
+          sources: [],
+          confidence: "D",
+          reasoning:
+            "A matching public sale row was found, but it was missing a valid past sale date or positive sale price.",
+        },
+      ];
+    }
+    return [
+      {
+        scout: "market",
+        claim: "Open sale records",
+        value: null,
+        sources: [],
+        confidence: "D",
+        reasoning: "No public sale or assessment record matches this address yet.",
+      },
+    ];
+  }
+
+  private async envSaleMatches(
+    input: PropertyQuery,
+  ): Promise<{ usable: { url: string; record: OpenSaleRecord }[]; unusableMatched: boolean }> {
+    if (this.salesUrls.length === 0) return { usable: [], unusableMatched: false };
     try {
       const loaded = await Promise.all(
         this.salesUrls.map(async (url) => ({
@@ -706,66 +771,14 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
           .filter((record) => addressMatches(record, input.address))
           .map((record) => ({ url, record })),
       );
-      const matches = rawMatches.filter(({ record }) => saleRecordUsable(record));
-      if (rawMatches.length > 0 && matches.length === 0) {
-        return [
-          {
-            scout: "market",
-            claim: "Open sale records",
-            value: null,
-            sources: [],
-            confidence: "D",
-            reasoning:
-              "A matching public sale row was found, but it was missing a valid past sale date or positive sale price.",
-          },
-        ];
-      }
-      if (matches.length === 0) {
-        return [
-          {
-            scout: "market",
-            claim: "Open sale records",
-            value: null,
-            sources: [],
-            confidence: "D",
-            reasoning: "No public sale record matches this address yet.",
-          },
-        ];
-      }
-
-      const latest = matches
-        .slice()
-        .sort((a, b) => (dateFrom(b.record) ?? "").localeCompare(dateFrom(a.record) ?? ""))[0]!;
-      const price = validPrice(priceFrom(latest.record))!;
-      const saleDate = validPastDate(dateFrom(latest.record))!;
-      return [
-        {
-          scout: "market",
-          claim: "Open sale record",
-          value: `${price} on ${saleDate}`,
-          sources: [sourceFrom(latest.record, latest.url)],
-          confidence: matches.length >= 3 ? "B" : "C",
-          reasoning:
-            matches.length >= 3
-              ? `${matches.length} public sale record(s) matched this address.`
-              : "Single public sale record matched this address; useful, but not enough for a modeled ARV.",
-        },
-      ];
+      const usable = rawMatches.filter(({ record }) => saleRecordUsable(record));
+      return { usable, unusableMatched: rawMatches.length > 0 && usable.length === 0 };
     } catch (e) {
       log("warn", "provider.sales.failed", {
         error: e instanceof Error ? e.message : String(e),
         urls: this.salesUrls.length,
       });
-      return [
-        {
-          scout: "market",
-          claim: "Open sale records",
-          value: null,
-          sources: [],
-          confidence: "D",
-          reasoning: "Public sale records weren't reachable just now — they'll load on the next look.",
-        },
-      ];
+      return { usable: [], unusableMatched: false };
     }
   }
 }
@@ -903,7 +916,11 @@ export class OpenRiskDataProvider implements RiskDataProvider {
     const problem = queryProblem(input);
     if (problem) return [gapCard("risk", "Flood risk", problem)];
 
-    if (this.hazardUrls.length === 0) {
+    const endpoints: { url: string; name?: string; homepage?: string }[] = [
+      ...this.hazardUrls.map((url) => ({ url })),
+      ...catalogHazardEndpoints(input.lng, input.lat),
+    ];
+    if (endpoints.length === 0) {
       return [
         {
           scout: "risk",
@@ -918,8 +935,8 @@ export class OpenRiskDataProvider implements RiskDataProvider {
     }
 
     const empty: EvidenceCard[] = [];
-    for (const hazardUrl of this.hazardUrls) {
-      const cards = await this.hazardFromUrl(hazardUrl, input);
+    for (const endpoint of endpoints) {
+      const cards = await this.hazardFromUrl(endpoint.url, input, endpoint.name, endpoint.homepage);
       const grounded = cards.find(
         (card) => card.confidence !== "D" && !String(card.value).startsWith("No mapped"),
       );
@@ -944,7 +961,8 @@ export class OpenRiskDataProvider implements RiskDataProvider {
     const problem = queryProblem(input, { requireAddress: true });
     if (problem) return [gapCard("risk", "Open distress signals", problem)];
 
-    if (this.distressUrls.length === 0) {
+    const covered = this.distressUrls.length > 0 || catalogCovers(input.lng, input.lat, ["distress"]);
+    if (!covered) {
       return [
         {
           scout: "risk",
@@ -958,61 +976,35 @@ export class OpenRiskDataProvider implements RiskDataProvider {
       ];
     }
 
-    try {
-      const loaded = await Promise.all(
-        this.distressUrls.map(async (url) => ({
-          url,
-          records: await loadOpenRecords(url),
-        })),
-      );
-      const matches = loaded.flatMap(({ url, records }) =>
-        records
-          .filter((record) => addressMatches(record, input.address))
-          .map((record) => ({ url, record })),
-      );
-      if (matches.length === 0) {
-        return [
-          {
-            scout: "risk",
-            claim: "Open distress signals",
-            value: null,
-            sources: [],
-            confidence: "D",
-            reasoning: "No public distress record matches this address — a quiet signal, honestly reported.",
-          },
-        ];
-      }
+    const [envMatches, catalogMatches] = await Promise.all([
+      this.envDistressMatches(input),
+      queryCatalogDistress(input).catch((e) => {
+        log("warn", "provider.catalog.distress.failed", { error: e instanceof Error ? e.message : String(e) });
+        return [] as CatalogMatch[];
+      }),
+    ]);
 
-      const first = matches[0]!;
-      const record = first.record;
-      const label =
-        record.record_type ??
-        record.violation_type ??
-        record.case_type ??
-        record.category ??
-        record.type ??
-        record.status ??
-        "public distress record";
-      const date = record.date ?? record.created_date ?? record.inspection_date;
-      const source = record.source || "Open county data";
-      return [
-        {
-          scout: "risk",
-          claim: "Open distress signal",
-          value: `${label}${date ? ` · ${date}` : ""}`,
-          sources: [{ name: source, url: record.source_url ?? record.url ?? first.url }],
-          confidence: matches.length >= 2 ? "B" : "C",
-          reasoning:
-            matches.length >= 2
-              ? `${matches.length} public distress record(s) matched this address.`
-              : "Single public distress record matched this address; verify before prioritizing outreach.",
-        },
-      ];
-    } catch (e) {
-      log("warn", "provider.distress.failed", {
-        error: e instanceof Error ? e.message : String(e),
-        urls: this.distressUrls.length,
-      });
+    const merged = [
+      ...envMatches.map(({ url, record }) => ({
+        label:
+          record.record_type ??
+          record.violation_type ??
+          record.case_type ??
+          record.category ??
+          record.type ??
+          record.status ??
+          "public distress record",
+        date: record.date ?? record.created_date ?? record.inspection_date,
+        source: { name: record.source || "Open county data", url: record.source_url ?? record.url ?? url },
+      })),
+      ...catalogMatches.map((m) => ({
+        label: m.label ?? "public distress record",
+        date: m.date,
+        source: { name: m.source.name, url: m.source.homepage },
+      })),
+    ];
+
+    if (merged.length === 0) {
       return [
         {
           scout: "risk",
@@ -1020,13 +1012,58 @@ export class OpenRiskDataProvider implements RiskDataProvider {
           value: null,
           sources: [],
           confidence: "D",
-          reasoning: "Public distress records weren't reachable just now — they'll load on the next look.",
+          reasoning: "No public distress record matches this address — a quiet signal, honestly reported.",
         },
       ];
     }
+
+    const latest = merged.slice().sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))[0]!;
+    return [
+      {
+        scout: "risk",
+        claim: "Open distress signal",
+        value: `${latest.label}${latest.date ? ` · ${latest.date}` : ""}`,
+        sources: [latest.source],
+        confidence: merged.length >= 2 ? "B" : "C",
+        reasoning:
+          merged.length >= 2
+            ? `${merged.length} public distress record(s) matched this address.`
+            : "Single public distress record matched this address; verify before prioritizing outreach.",
+      },
+    ];
   }
 
-  private async hazardFromUrl(rawHazardUrl: string, input: PropertyQuery): Promise<EvidenceCard[]> {
+  private async envDistressMatches(
+    input: PropertyQuery,
+  ): Promise<{ url: string; record: OpenPublicRecord }[]> {
+    if (this.distressUrls.length === 0) return [];
+    try {
+      const loaded = await Promise.all(
+        this.distressUrls.map(async (url) => ({
+          url,
+          records: await loadOpenRecords(url),
+        })),
+      );
+      return loaded.flatMap(({ url, records }) =>
+        records
+          .filter((record) => addressMatches(record, input.address))
+          .map((record) => ({ url, record })),
+      );
+    } catch (e) {
+      log("warn", "provider.distress.failed", {
+        error: e instanceof Error ? e.message : String(e),
+        urls: this.distressUrls.length,
+      });
+      return [];
+    }
+  }
+
+  private async hazardFromUrl(
+    rawHazardUrl: string,
+    input: PropertyQuery,
+    knownName?: string,
+    knownHomepage?: string,
+  ): Promise<EvidenceCard[]> {
     try {
       const queryUrl = await this.arcGisQueryUrl(rawHazardUrl);
       if (!queryUrl) {
@@ -1065,7 +1102,7 @@ export class OpenRiskDataProvider implements RiskDataProvider {
             scout: "risk",
             claim: "Flood risk",
             value: "No mapped open hazard zone at this point",
-            sources: [{ name: sourceNameForHazard(rawHazardUrl), url: rawHazardUrl }],
+            sources: [{ name: knownName ?? sourceNameForHazard(rawHazardUrl), url: knownHomepage ?? rawHazardUrl }],
             confidence: "C",
             reasoning:
               "Point query returned no intersecting hazard polygon. Confirm locally before treating this as insurance guidance.",
@@ -1078,13 +1115,13 @@ export class OpenRiskDataProvider implements RiskDataProvider {
         firstString(attrs, ["FLD_ZONE", "fld_zone", "ZONE", "zone", "hazard", "HAZARD", "name", "NAME"]) ??
         "mapped zone";
       const subtype = firstString(attrs, ["ZONE_SUBTY", "zone_subty", "SFHA_TF", "sfha_tf", "description", "DESC"]);
-      const sourceName = sourceNameForHazard(rawHazardUrl);
+      const sourceName = knownName ?? sourceNameForHazard(rawHazardUrl);
       return [
         {
           scout: "risk",
           claim: "Flood risk",
           value: subtype ? `${sourceName} ${zone} · ${subtype}` : `${sourceName} ${zone}`,
-          sources: [{ name: sourceName, url: rawHazardUrl }],
+          sources: [{ name: sourceName, url: knownHomepage ?? rawHazardUrl }],
           confidence: "B",
           reasoning:
             "Open hazard point query intersected a mapped feature. This is public hazard context, not a replacement for local due diligence.",

@@ -88,6 +88,10 @@ const SOURCE_PACKS: { title: string; ids: string[] }[] = [
     title: "Operator-owned data",
     ids: ["operator-imports", "consented-contact", "automation"],
   },
+  {
+    title: "Regional proof packs",
+    ids: ["region-america", "region-canada", "region-europe", "region-africa"],
+  },
 ];
 
 function statusLabel(status: DataSource["status"]): string {

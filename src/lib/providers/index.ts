@@ -66,7 +66,10 @@ export function getImageryProvider(): ImageryProvider {
 }
 
 export function getRiskProvider(): RiskDataProvider {
+  // Production always gets the open provider: the built-in catalog carries
+  // FEMA NFHL + EA flood layers and city violation feeds with no env needed.
   if (
+    config.production ||
     process.env.FEMA_NFHL_URL ||
     process.env.OPEN_HAZARD_LAYER_URL ||
     process.env.OPEN_DISTRESS_DATA_URL ||

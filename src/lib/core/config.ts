@@ -42,7 +42,10 @@ export const config = {
   persist: (env("FORLEADS_PERSIST") ??
     (production && supabaseConfigured ? "supabase" : "memory")) as "memory" | "supabase",
 
-  propertyProvider: env("FORLEADS_PROPERTY_PROVIDER") ?? (production ? "osm" : "osm-mock"),
+  // "open-data" wraps the OSM floor and adds the built-in verified catalog
+  // (NYC/Philly/Chicago sales+violations, Canadian assessments, HMLR, DVF,
+  // FEMA/EA hazards) — real free coverage with zero env configuration.
+  propertyProvider: env("FORLEADS_PROPERTY_PROVIDER") ?? (production ? "open-data" : "osm-mock"),
   imageryProvider:
     env("FORLEADS_IMAGERY_PROVIDER") ??
     (production && env("MAPILLARY_TOKEN")

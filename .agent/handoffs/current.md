@@ -1,56 +1,51 @@
 # Current agent checkpoint
 
-Generated: 2026-07-11T20:31:36.181Z
+Generated: 2026-07-12T04:44:32.068Z
 
 ## State
 - Branch: `feat/agentic-data-ops`
-- Commit: `302f678e8d3e`
+- Commit: `8affb50365ab`
 - Worktree: dirty
 - Changed files:
-  - M .agent/handoffs/current.md
-  -  M .agent/metrics/runs.jsonl
-  -  M .gitignore
-  -  M package.json
-  -  M src/app/globals.css
-  -  M src/app/layout.tsx
-  -  M src/components/ConnectorHub.tsx
-  -  M src/components/MapWorkspace.tsx
-  -  M src/lib/agents/dispatcher.ts
-  -  M src/lib/core/config.ts
-  -  M src/lib/core/types.ts
-  -  M src/lib/providers/index.ts
-  -  M src/lib/providers/readiness.test.ts
-  -  M src/lib/providers/readiness.ts
-  -  M src/lib/providers/real.test.ts
-  -  M src/lib/providers/real.ts
-  -  M tsconfig.json
-  - ?? .agent/metrics/phase-runs.jsonl
-  - ?? .agent/phase-manifest.json
-  - ?? .agent/plans/property-provenance-hardening.md
-  - ?? .agent/plans/real-data-source-expansion.md
-  - ?? .eslintignore
-  - ?? scripts/agent-phase-runner.mjs
-  - ?? scripts/lint.mjs
-  - ?? scripts/sync-maplibre-assets.mjs
-  - ?? src/app/api/imagery/
+  - UU .agent/handoffs/current.md
+  - UU .agent/metrics/runs.jsonl
+  - A  .agent/notes/learnings-session-2026-07-05-catalog.md
+  - A  .agent/plans/builtin-region-catalog-ui-polish.md
+  - M  next.config.mjs
+  - M  src/app/globals.css
+  - UU src/app/page.tsx
+  - UU src/components/ActionInbox.tsx
+  - UU src/components/ConnectorHub.tsx
+  - M  src/components/MapWorkspace.tsx
+  - M  src/components/ReviewTray.tsx
+  - A  src/components/icons.tsx
+  - M  src/lib/core/config.ts
+  - A  src/lib/providers/catalog.live.test.ts
+  - A  src/lib/providers/catalog.test.ts
+  - A  src/lib/providers/catalog.ts
+  - M  src/lib/providers/index.ts
+  - UU src/lib/providers/readiness.test.ts
+  - UU src/lib/providers/readiness.ts
+  - UU src/lib/providers/real.test.ts
+  - UU src/lib/providers/real.ts
 
 ## Goal
 Production-grade Forleads continuous implementation loop
 
 ## Completed
-Phase A gate stability is complete. Implemented real-data/source provenance slice, evidence media rendering, Google Street View image proxy, Mapillary media, assessor/open property facts, licensed-provider fail-closed shells, phase manifest/runner, deterministic lint runner, generated MapLibre static asset sync, and Turbopack build path. Manifest now marks phase-a done and phase-b-data-provenance in progress.
+Merged main into feat/agentic-data-ops after Phase A success. Preserved main built-in open-data catalog and UI polish while keeping Phase A real-data provenance work: evidence media, Google Street View proxy, Mapillary media, assessor/property facts, licensed-provider fail-closed shells, deterministic linting, Turbopack build, MapLibre static asset sync, and phase loop runner.
 
 ## Next exact action
-Commit and push the green Phase A slice, then continue Phase B data-provenance hardening: turn licensed provider skeletons into at least one mapped live adapter path where credentials exist or a stronger setup-required contract where they do not.
+Resolve any remaining merge fallout with tests/typecheck, push the updated branch, wait for PR checks, merge PR #41 if green, then continue phase-b-data-provenance.
 
 ## Blockers
-none for Phase A. Merge/deploy/production mutation still require approval after PR/CI as usual.
+none known after conflict resolution; verification pending after merge.
 
 ## Authority
 In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secrets, spending, destructive actions, and external communication require the user.
 
 ## Verification proof
-npm run agent:check -- --risk=high passed end to end: agent:doctor 76/76, typecheck, lint, tests 55 files/245 tests, agent eval 16/16, coverage, and npm run build using next build --turbopack. Build summary: 17 static pages generated, / first load JS 138 kB. Runtime smoke: sync-maplibre-assets generated public/vendor/maplibre assets; next dev did not bind within smoke window, so browser QA remains for Phase B/UX.
+Before merging main, npm run agent:check -- --risk=high passed end to end on commit 8affb50. Post-merge verification pending.
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Artifact, EmailPayload } from "@/lib/core/types";
 import { actionTypeLabel, humanizeToken } from "@/lib/design/labels";
 import { apiPatch, apiPost, GradeChip } from "./ui";
+import { MailIcon } from "./icons";
 
 export function ReviewTray({
   artifact,
@@ -104,7 +105,9 @@ export function ReviewTray({
     <div className="overlay" onClick={onClose}>
       <div className="draft" onClick={(e) => e.stopPropagation()}>
         <div className="draft-head">
-          <span style={{ color: "var(--brand)", fontSize: 18 }}>✉</span>
+          <span style={{ color: "var(--brand)", display: "grid", placeItems: "center" }}>
+            <MailIcon size={18} />
+          </span>
           <div className="t">
             Draft <small>· ready for your review</small>
           </div>

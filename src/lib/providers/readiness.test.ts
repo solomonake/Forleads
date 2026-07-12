@@ -42,16 +42,17 @@ function clearWatchedEnv() {
 }
 
 describe("dataSourceReadiness", () => {
-  it("shows open market data as setup-required until a public feed exists", () => {
+  it("shows open market data live out of the box via the built-in catalog", () => {
     clearWatchedEnv();
 
     const sales = dataSourceReadiness().find((source) => source.id === "open-sales");
 
-    expect(sales?.status).toBe("setup_required");
+    expect(sales?.status).toBe("live");
+    expect(sales?.detail).toContain("Built in and verified");
     expect(sales?.env).toContain("OPEN_SALES_DATA_URL");
   });
 
-  it("marks open feeds live without exposing URLs as secrets", () => {
+  it("marks operator feeds as running alongside built-ins without exposing URLs", () => {
     clearWatchedEnv();
     process.env.OPEN_SALES_DATA_URL = "https://example.test/sales.csv";
     process.env.TAX_DELINQUENCY_DATA_URL = "https://example.test/tax.csv";
@@ -61,6 +62,7 @@ describe("dataSourceReadiness", () => {
     const distress = sources.find((source) => source.id === "open-distress");
 
     expect(sales?.status).toBe("live");
+    expect(sales?.detail).toContain("alongside the built-ins");
     expect(sales?.detail).not.toContain("example.test");
     expect(distress?.status).toBe("live");
     expect(distress?.detail).not.toContain("example.test");
@@ -80,6 +82,20 @@ describe("dataSourceReadiness", () => {
     expect(sources.map((source) => source.id)).toEqual(
       expect.arrayContaining(["reso-web-api", "mls-grid", "attom", "regrid", "reportall"]),
     );
+  });
+
+  it("shows regional packs live by default and Africa honestly field-first", () => {
+    clearWatchedEnv();
+
+    const sources = dataSourceReadiness();
+
+    expect(sources.find((source) => source.id === "region-america")?.status).toBe("live");
+    expect(sources.find((source) => source.id === "region-america")?.detail).toContain("New York City");
+    expect(sources.find((source) => source.id === "region-canada")?.status).toBe("live");
+    expect(sources.find((source) => source.id === "region-canada")?.detail).toContain("Calgary");
+    expect(sources.find((source) => source.id === "region-europe")?.status).toBe("live");
+    expect(sources.find((source) => source.id === "region-europe")?.detail).toContain("England & Wales");
+    expect(sources.find((source) => source.id === "region-africa")?.status).toBe("manual_capture");
   });
 
   it("does not mark licensed listing APIs live when only half the credentials exist", () => {

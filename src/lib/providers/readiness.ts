@@ -1,4 +1,25 @@
 import { config } from "@/lib/core/config";
+import { OPEN_DATA_CATALOG } from "@/lib/providers/catalog";
+
+function builtinMarkets(...kinds: string[]): string[] {
+  const markets: string[] = [];
+  for (const source of OPEN_DATA_CATALOG) {
+    if (kinds.includes(source.kind) && !markets.includes(source.market)) markets.push(source.market);
+  }
+  return markets;
+}
+
+function builtinRegionMarkets(region: string): string[] {
+  const markets: string[] = [];
+  for (const source of OPEN_DATA_CATALOG) {
+    if (source.region === region && !markets.includes(source.market)) markets.push(source.market);
+  }
+  return markets;
+}
+
+function builtinDetail(markets: string[]): string {
+  return `Built in and verified: ${markets.join(", ")}. Add your county/city feed via env to extend coverage.`;
+}
 
 export type ReadinessStatus = "live" | "setup_required" | "manual_capture" | "planned";
 
@@ -68,6 +89,12 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
     "EU_DISTRESS_DATA_URL",
     "AFRICA_DISTRESS_DATA_URL",
   );
+  const africaLive = configured(
+    "AFRICA_BUILDINGS_DATA_URL",
+    "AFRICA_OPEN_SALES_DATA_URL",
+    "AFRICA_DISTRESS_DATA_URL",
+    "AFRICA_HAZARD_LAYER_URL",
+  );
   const hazardLive = configured(
     "FEMA_NFHL_URL",
     "OPEN_HAZARD_LAYER_URL",
@@ -91,7 +118,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       live: config.propertyProvider === "osm" || config.propertyProvider === "open-data",
       unlocks: "Building tags, land use, address context, and the global free map floor.",
       configuredBy: ["OpenStreetMap", "Overpass", "self-hosted OSM extracts"],
-      detail: "Good for map/building context, not owner identity, legal parcel truth, or sale-price truth.",
+      detail: "Live global floor when OSM/open-data is selected. Great for map/building context, not owner, MLS, or sale-price truth.",
       env: ["FORLEADS_PROPERTY_PROVIDER", "OVERPASS_URL"],
     }),
     source({
@@ -156,6 +183,101 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       configuredBy: ["Forleads mobile capture", "operator upload", "storage bucket"],
       detail: fieldPhotoLive ? "Field photo storage is configured." : "Most trustworthy for current condition, but needs upload/storage wiring.",
       env: ["FIELD_PHOTO_STORAGE", "NEXT_PUBLIC_FIELD_PHOTOS"],
+    },
+    source({
+      id: "open-sales",
+      label: "Open sale and valuation records",
+      live: true,
+      unlocks: "Last sale, price-paid, public comps, and transparent valuation context where open data exists.",
+      configuredBy: ["HM Land Registry Price Paid", "France DVF", "city open-data portals", "local assessor CSV exports"],
+      detail: openSalesLive
+        ? `Your configured feed runs alongside the built-ins (${builtinMarkets("sales", "assessment").join(", ")}).`
+        : builtinDetail(builtinMarkets("sales", "assessment")),
+      env: [
+        "OPEN_SALES_DATA_URL",
+        "OPEN_SALES_DATA_URLS",
+        "HMLR_PRICE_PAID_URL",
+        "COUNTY_OPEN_DATA_URL",
+        "US_OPEN_SALES_DATA_URL",
+        "UK_PRICE_PAID_DATA_URL",
+        "EU_OPEN_SALES_DATA_URL",
+        "AFRICA_OPEN_SALES_DATA_URL",
+        "OPERATOR_SALES_IMPORT_URL",
+      ],
+    }),
+    source({
+      id: "open-distress",
+      label: "Open distress signals",
+      live: true,
+      unlocks: "Tax delinquency, code violations, vacant registry, nuisance, or foreclosure notices where public.",
+      configuredBy: ["county/city open data", "public tax delinquency CSVs", "court notice feeds"],
+      detail: openDistressLive
+        ? `Your configured feed runs alongside the built-ins (${builtinMarkets("distress").join(", ")}).`
+        : builtinDetail(builtinMarkets("distress")),
+      env: [
+        "OPEN_DISTRESS_DATA_URL",
+        "OPEN_DISTRESS_DATA_URLS",
+        "TAX_DELINQUENCY_DATA_URL",
+        "CODE_VIOLATION_DATA_URL",
+        "VACANT_REGISTRY_DATA_URL",
+        "US_DISTRESS_DATA_URL",
+        "UK_DISTRESS_DATA_URL",
+        "EU_DISTRESS_DATA_URL",
+        "AFRICA_DISTRESS_DATA_URL",
+      ],
+    }),
+    source({
+      id: "open-hazard",
+      label: "Open hazard and flood layers",
+      live: true,
+      unlocks: "Flood, hazard, and environmental risk cards with cited public sources.",
+      configuredBy: ["FEMA NFHL", "EA Flood Map for Planning", "local hazard GIS"],
+      detail: hazardLive
+        ? `Your configured layer runs alongside the built-ins (${builtinMarkets("hazard").join(", ")}).`
+        : builtinDetail(builtinMarkets("hazard")),
+      env: ["FEMA_NFHL_URL", "OPEN_HAZARD_LAYER_URL", "US_HAZARD_LAYER_URL", "UK_HAZARD_LAYER_URL", "EU_HAZARD_LAYER_URL", "AFRICA_HAZARD_LAYER_URL"],
+    }),
+    source({
+      id: "region-america",
+      label: "USA public-record pack",
+      live: true,
+      unlocks: "City sale records, code violations, and FEMA national flood zones — plus county feeds you add.",
+      configuredBy: ["built-in verified catalog", "county open data", "Socrata", "operator CSV imports"],
+      detail: configured("US_OPEN_SALES_DATA_URL", "COUNTY_OPEN_DATA_URL", "FEMA_NFHL_URL", "US_DISTRESS_DATA_URL")
+        ? `Your configured feed runs alongside the built-ins (${builtinRegionMarkets("usa").join(", ")}).`
+        : builtinDetail(builtinRegionMarkets("usa")),
+      env: ["US_OPEN_SALES_DATA_URL", "COUNTY_OPEN_DATA_URL", "FEMA_NFHL_URL", "US_DISTRESS_DATA_URL", "OPERATOR_SALES_IMPORT_URL"],
+    }),
+    source({
+      id: "region-canada",
+      label: "Canada assessment pack",
+      live: true,
+      unlocks: "Official assessed values and year-built context from city assessment registers.",
+      configuredBy: ["built-in verified catalog", "provincial/municipal open data", "operator CSV imports"],
+      detail: builtinDetail(builtinRegionMarkets("canada")),
+      env: ["OPEN_SALES_DATA_URLS", "OPEN_DISTRESS_DATA_URLS", "OPEN_HAZARD_LAYER_URL"],
+    }),
+    source({
+      id: "region-europe",
+      label: "Europe open-data pack",
+      live: true,
+      unlocks: "HM Land Registry price-paid (England & Wales), France DVF sales, and EA flood zones — plus national feeds you add.",
+      configuredBy: ["built-in verified catalog", "data.europa.eu discovery", "national cadastral portals"],
+      detail: configured("HMLR_PRICE_PAID_URL", "UK_PRICE_PAID_DATA_URL", "ENGLAND_PRICE_PAID_DATA_URL", "EU_OPEN_SALES_DATA_URL", "EU_CADASTRE_DATA_URL", "EU_HAZARD_LAYER_URL", "EU_DISTRESS_DATA_URL")
+        ? `Your configured feed runs alongside the built-ins (${builtinRegionMarkets("europe").join(", ")}).`
+        : builtinDetail(builtinRegionMarkets("europe")),
+      env: ["HMLR_PRICE_PAID_URL", "EU_OPEN_SALES_DATA_URL", "EU_CADASTRE_DATA_URL", "EU_HAZARD_LAYER_URL", "EU_DISTRESS_DATA_URL"],
+    }),
+    {
+      id: "region-africa",
+      label: "Africa field-first open-data pack",
+      status: africaLive ? "live" : "manual_capture",
+      unlocks: "OSM buildings (built in, global), field-scout notes/photos, and operator imports.",
+      configuredBy: ["OpenStreetMap", "field capture", "operator imports", "local open data"],
+      detail: africaLive
+        ? "At least one Africa open source is configured."
+        : "No free valuation registry passed our live verification yet (Cape Town's open service was down when checked). OSM buildings work everywhere; field capture and your own imports carry the most weight here.",
+      env: ["AFRICA_BUILDINGS_DATA_URL", "AFRICA_OPEN_SALES_DATA_URL", "AFRICA_DISTRESS_DATA_URL", "AFRICA_HAZARD_LAYER_URL", "GOOGLE_OPEN_BUILDINGS_URL"],
     },
     source({
       id: "reso-web-api",
@@ -337,33 +459,6 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       detail: "Forleads should not infer owner/occupant/contact details from an address alone.",
       env: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "FOLLOWUPBOSS_API_KEY", "GHL_API_KEY"],
     },
-    source({
-      id: "open-sales",
-      label: "Generic open sale records",
-      live: openSalesLive,
-      unlocks: "Open CSV/JSON sale rows in markets not covered by a dedicated provider adapter yet.",
-      configuredBy: ["public CSV/JSON feed", "operator-hosted source pack"],
-      detail: "Every row must pass address, sale date, price, source, and freshness checks before becoming evidence.",
-      env: ["OPEN_SALES_DATA_URL", "OPEN_SALES_DATA_URLS", "OPERATOR_SALES_IMPORT_URL"],
-    }),
-    source({
-      id: "open-distress",
-      label: "Generic open distress records",
-      live: openDistressLive,
-      unlocks: "Open distress rows for tax, vacancy, code, foreclosure, nuisance, or permit signals.",
-      configuredBy: ["public CSV/JSON feed", "municipal open data"],
-      detail: "Each dataset must be mapped and cited; unknown schemas stay D-grade.",
-      env: ["OPEN_DISTRESS_DATA_URL", "OPEN_DISTRESS_DATA_URLS"],
-    }),
-    source({
-      id: "open-hazard",
-      label: "Generic open hazard layers",
-      live: hazardLive,
-      unlocks: "Flood, fire, environmental, or local hazard context from public GIS layers.",
-      configuredBy: ["ArcGIS REST", "local hazard GIS", "open environmental layers"],
-      detail: "Risk evidence must cite the layer and avoid legal/insurance conclusions.",
-      env: ["OPEN_HAZARD_LAYER_URL", "US_HAZARD_LAYER_URL", "UK_HAZARD_LAYER_URL", "EU_HAZARD_LAYER_URL", "AFRICA_HAZARD_LAYER_URL"],
-    }),
     source({
       id: "open-buildings",
       label: "Generic open building footprints",
