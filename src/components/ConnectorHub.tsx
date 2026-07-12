@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiGet } from "./ui";
+import { connectorSetupCopy } from "./connectorSetupCopy";
 
 interface CredentialField {
   key: string;
@@ -246,6 +247,7 @@ function ConnectorCard({
       : status.connected
         ? "Connected"
         : "Not connected";
+  const setupCopy = connectorSetupCopy(status);
 
   return (
     <div className="row" data-testid={`connector-${status.provider}`}>
@@ -265,6 +267,7 @@ function ConnectorCard({
             Scopes: {status.scopes.join(" · ")}
           </>
         )}
+        {setupCopy && <div className="setup-note">{setupCopy}</div>}
       </div>
       <div className="ractions">
         {!status.connected && status.authKind === "oauth" && status.connectUrl && (

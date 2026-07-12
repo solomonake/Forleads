@@ -313,3 +313,16 @@ exit criterion requires both focused tests plus the high-risk gate to pass.
   gotcha). GitHub checks on f5cda738: `agent proof` ✅, CodeQL ✅, Vercel ✅.
 - **Not done, human-gated:** merge/PR (PR needs the P1 Playwright video —
   same environment blocker), live Gmail draft proof, mobile-width QA.
+
+## Phase E UX proof update (2026-07-12)
+
+- Connector Hub now tells operators that approvals needing an unconnected
+  provider stop as setup-required until OAuth, credentials, or webhook URL setup
+  is complete.
+- `src/components/ConnectorHub.test.ts` covers OAuth/API-key/connected copy.
+- Rendered QA covered the Connector Hub at desktop and 390px mobile widths:
+  setup-required copy was visible on all six action connector cards and console
+  errors/warnings were empty. The Browser DOM snapshot API failed in this
+  environment, so validation used in-app Browser screenshot/evaluate checks; a
+  standalone Playwright fallback was unavailable because the local browser
+  binary is not installed.

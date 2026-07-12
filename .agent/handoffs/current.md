@@ -1,35 +1,36 @@
 # Current agent checkpoint
 
-Generated: 2026-07-12T18:53:28.500Z
+Generated: 2026-07-12T19:22:12.874Z
 
 ## State
-- Branch: `codex/connector-live-posture-proof`
-- Commit: `59e0b655002a`
+- Branch: `codex/operator-ux-evidence-review`
+- Commit: `ea7904f51860`
 - Worktree: dirty
 - Changed files:
   - M .agent/metrics/phase-runs.jsonl
-  -  M .agent/phase-manifest.json
-  -  M .agent/plans/live-only-production.md
-  -  M src/lib/connectors/live-only.test.ts
-  - ?? src/lib/connectors/production-policy.test.ts
+  -  M .agent/plans/product-completion-loop.md
+  -  M src/app/globals.css
+  -  M src/components/ConnectorHub.tsx
+  - ?? src/components/ConnectorHub.test.ts
+  - ?? src/components/connectorSetupCopy.ts
 
 ## Goal
-Close Phase D connector live-posture proof and activate Phase E operator UX.
+Continue Phase E operator UX; ship Connector Hub setup-required clarity slice.
 
 ## Completed
-Strengthened src/lib/connectors/live-only.test.ts to reset idempotency and cover Gmail, Google Calendar, Outlook draft/calendar, CRM, SMS, Zapier, and mock writes with mock writes disabled; added src/lib/connectors/production-policy.test.ts proving production factory-selected email, calendar, SMS, CRM-note, and task connectors fail closed without credentials; updated live-only plan and marked Phase D done / Phase E active.
+Added setup-required approval-stop copy for unconnected Connector Hub providers; added connectorSetupCopy helper/test; added mobile-safe setup-note styling; rendered QA checked Connector Hub desktop and 390px mobile.
 
 ## Next exact action
-Start Phase E by reviewing MapWorkspace, ActionInbox, Pipeline, LoopStudio, ConnectorHub, and AgentTraceDrawer for setup-required, evidence media/source/freshness, and mobile/desktop workflow clarity.
+Continue Phase E with Action Inbox, AgentTraceDrawer, MapWorkspace evidence cards, Pipeline, and LoopStudio review/QA; focus on source/freshness/media fit and misleading/dead states.
 
 ## Blockers
-Real external connector writes require human OAuth/API credentials and explicit approval; no production mutation or external communication performed.
+Phase E not complete. Browser DOM snapshot API failed with incrementalAriaSnapshot error; standalone Playwright browser binary is missing, so rendered QA used in-app Browser evaluate+screenshot checks.
 
 ## Authority
 In-scope read, edit, test, branch, commit, push, and draft PR are allowed; secrets, spending, destructive actions, and external communication require the user.
 
 ## Verification proof
-focused connector suite 4 files/22 passed; agent:doctor 78/78; typecheck passed; lint passed; npm test 60 files/276 passed/10 skipped; agent:eval 16/16; coverage passed; next build passed via npm run agent:check -- --risk=high.
+ConnectorHub helper test 1 file/3 passed; typecheck passed; lint passed; npm test 61 files/279 passed/10 skipped; rendered QA desktop and 390px mobile no console errors and six setup-required lines visible; agent:check high passed doctor/typecheck/lint/test/eval/coverage/build.
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.
