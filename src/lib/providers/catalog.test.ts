@@ -220,7 +220,7 @@ describe("Maryland built-in pack (socrata-eq)", () => {
     globalThis.fetch = async (input) => {
       const url = String(input);
       calls.push(url);
-      if (url.includes("opendata.maryland.gov") && url.includes("sale_price")) {
+      if (new URL(url).host === "opendata.maryland.gov" && url.includes("sale_price")) {
         return jsonResponse([
           { address: "22125 CLARKSBURG RD", city: "CLARKSBURG", sale_price: "658120", sale_date: "2021.12.13" },
         ]);
@@ -230,7 +230,7 @@ describe("Maryland built-in pack (socrata-eq)", () => {
 
     const matches = await queryCatalogSales(CLARKSBURG);
 
-    const sdatCall = calls.find((c) => c.includes("opendata.maryland.gov"));
+    const sdatCall = calls.find((c) => new URL(c).host === "opendata.maryland.gov");
     expect(sdatCall).toContain("mdp_street_address_mdp_field_address=22125+CLARKSBURG+RD");
     expect(sdatCall).toContain("%24limit=25");
     const sales = matches.filter((m) => m.source.id === "maryland-sdat-sales");
@@ -242,7 +242,7 @@ describe("Maryland built-in pack (socrata-eq)", () => {
     const sdatCalls: string[] = [];
     globalThis.fetch = async (input) => {
       const url = String(input);
-      if (url.includes("opendata.maryland.gov") && url.includes("sale_price")) {
+      if (new URL(url).host === "opendata.maryland.gov" && url.includes("sale_price")) {
         sdatCalls.push(decodeURIComponent(url).replace(/\+/g, " "));
         if (url.includes("22125+CLARKSBURG+ROAD")) {
           return jsonResponse([
@@ -266,7 +266,7 @@ describe("Maryland built-in pack (socrata-eq)", () => {
   it("grounds Montgomery County code violations with composed address and filed date", async () => {
     globalThis.fetch = async (input) => {
       const url = String(input);
-      if (url.includes("data.montgomerycountymd.gov")) {
+      if (new URL(url).host === "data.montgomerycountymd.gov") {
         return jsonResponse([
           {
             street_address: "22125 CLARKSBURG RD",

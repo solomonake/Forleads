@@ -304,7 +304,12 @@ describe("OpenDataPropertyProvider", () => {
       scout: "market",
     });
 
-    expect(calls).toEqual(["https://example.test/empty.csv", "https://example.test/us-sales.csv"]);
+    // Built-in Maryland catalog sources also fire for this point; the env
+    // feeds must still both be tried, in order.
+    expect(calls.filter((c) => c.includes("example.test"))).toEqual([
+      "https://example.test/empty.csv",
+      "https://example.test/us-sales.csv",
+    ]);
     expect(cards[0]).toMatchObject({
       value: "$425,000 on 2025-01-02",
       sources: [{ name: "US county feed", url: "https://county.example/sales/2" }],
@@ -380,12 +385,14 @@ describe("OpenDataPropertyProvider", () => {
       "<your public sales CSV/JSON URL>",
     );
 
-    expect(await provider.hasCoverage(-77.28, 39.23)).toBe(false);
+    // Use a point with no built-in catalog coverage (rural Oklahoma) so the
+    // assertion isolates the placeholder-env behavior from catalog fallback.
+    expect(await provider.hasCoverage(-98.5, 35.0)).toBe(false);
 
     const cards = await provider.comps({
-      address: "22125 Clarksburg Road",
-      lng: -77.28,
-      lat: 39.23,
+      address: "1 Placeholder Road, Nowhere",
+      lng: -98.5,
+      lat: 35.0,
       scout: "market",
     });
     // Falls into the honest "not configured" gap, not the "unreachable" retry path.
