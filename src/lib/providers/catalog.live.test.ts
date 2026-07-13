@@ -57,6 +57,38 @@ describe.runIf(live)("catalog live verification", () => {
     expect(matches.some((m) => m.source.id === "montgomery-md-code-violations")).toBe(true);
   }, 30000);
 
+  it("Connecticut OPM sales ground a real sale", async () => {
+    const matches = await queryCatalogSales(q("323 Beaver St, Ansonia, CT", -73.068, 41.35));
+    expect(matches.some((m) => m.source.id === "connecticut-sales" && m.amount)).toBe(true);
+  }, 30000);
+
+  it("NY State assessment rolls ground a real full market value", async () => {
+    const matches = await queryCatalogSales(q("135 Willow St, Albany, NY", -73.76, 42.66));
+    expect(matches.some((m) => m.source.id === "ny-state-assessments" && m.amount)).toBe(true);
+  }, 30000);
+
+  it("New Orleans code violations ground a real distress signal", async () => {
+    const seed = (await (
+      await fetch("https://data.nola.gov/resource/3ehi-je3s.json?$limit=1&$where=location IS NOT NULL", {
+        headers: { "User-Agent": "Forleads/1.0 (live catalog check)", Accept: "application/json" },
+      })
+    ).json()) as { location?: string }[];
+    expect(seed[0]?.location, "dataset no longer returns addressed rows").toBeTruthy();
+    const matches = await queryCatalogDistress(q(`${seed[0]!.location}, New Orleans`, -90.07, 29.95));
+    expect(matches.some((m) => m.source.id === "nola-code-violations")).toBe(true);
+  }, 30000);
+
+  it("Cincinnati code enforcement grounds a real distress signal", async () => {
+    const seed = (await (
+      await fetch("https://data.cincinnati-oh.gov/resource/cncm-znd6.json?$limit=1&$where=full_address IS NOT NULL", {
+        headers: { "User-Agent": "Forleads/1.0 (live catalog check)", Accept: "application/json" },
+      })
+    ).json()) as { full_address?: string }[];
+    expect(seed[0]?.full_address, "dataset no longer returns addressed rows").toBeTruthy();
+    const matches = await queryCatalogDistress(q(`${seed[0]!.full_address}, Cincinnati`, -84.51, 39.11));
+    expect(matches.some((m) => m.source.id === "cincinnati-code-enforcement")).toBe(true);
+  }, 30000);
+
   it("Calgary assessments ground a real assessed value", async () => {
     const matches = await queryCatalogSales(q("15 Deermeade Pl SE, Calgary", -114.03, 50.93));
     expect(matches.some((m) => m.source.id === "calgary-assessments" && m.amount)).toBe(true);

@@ -287,3 +287,54 @@ describe("Maryland built-in pack (socrata-eq)", () => {
     expect(mont[0]).toMatchObject({ label: "General Condition", date: "2026-06-09" });
   });
 });
+
+describe("statewide split-field where template (NY)", () => {
+  const ALBANY: PropertyQuery = { address: "135 Willow Street, Albany", lng: -73.76, lat: 42.66, scout: "market" };
+
+  it("builds number+street+city equality and matches the composed address", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (new URL(url).host === "data.ny.gov") {
+        return jsonResponse([
+          {
+            parcel_address_number: "135",
+            parcel_address_street: "Willow",
+            parcel_address_suff: "St",
+            municipality_name: "Albany",
+            full_market_value: "20833",
+            roll_year: "2025",
+          },
+        ]);
+      }
+      return jsonResponse([]);
+    };
+
+    const matches = await queryCatalogSales(ALBANY);
+
+    const ny = decodeURIComponent(calls.find((c) => new URL(c).host === "data.ny.gov") ?? "").replace(/\+/g, " ");
+    expect(ny).toContain("parcel_address_number='135'");
+    expect(ny).toContain("upper(parcel_address_street)='WILLOW'");
+    expect(ny).toContain("upper(municipality_name)='ALBANY'");
+    const rolls = matches.filter((m) => m.source.id === "ny-state-assessments");
+    expect(rolls).toHaveLength(1);
+    expect(rolls[0]).toMatchObject({ amount: "20833", date: "2025" });
+  });
+
+  it("drops ambiguous statewide matches when the query has no city", async () => {
+    globalThis.fetch = async (input) => {
+      if (new URL(String(input)).host === "data.ny.gov") {
+        return jsonResponse([
+          { parcel_address_number: "135", parcel_address_street: "Willow", parcel_address_suff: "St", municipality_name: "Albany", full_market_value: "20833", roll_year: "2025" },
+          { parcel_address_number: "135", parcel_address_street: "Willow", parcel_address_suff: "St", municipality_name: "Ithaca", full_market_value: "99999", roll_year: "2025" },
+        ]);
+      }
+      return jsonResponse([]);
+    };
+
+    const matches = await queryCatalogSales({ address: "135 Willow Street", lng: -73.76, lat: 42.66, scout: "market" });
+
+    expect(matches.filter((m) => m.source.id === "ny-state-assessments")).toHaveLength(0);
+  });
+});
