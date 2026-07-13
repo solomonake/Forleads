@@ -1,52 +1,61 @@
 # Current agent checkpoint
 
-Generated: 2026-07-12 (Clay-for-real-estate session)
+Generated: 2026-07-13 (Clay-for-real-estate session, loop 2)
 
 ## State
-- Branch: `codex/maryland-builtin-pack`
-- Base: main (codex/operator-ux-evidence-review already merged per GitHub; local origin/main ref was stale and `git fetch` timed out — trust `gh`, not local refs, on this machine)
+- Branch: `codex/product-language` (stacked on merged #51)
+- Merged this session: PR #50 (Maryland pack), PR #51 (CT + NY statewide, NOLA
+  + Cincinnati violations, catalog-probe script). Merge authority: GRANTED by
+  user 2026-07-13 ("you can push, merge and etc").
 
 ## Goal
-Phase 1 of `.agent/plans/clay-for-real-estate.md`: Maryland built-in pack +
-`socrata-eq` catalog style so the user's own market (22125 Clarksburg Road,
-Montgomery County, MD) grounds sale/assessment/distress evidence with zero env.
+Transform Forleads from a developer-looking tool into a product agents
+instantly understand and prefer over FUB. User verdict 2026-07-13: "currently
+this is a very useless and unusable tool… I don't even see a use for it if
+someone is already using FUB." Positioning answer: FUB manages contacts you
+already have; Forleads finds/grounds opportunities from public records and
+WRITES INTO your FUB/Gmail/calendar after approval.
 
-## Completed
-- Root cause of "nothing loads at my address": env feeds are static
-  pre-filtered dumps; only catalog sources query per-address. User's market had
-  no catalog coverage.
-- Added `socrata-eq` style (equality on cfg.queryField, UPPERCASE + USPS
-  suffix variants, dot-date → ISO normalization), Maryland SDAT sales +
-  assessments entries, Montgomery County code violations entry.
-- Live-verified 2026-07-12 by direct curl: SDAT equality returns the exact
-  Clarksburg parcel (sale 2021-12-13 $658,120, assessed $777,333) in ~1s; $q
-  times out on 2.4M rows. Montgomery k9nj-z35d answers $q with fresh rows.
-- 14/14 catalog unit tests pass (3 new: eq-query shape, suffix fallback,
-  Montgomery distress).
-- docs/operator-setup-guide.md: what loads built-in vs what only the human can
-  unlock (OAuth, paid keys, MLS agreements).
-- .agent/playbook.md: capability-gaps-are-handoffs P1 rule + market-pack
-  recipe.
+## Completed (this branch, gates running)
+- ReviewTray: task/calendar/SMS/CRM payloads render as human cards
+  (PayloadCard) — raw JSON eliminated.
+- AgentTraceDrawer: leads with a one-paragraph plain-English story
+  (traceStory); rows renamed (What started this / Grounded on / Safety
+  checks / Where it goes / What it cost); zero-cost runs say "Nothing".
+- ActionInbox: evidence chips now carry claim labels (+N more), not bare
+  grade dots.
+- Nav story: Prospect / Approvals / Autopilot / Deals / Connect / Recap
+  (titles kept for test selectors); every screen h1+sub rewritten in agent
+  language with honest-FOMO framing.
 
-## Next exact action
-When `LIVE_CATALOG=1 npx vitest run src/lib/providers/catalog.live.test.ts`
-+ typecheck + lint finish green: commit, push, `gh pr create`, then continue
-plan Phase 2 (waterfall trace surface) or hand off.
+## Next exact actions (in order)
+1. When gates pass: commit, push, PR "Product language: every screen speaks
+   agent, not developer", merge on green CI.
+2. **Contacts-forward pass** (user: "other tools have the people's contacts
+   immediately pulled up"): lead rail + Deals rows surface the consented
+   contact (name/phone/email) at top; add-contact affordance; FUB
+   syncContacts when connected. Files: MapWorkspace.tsx, Pipeline.tsx,
+   ContactEditor.tsx, connectors/followupboss.ts.
+3. **Provider logos** on Connect cards (inline SVG monograms in brand colors
+   — no external fetches; nominative use).
+4. **Batch approvals** (approve/skip/edit cadence in Approvals).
+5. **Farm table** (Clay-style: leads × evidence columns, CSV import/export)
+   per .agent/plans/clay-for-real-estate.md Phase 3.
+6. US coverage keeps growing via scripts/catalog-probe.mjs (recipe in
+   .agent/playbook.md); then Canada provinces, Europe countries.
 
-## Blockers
-- `git fetch` can take >2min on this machine (timed out once); GitHub API is
-  the source of truth for merge state.
-- YouTube transcript extraction is anti-bot-blocked; video patterns were
-  captured from description + chapters instead (recorded in the plan).
+## Blockers / human-only
+- OAuth connect clicks, CRM/Twilio keys, paid data keys, MLS agreements
+  (docs/operator-setup-guide.md).
+- Rendered browser QA at 390px on this 8GB machine is unreliable under load;
+  Vercel preview + prod check after merge instead.
 
-## Authority
-Read/edit/test/branch/commit/push/PR allowed; merge, deploy, secrets, spend,
-external comms are human-gated.
+## Verification proof so far
+- #51: unit 36/36, LIVE_CATALOG 16/16, full CI green, merged.
+- This branch: typecheck/lint/component tests running (see phase-runs.jsonl).
 
 ## Cold-start sequence
-1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and
-   `.agent/plans/clay-for-real-estate.md`.
-2. Verify branch + `git log --oneline -3`.
-3. Re-run the cheapest risky proof: the SDAT curl from the plan's evidence
-   line.
-4. Continue from **Next exact action**.
+1. Read AGENTS.md, this file, .agent/plans/clay-for-real-estate.md,
+   .agent/plans/screen-use-cases.md.
+2. `git log --oneline -5` on codex/product-language.
+3. Continue from Next exact actions.

@@ -1,10 +1,76 @@
 "use client";
 
 import { useState } from "react";
-import type { Artifact, EmailPayload } from "@/lib/core/types";
+import type {
+  Artifact,
+  ArtifactPayload,
+  CalendarPayload,
+  CrmNotePayload,
+  EmailPayload,
+  SmsPayload,
+  TaskPayload,
+} from "@/lib/core/types";
 import { actionTypeLabel, humanizeToken } from "@/lib/design/labels";
 import { apiPatch, apiPost, GradeChip } from "./ui";
 import { MailIcon } from "./icons";
+
+function friendlyWhen(iso: string | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/**
+ * Agents review a task, hold, SMS, or CRM note the way they'd read it in
+ * their own tools — never as raw JSON.
+ */
+function PayloadCard({ type, payload }: { type: Artifact["type"]; payload: ArtifactPayload }) {
+  const rows: { k: string; v: string }[] = [];
+  if (type === "task") {
+    const p = payload as TaskPayload;
+    rows.push({ k: "Task", v: p.title });
+    rows.push({ k: "Due", v: friendlyWhen(p.dueAt) });
+    if (p.notes) rows.push({ k: "Notes", v: p.notes });
+  } else if (type === "calendar") {
+    const p = payload as CalendarPayload;
+    rows.push({ k: "Hold", v: p.title });
+    rows.push({ k: "When", v: `${friendlyWhen(p.startAt)} – ${friendlyWhen(p.endAt)}` });
+    if (p.notes) rows.push({ k: "Notes", v: p.notes });
+  } else if (type === "sms") {
+    const p = payload as SmsPayload;
+    rows.push({ k: "To", v: p.to });
+    rows.push({ k: "Message", v: p.body });
+  } else if (type === "crm_note") {
+    const p = payload as CrmNotePayload;
+    if (p.contactRef) rows.push({ k: "Contact", v: p.contactRef });
+    rows.push({ k: "Note", v: p.body });
+    if (p.tags?.length) rows.push({ k: "Tags", v: p.tags.join(", ") });
+  } else {
+    for (const [k, v] of Object.entries(payload as unknown as Record<string, unknown>)) {
+      if (v === undefined || v === null || v === "") continue;
+      rows.push({ k: humanizeToken(k), v: typeof v === "string" ? v : JSON.stringify(v) });
+    }
+  }
+  return (
+    <>
+      {rows.map((row) => (
+        <div className="field" key={row.k}>
+          <span className="k">{row.k}</span>
+          <span className="v" style={{ whiteSpace: "pre-wrap" }}>
+            {row.v}
+          </span>
+        </div>
+      ))}
+    </>
+  );
+}
 
 export function ReviewTray({
   artifact,
@@ -140,9 +206,7 @@ export function ReviewTray({
               </div>
             </>
           ) : (
-            <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--sans)", fontSize: 14 }}>
-              {JSON.stringify(current.payload, null, 2)}
-            </pre>
+            <PayloadCard type={current.type} payload={current.payload} />
           )}
 
           {current.evidence_used.length > 0 && (

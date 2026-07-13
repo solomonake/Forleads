@@ -113,10 +113,10 @@ export function Pipeline({
 
   return (
     <div className="panel">
-      <h1>Pipeline</h1>
+      <h1>Deals</h1>
       <div className="sub">
-        The money board: every property sits in the stage where it is blocked, waiting for approval,
-        or ready for the next follow-up.
+        Every property you&apos;re working, in the stage it&apos;s actually in — and what&apos;s
+        blocking it from moving. Start your day where the money is stuck.
       </div>
 
       <div className="pipeline-hero">
