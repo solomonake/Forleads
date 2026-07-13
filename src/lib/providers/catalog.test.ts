@@ -206,3 +206,84 @@ describe("queryCatalogDistress", () => {
     expect(hpd[0]!.label).toContain("REPAIR THE BROKEN WINDOW");
   });
 });
+
+describe("Maryland built-in pack (socrata-eq)", () => {
+  const CLARKSBURG: PropertyQuery = {
+    address: "22125 Clarksburg Road, Clarksburg",
+    lng: -77.28,
+    lat: 39.24,
+    scout: "market",
+  };
+
+  it("queries SDAT by uppercase USPS-abbreviated equality and normalizes dot dates", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (new URL(url).host === "opendata.maryland.gov" && url.includes("sale_price")) {
+        return jsonResponse([
+          { address: "22125 CLARKSBURG RD", city: "CLARKSBURG", sale_price: "658120", sale_date: "2021.12.13" },
+        ]);
+      }
+      return jsonResponse([]);
+    };
+
+    const matches = await queryCatalogSales(CLARKSBURG);
+
+    const sdatCall = calls.find((c) => new URL(c).host === "opendata.maryland.gov");
+    expect(sdatCall).toContain("mdp_street_address_mdp_field_address=22125+CLARKSBURG+RD");
+    expect(sdatCall).toContain("%24limit=25");
+    const sales = matches.filter((m) => m.source.id === "maryland-sdat-sales");
+    expect(sales).toHaveLength(1);
+    expect(sales[0]).toMatchObject({ amount: "658120", date: "2021-12-13" });
+  });
+
+  it("falls back to the raw uppercase street when the abbreviated form has no rows", async () => {
+    const sdatCalls: string[] = [];
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (new URL(url).host === "opendata.maryland.gov" && url.includes("sale_price")) {
+        sdatCalls.push(decodeURIComponent(url).replace(/\+/g, " "));
+        if (url.includes("22125+CLARKSBURG+ROAD")) {
+          return jsonResponse([
+            { address: "22125 CLARKSBURG ROAD", city: "CLARKSBURG", sale_price: "500000", sale_date: "2019.05.01" },
+          ]);
+        }
+        return jsonResponse([]);
+      }
+      return jsonResponse([]);
+    };
+
+    const matches = await queryCatalogSales(CLARKSBURG);
+
+    expect(sdatCalls.some((c) => c.includes("22125 CLARKSBURG RD"))).toBe(true);
+    expect(sdatCalls.some((c) => c.includes("22125 CLARKSBURG ROAD"))).toBe(true);
+    const sales = matches.filter((m) => m.source.id === "maryland-sdat-sales");
+    expect(sales).toHaveLength(1);
+    expect(sales[0]).toMatchObject({ amount: "500000", date: "2019-05-01" });
+  });
+
+  it("grounds Montgomery County code violations with composed address and filed date", async () => {
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (new URL(url).host === "data.montgomerycountymd.gov") {
+        return jsonResponse([
+          {
+            street_address: "22125 CLARKSBURG RD",
+            city: "CLARKSBURG",
+            condition: "General Condition",
+            date_filed: "2026-06-09T00:00:00.000",
+          },
+          { street_address: "13610 LITTLE SENECA PKWY", city: "CLARKSBURG", condition: "Door", date_filed: "2026-06-03T00:00:00.000" },
+        ]);
+      }
+      return jsonResponse([]);
+    };
+
+    const matches = await queryCatalogDistress(CLARKSBURG);
+
+    const mont = matches.filter((m) => m.source.id === "montgomery-md-code-violations");
+    expect(mont).toHaveLength(1);
+    expect(mont[0]).toMatchObject({ label: "General Condition", date: "2026-06-09" });
+  });
+});

@@ -135,3 +135,25 @@ app is unaffected.
 - Departing operator with deploy access.
 - Annually as a baseline hygiene practice — easier to test the runbook
   during planned downtime than during an incident.
+
+## Capability gaps are handoffs, not silent skips (P1, every model)
+
+If you cannot perform a step (watch a video, drive a browser, fetch a URL,
+run rendered QA, complete OAuth), you MUST name it in your report/PR/handoff
+under "what I could not do / what only the human can do", with the exact
+action the human should take. The human can do what you can't. A silently
+skipped step reads as completed work and is treated as fabrication.
+
+## Built-in market packs: how to add one (proven 2026-07-12, Maryland)
+
+1. Find the market's open-data portal dataset (Socrata discovery API:
+   `api.us.socrata.com/api/catalog/v1?domains=<portal>&q=<topic>`).
+2. Live-verify with a REAL address before writing code (curl the endpoint;
+   huge datasets need equality filters — `$q` full-text times out >2M rows).
+3. Add a `CatalogSource` entry in `src/lib/providers/catalog.ts` with bbox,
+   license, homepage, and today's `verified` date; pick style `socrata`
+   ($q works) or `socrata-eq` (equality on cfg.queryField, UPPERCASE + USPS
+   suffix values).
+4. Add a unit test (mocked fetch) and a live test in `catalog.live.test.ts`;
+   run `LIVE_CATALOG=1 npx vitest run src/lib/providers/catalog.live.test.ts`.
+5. Readiness panel market lists update automatically from the catalog.

@@ -20,6 +20,7 @@ export type CatalogKind = "sales" | "assessment" | "distress" | "hazard";
 
 export type CatalogStyle =
   | "socrata" // Socrata SODA: ?$q=<address>&$limit=N, JSON array
+  | "socrata-eq" // Socrata SODA equality on cfg.queryField — for datasets too big for $q (full-text times out); values are UPPERCASE with USPS suffix abbreviations
   | "carto-sql" // CARTO SQL API: SELECT ... WHERE addr ILIKE '%..%'
   | "opendatasoft" // Opendatasoft Explore v2.1: ?where=field like "..."
   | "hmlr-ppd" // HM Land Registry linked-data API, postcode-keyed
@@ -144,6 +145,70 @@ export const OPEN_DATA_CATALOG: CatalogSource[] = [
     license: "US Government public domain",
     bbox: [-180, 17, -64, 72],
     verified: "2026-07-05",
+  },
+
+  {
+    id: "maryland-sdat-sales",
+    region: "usa",
+    market: "Maryland",
+    kind: "sales",
+    style: "socrata-eq",
+    url: "https://opendata.maryland.gov/resource/ed4q-f8tm.json",
+    name: "Maryland SDAT Real Property (sale record)",
+    homepage: "https://opendata.maryland.gov/Business-and-Economy/Maryland-Real-Property-Assessments-Hidden-Property/ed4q-f8tm",
+    license: "Maryland Open Data (public)",
+    bbox: [-79.49, 37.88, -74.98, 39.75],
+    verified: "2026-07-12",
+    cfg: {
+      // 2.4M rows: $q full-text times out; equality on the MDP address field
+      // answers in ~1s. Values are UPPERCASE with USPS suffixes ("... RD").
+      queryField: "mdp_street_address_mdp_field_address",
+      select:
+        "mdp_street_address_mdp_field_address AS address, mdp_street_address_city_mdp_field_city AS city, sales_segment_1_consideration_mdp_field_considr1_sdat_field_90 AS sale_price, sales_segment_1_transfer_date_yyyy_mm_dd_mdp_field_tradate_sdat_field_89 AS sale_date",
+      address: "address",
+      amount: "sale_price",
+      date: "sale_date",
+    },
+  },
+  {
+    id: "maryland-sdat-assessments",
+    region: "usa",
+    market: "Maryland",
+    kind: "assessment",
+    style: "socrata-eq",
+    url: "https://opendata.maryland.gov/resource/ed4q-f8tm.json",
+    name: "Maryland SDAT Real Property (assessment)",
+    homepage: "https://opendata.maryland.gov/Business-and-Economy/Maryland-Real-Property-Assessments-Hidden-Property/ed4q-f8tm",
+    license: "Maryland Open Data (public)",
+    bbox: [-79.49, 37.88, -74.98, 39.75],
+    verified: "2026-07-12",
+    cfg: {
+      queryField: "mdp_street_address_mdp_field_address",
+      select:
+        "mdp_street_address_mdp_field_address AS address, current_assessment_year_total_assessment_sdat_field_172 AS assessed, current_cycle_data_date_assessed_yyyy_mm_mdp_field_lastassd_sdat_field_169 AS assessed_date",
+      address: "address",
+      amount: "assessed",
+      date: "assessed_date",
+    },
+  },
+  {
+    id: "montgomery-md-code-violations",
+    region: "usa",
+    market: "Montgomery County, MD",
+    kind: "distress",
+    style: "socrata",
+    url: "https://data.montgomerycountymd.gov/resource/k9nj-z35d.json",
+    name: "Montgomery County Housing Code Violations",
+    homepage: "https://data.montgomerycountymd.gov/Consumer-Housing/Housing-Code-Violations/k9nj-z35d",
+    license: "dataMontgomery (public)",
+    bbox: [-77.53, 38.93, -76.87, 39.36],
+    verified: "2026-07-12",
+    cfg: {
+      addressParts: "street_address city",
+      label: "condition",
+      labelFallback: "Housing code violation",
+      date: "date_filed",
+    },
   },
 
   // ---- Canada ---------------------------------------------------------------
@@ -290,16 +355,44 @@ function ukPostcode(address: string): string | null {
   return m ? m[0].replace(/\s+/, " ").trim() : null;
 }
 
+/** USPS street-suffix abbreviations shared by matching and query building. */
+const STREET_SUFFIXES: [full: string, abbr: string][] = [
+  ["road", "rd"],
+  ["street", "st"],
+  ["avenue", "ave"],
+  ["drive", "dr"],
+  ["lane", "ln"],
+  ["court", "ct"],
+  ["place", "pl"],
+  ["boulevard", "blvd"],
+  ["parkway", "pkwy"],
+  ["circle", "cir"],
+  ["terrace", "ter"],
+  ["highway", "hwy"],
+  ["trail", "trl"],
+  ["square", "sq"],
+];
+
 export function normalizeAddress(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\b(road)\b/g, "rd")
-    .replace(/\b(street)\b/g, "st")
-    .replace(/\b(avenue)\b/g, "ave")
-    .replace(/\b(drive)\b/g, "dr")
-    .replace(/\b(lane)\b/g, "ln")
-    .trim();
+  let out = value.toLowerCase().replace(/[^a-z0-9]+/g, " ");
+  for (const [full, abbr] of STREET_SUFFIXES) {
+    out = out.replace(new RegExp(`\\b${full}\\b`, "g"), abbr);
+  }
+  return out.trim();
+}
+
+/**
+ * Query candidates for US equality-filtered datasets that store UPPERCASE
+ * addresses with USPS suffixes ("22125 CLARKSBURG RD"): abbreviated form
+ * first, raw uppercase as fallback.
+ */
+function usStreetVariants(street: string): string[] {
+  const raw = street.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+  let abbr = raw;
+  for (const [full, short] of STREET_SUFFIXES) {
+    abbr = abbr.replace(new RegExp(`\\b${full.toUpperCase()}\\b`, "g"), short.toUpperCase());
+  }
+  return abbr === raw ? [raw] : [abbr, raw];
 }
 
 export function addressesMatch(candidate: string, target: string): boolean {
@@ -353,7 +446,12 @@ function composedAddress(record: Record<string, unknown>, cfg: Record<string, st
 }
 
 function isoDay(value: string | undefined): string | undefined {
-  return value ? value.slice(0, 10) : undefined;
+  if (!value) return undefined;
+  const day = value.slice(0, 10);
+  // SDAT publishes dot-separated dates ("2021.12.13", "2024.01"); normalize
+  // to ISO so the card shows a real as-of date instead of "date unknown".
+  if (/^\d{4}\.\d{2}(\.\d{2})?$/.test(day)) return day.replace(/\./g, "-");
+  return day;
 }
 
 // ---- Style handlers ---------------------------------------------------------
@@ -378,6 +476,34 @@ async function querySocrata(source: CatalogSource, q: PropertyQuery): Promise<Ca
     });
   }
   return matches;
+}
+
+async function querySocrataEq(source: CatalogSource, q: PropertyQuery): Promise<CatalogMatch[]> {
+  const cfg = source.cfg ?? {};
+  const street = streetPart(q.address);
+  if (!street || !cfg.queryField) return [];
+  for (const candidate of usStreetVariants(street)) {
+    const params = new URLSearchParams();
+    params.set(cfg.queryField, candidate);
+    if (cfg.select) params.set("$select", cfg.select);
+    params.set("$limit", "25");
+    const data = (await fetchJson(`${source.url}?${params.toString()}`)) as Record<string, unknown>[];
+    if (!Array.isArray(data) || data.length === 0) continue;
+    const matches: CatalogMatch[] = [];
+    for (const record of data) {
+      const address = composedAddress(record, cfg);
+      if (!address || !addressesMatch(address, street)) continue;
+      matches.push({
+        source,
+        address,
+        amount: str(record, cfg.amount),
+        date: isoDay(str(record, cfg.date)),
+        label: str(record, cfg.label) ?? cfg.labelFallback,
+      });
+    }
+    if (matches.length > 0) return matches;
+  }
+  return [];
 }
 
 async function queryCarto(source: CatalogSource, q: PropertyQuery): Promise<CatalogMatch[]> {
@@ -584,6 +710,7 @@ async function queryDvf(source: CatalogSource, q: PropertyQuery): Promise<Catalo
 
 const HANDLERS: Record<Exclude<CatalogStyle, "arcgis-point">, (s: CatalogSource, q: PropertyQuery) => Promise<CatalogMatch[]>> = {
   socrata: querySocrata,
+  "socrata-eq": querySocrataEq,
   "carto-sql": queryCarto,
   opendatasoft: queryOpendatasoft,
   "hmlr-ppd": queryHmlr,
