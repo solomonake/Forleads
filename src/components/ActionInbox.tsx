@@ -120,10 +120,11 @@ export function ActionInbox({
 
   return (
     <div className="panel">
-      <h1>Action Inbox</h1>
+      <h1>Approvals</h1>
       <div className="sub">
-        Approval desk for real-world momentum: Gmail drafts, CRM tasks, calendar holds, SMS, and
-        webhook jobs wait here until a human approves them.
+        Work Forleads prepared while you were in the field — follow-up emails, tasks, and calendar
+        holds. One click sends each into your own Gmail, CRM, or calendar. Nothing leaves without
+        you.
       </div>
       <div className="tabs">
         {TABS.map((t) => {
@@ -178,13 +179,18 @@ export function ActionInbox({
                 {leadAddress} · {actionTypeLabel(artifact.type)}
                 {" · "}
                 {artifact.evidence_used.length > 0 ? (
-                  artifact.evidence_used.slice(0, 3).map((e, i) => (
-                    <span key={i} style={{ marginLeft: 4 }}>
-                      <GradeChip grade={e.confidence} />
+                  artifact.evidence_used.slice(0, 2).map((e, i) => (
+                    <span key={i} className="chip" style={{ display: "inline-flex", marginLeft: 4 }}>
+                      <GradeChip grade={e.confidence} /> {e.claim}
                     </span>
                   ))
                 ) : (
                   <em> no grounded evidence</em>
+                )}
+                {artifact.evidence_used.length > 2 && (
+                  <span style={{ marginLeft: 4, color: "var(--text-2)" }}>
+                    +{artifact.evidence_used.length - 2} more
+                  </span>
                 )}
                 {" · "}
                 {blocked ? (

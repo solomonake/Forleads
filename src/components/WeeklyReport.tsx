@@ -35,7 +35,7 @@ export function WeeklyReport({ onNavigate }: { onNavigate: (view: View) => void 
   if (error) {
     return (
       <div className="panel">
-        <h1>Weekly Intelligence Report</h1>
+        <h1>Weekly Recap</h1>
         <div className="sub">{error}</div>
       </div>
     );
@@ -44,7 +44,7 @@ export function WeeklyReport({ onNavigate }: { onNavigate: (view: View) => void 
   if (!report) {
     return (
       <div className="panel">
-        <h1>Weekly Intelligence Report</h1>
+        <h1>Weekly Recap</h1>
         <div className="sub">Assembling this week&apos;s numbers…</div>
       </div>
     );
@@ -57,10 +57,11 @@ export function WeeklyReport({ onNavigate }: { onNavigate: (view: View) => void 
 
   return (
     <div className="panel">
-      <h1>Weekly Intelligence Report</h1>
+      <h1>Weekly Recap</h1>
       <div className="sub">
-        {fmt(report.periodStart)} – {fmt(report.periodEnd)} · every number below comes from work
-        you approved, not from projections.
+        {fmt(report.periodStart)} – {fmt(report.periodEnd)} · what the system found, prepared, and
+        sent for you this week — including where it failed or stayed blocked. Every number is from
+        work you approved, never a projection.
       </div>
 
       <div className="metrics">

@@ -145,7 +145,7 @@ test("weekly report renders with actionable next moves", async ({ page }) => {
   await sessionReady;
   await page.locator('nav button[title="Weekly Report"]').click();
   await expect(
-    page.getByRole("heading", { name: "Weekly Intelligence Report" })
+    page.getByRole("heading", { name: "Weekly Recap" })
   ).toBeVisible({ timeout: COLD_API_TIMEOUT });
 });
 

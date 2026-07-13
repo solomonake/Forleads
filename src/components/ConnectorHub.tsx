@@ -162,11 +162,11 @@ export function ConnectorHub() {
 
   return (
     <div className="panel">
-      <h1>Connector Hub</h1>
+      <h1>Connect</h1>
       <div className="sub">
-        Each real-estate agent connects their own tools here. Forleads holds the credential
-        encrypted at rest, uses it only when you approve a draft, and never shares it across
-        accounts.
+        Forleads doesn&apos;t replace your Gmail, Follow Up Boss, or calendar — it writes into
+        them. Connect a tool once and every approval lands there. Credentials stay encrypted,
+        used only when you approve, never shared.
       </div>
 
       <h2 className="panel-section-title">Action connectors</h2>

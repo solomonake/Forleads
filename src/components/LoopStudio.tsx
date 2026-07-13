@@ -141,11 +141,11 @@ export function LoopStudio({
 
   return (
     <div className="panel">
-      <h1>Loop Studio</h1>
+      <h1>Autopilot</h1>
       <div className="sub">
-        Follow-up autopilot: after you approve an outreach email, these loops watch for silence,
-        prepare the bump, and draft the response the moment you log a reply — you approve
-        everything before it leaves Forleads.
+        Your follow-up rules. When a lead goes quiet, gets a reply, or moves stage, these loops
+        prepare the next touch and drop it in Approvals — so no lead dies of silence while
+        you&apos;re showing houses.
       </div>
       <div className="loop-flow">
         <div><b>1</b><span>Watch: approved outreach, field notes, stale leads, logged replies</span></div>
