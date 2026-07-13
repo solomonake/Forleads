@@ -35,6 +35,28 @@ describe.runIf(live)("catalog live verification", () => {
     expect(matches.some((m) => m.source.id === "chicago-building-violations")).toBe(true);
   }, 20000);
 
+  it("Maryland SDAT grounds a real sale and assessment for a Clarksburg parcel", async () => {
+    const matches = await queryCatalogSales(q("22125 Clarksburg Road, Clarksburg, MD", -77.28, 39.24));
+    expect(matches.some((m) => m.source.id === "maryland-sdat-sales" && m.amount)).toBe(true);
+    expect(matches.some((m) => m.source.id === "maryland-sdat-assessments" && m.amount)).toBe(true);
+  }, 30000);
+
+  it("Montgomery County code violations ground a real distress signal", async () => {
+    // Self-grounding: pull one live row, then prove the pipeline finds it.
+    const seed = (await (
+      await fetch(
+        "https://data.montgomerycountymd.gov/resource/k9nj-z35d.json?$limit=1&$where=street_address IS NOT NULL AND city IS NOT NULL",
+        { headers: { "User-Agent": "Forleads/1.0 (live catalog check)", Accept: "application/json" } },
+      )
+    ).json()) as { street_address?: string; city?: string }[];
+    const row = seed[0];
+    expect(row?.street_address, "dataset no longer returns addressed rows").toBeTruthy();
+    const matches = await queryCatalogDistress(
+      q(`${row!.street_address}, ${row!.city}`, -77.2, 39.15),
+    );
+    expect(matches.some((m) => m.source.id === "montgomery-md-code-violations")).toBe(true);
+  }, 30000);
+
   it("Calgary assessments ground a real assessed value", async () => {
     const matches = await queryCatalogSales(q("15 Deermeade Pl SE, Calgary", -114.03, 50.93));
     expect(matches.some((m) => m.source.id === "calgary-assessments" && m.amount)).toBe(true);
