@@ -211,6 +211,82 @@ export const OPEN_DATA_CATALOG: CatalogSource[] = [
     },
   },
 
+  {
+    id: "connecticut-sales",
+    region: "usa",
+    market: "Connecticut",
+    kind: "sales",
+    style: "socrata-eq",
+    url: "https://data.ct.gov/resource/5mzw-sjtu.json",
+    name: "Connecticut Real Estate Sales (OPM)",
+    homepage: "https://data.ct.gov/Housing-and-Development/Real-Estate-Sales-2001-2023-GL/5mzw-sjtu",
+    license: "Connecticut Open Data (public)",
+    bbox: [-73.73, 40.95, -71.78, 42.06],
+    verified: "2026-07-13",
+    cfg: {
+      queryField: "address",
+      select: "address, town, saleamount, daterecorded",
+      order: "daterecorded DESC",
+      address: "address",
+      amount: "saleamount",
+      date: "daterecorded",
+    },
+  },
+  {
+    id: "ny-state-assessments",
+    region: "usa",
+    market: "New York State",
+    kind: "assessment",
+    style: "socrata-eq",
+    url: "https://data.ny.gov/resource/7vem-aaz7.json",
+    name: "NY State Local Assessment Rolls",
+    homepage: "https://data.ny.gov/Government-Finance/Property-Assessment-Data-from-Local-Assessment-Ro/7vem-aaz7",
+    license: "New York Open Data (public)",
+    bbox: [-79.77, 40.47, -71.85, 45.02],
+    verified: "2026-07-13",
+    cfg: {
+      // Split, mixed-case address fields — needs the $where template with
+      // upper(); statewide, so ambiguous no-city matches are dropped.
+      where: "parcel_address_number='{number}' AND upper(parcel_address_street)='{street}'",
+      cityWhere: "upper(municipality_name)='{city}'",
+      ambiguityField: "municipality_name",
+      select:
+        "parcel_address_number, parcel_address_street, parcel_address_suff, municipality_name, full_market_value, roll_year",
+      order: "roll_year DESC",
+      addressParts: "parcel_address_number parcel_address_street parcel_address_suff",
+      amount: "full_market_value",
+      date: "roll_year",
+    },
+  },
+  {
+    id: "nola-code-violations",
+    region: "usa",
+    market: "New Orleans",
+    kind: "distress",
+    style: "socrata",
+    url: "https://data.nola.gov/resource/3ehi-je3s.json",
+    name: "New Orleans Code Enforcement Violations",
+    homepage: "https://data.nola.gov/Housing-Land-Use-and-Blight/Code-Enforcement-All-Violations/3ehi-je3s",
+    license: "NOLA Open Data (public)",
+    bbox: [-90.14, 29.87, -89.62, 30.2],
+    verified: "2026-07-13",
+    cfg: { address: "location", label: "violation", date: "violationdate" },
+  },
+  {
+    id: "cincinnati-code-enforcement",
+    region: "usa",
+    market: "Cincinnati",
+    kind: "distress",
+    style: "socrata",
+    url: "https://data.cincinnati-oh.gov/resource/cncm-znd6.json",
+    name: "Cincinnati Code Enforcement",
+    homepage: "https://data.cincinnati-oh.gov/Thriving-Neighborhoods/Code-Enforcement/cncm-znd6",
+    license: "CincyInsights (public)",
+    bbox: [-84.72, 39.02, -84.36, 39.22],
+    verified: "2026-07-13",
+    cfg: { address: "full_address", label: "comp_type_desc", date: "entered_date" },
+  },
+
   // ---- Canada ---------------------------------------------------------------
   {
     id: "calgary-assessments",
@@ -371,6 +447,8 @@ const STREET_SUFFIXES: [full: string, abbr: string][] = [
   ["highway", "hwy"],
   ["trail", "trl"],
   ["square", "sq"],
+  // Non-USPS variants seen in live portals (Cincinnati uses "AV").
+  ["av", "ave"],
 ];
 
 export function normalizeAddress(value: string): string {
@@ -478,14 +556,64 @@ async function querySocrata(source: CatalogSource, q: PropertyQuery): Promise<Ca
   return matches;
 }
 
+/**
+ * SoQL $where template for datasets whose address lives in SPLIT, mixed-case
+ * fields (NY: parcel_address_number + parcel_address_street). Tokens:
+ * {number} house number, {street} UPPERCASE street name without its suffix
+ * token, {city} optional (cfg.cityWhere appended only when the query address
+ * carries a city part). Statewide split-field data is ambiguous across towns,
+ * so when no city is known and cfg.ambiguityField values differ, the source
+ * contributes nothing rather than guessing.
+ */
+async function querySocrataWhere(source: CatalogSource, q: PropertyQuery, street: string): Promise<CatalogMatch[]> {
+  const cfg = source.cfg ?? {};
+  const m = street.toUpperCase().replace(/[^A-Z0-9 ]/g, " ").trim().match(/^(\d+[A-Z]?)\s+(.+)$/);
+  if (!m) return [];
+  const esc = (s: string) => s.replace(/'/g, "''");
+  const tokens = m[2]!.split(/\s+/);
+  const suffixTokens = new Set(STREET_SUFFIXES.flatMap(([full, abbr]) => [full.toUpperCase(), abbr.toUpperCase()]));
+  const streetName = tokens.length > 1 && suffixTokens.has(tokens[tokens.length - 1]!) ? tokens.slice(0, -1).join(" ") : m[2]!;
+
+  let where = cfg.where!.replace("{number}", esc(m[1]!)).replace("{street}", esc(streetName));
+  const cityPart = (q.address.split(",")[1] ?? "").replace(/[^A-Za-z0-9 ]/g, " ").trim().toUpperCase();
+  if (cfg.cityWhere && cityPart) where += ` AND ${cfg.cityWhere.replace("{city}", esc(cityPart))}`;
+
+  const params = new URLSearchParams({ $where: where, $limit: "25" });
+  if (cfg.select) params.set("$select", cfg.select);
+  if (cfg.order) params.set("$order", cfg.order);
+  const data = (await fetchJson(`${source.url}?${params.toString()}`)) as Record<string, unknown>[];
+  if (!Array.isArray(data)) return [];
+
+  const matches: CatalogMatch[] = [];
+  for (const record of data) {
+    const address = composedAddress(record, cfg);
+    if (!address || !addressesMatch(address, street)) continue;
+    matches.push({
+      source,
+      address,
+      amount: str(record, cfg.amount),
+      date: isoDay(str(record, cfg.date)),
+      label: str(record, cfg.label) ?? cfg.labelFallback,
+    });
+  }
+  if (!cityPart && cfg.ambiguityField) {
+    const places = new Set(data.map((r) => str(r, cfg.ambiguityField)).filter(Boolean));
+    if (places.size > 1) return [];
+  }
+  return matches;
+}
+
 async function querySocrataEq(source: CatalogSource, q: PropertyQuery): Promise<CatalogMatch[]> {
   const cfg = source.cfg ?? {};
   const street = streetPart(q.address);
-  if (!street || !cfg.queryField) return [];
+  if (!street) return [];
+  if (cfg.where) return querySocrataWhere(source, q, street);
+  if (!cfg.queryField) return [];
   for (const candidate of usStreetVariants(street)) {
     const params = new URLSearchParams();
     params.set(cfg.queryField, candidate);
     if (cfg.select) params.set("$select", cfg.select);
+    if (cfg.order) params.set("$order", cfg.order);
     params.set("$limit", "25");
     const data = (await fetchJson(`${source.url}?${params.toString()}`)) as Record<string, unknown>[];
     if (!Array.isArray(data) || data.length === 0) continue;
