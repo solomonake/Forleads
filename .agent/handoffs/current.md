@@ -1,10 +1,10 @@
 # Current agent checkpoint
 
-Generated: 2026-07-15T05:09:14.466Z
+Generated: 2026-07-15T05:22:44.858Z
 
 ## State
-- Branch: `codex/market-ready-us`
-- Commit: `653b39f182e2`
+- Branch: `codex/oklahoma-official-source`
+- Commit: `e9d3c0e31d65`
 - Worktree: dirty
 - Changed files:
   - M .agent/metrics/phase-runs.jsonl
@@ -14,19 +14,19 @@ Generated: 2026-07-15T05:09:14.466Z
 Deliver a market-test-ready U.S. evidence-to-action product for geographic real-estate farming, with Oklahoma as a named launch market and exact capability truth.
 
 ## Completed
-Sprint 0 committed at 653b39f: market thesis and eight-sprint contract; unwired licensed sources remain planned even with keys; Microsoft, FUB, GHL, and Twilio onboarding is blocked until named safety defects close; operator setup guide distinguishes zero-setup, setup-now, and implementation-required; dev uses verified Turbopack; full high-risk gate and 390px rendered QA passed.
+Sprint 0 merged in PR 53 and production health verified. Sprint 1 committed at e9d3c0e: generalized ArcGIS parcel-point adapter; Oklahoma County current market assessment and valid recorded sale facts; official source, freshness, grades, exact county extent; owner and mailing fields excluded; boundary, null, HTTP 429/503, ArcGIS 498, HTML/WAF, schema drift, truncation, timeout, focused, live, and full high-risk proofs passed.
 
 ## Next exact action
-Push codex/market-ready-us, open a ready PR, wait for green CI, merge under the user explicit authority, verify the deployment read-only, then continue market-s1-oklahoma from .agent/plans/market-ready-us.md.
+Push codex/oklahoma-official-source, open a ready PR, wait for all CI and demo checks, merge under explicit authority, verify production read-only, then branch market-s2-contact-overlay from merged main.
 
 ## Blockers
-No code blocker. Do not collect Microsoft, FUB, GHL, Twilio, ATTOM, Regrid, RentCast, ReportAll, RESO, or MLS Grid credentials yet. Human-only later: OAuth grants, vendor or MLS agreements and spend, SMS business and A2P plus legal review, design-partner recruitment, and any manual production mutation.
+No code blocker. Oklahoma is county-partial, not statewide parcel-live. Bulk extraction requires terms review. Human-only OAuth, vendor agreements and spend, SMS registration/legal review, and design-partner recruitment remain gated.
 
 ## Authority
 User explicitly authorized autonomous implementation, tests, parallel specialist work, push, and merge. Secrets, spend, destructive actions, external communications, and manual production mutation remain human-gated.
 
 ## Verification proof
-Commit 653b39f. High-risk gate passed: doctor 78/78, typecheck, lint, 287 tests passed with 16 skipped, eval 16/16, coverage 90.16% statements and 83.87% branches, production build. Production-build Connect QA passed at 390px without client errors.
+Commit e9d3c0e. Live test: 2209 Colchester Ter, Edmond returned sale 389000 on 2026-07-08 and assessment 364500 with official source freshness and grades. High-risk gate: doctor 78/78, typecheck, lint, 300 tests passed and 17 skipped, eval 16/16, coverage 90.16 percent statements and 83.87 percent branches, production build.
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.
