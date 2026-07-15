@@ -117,7 +117,7 @@ describe("POST /api/notes", () => {
     expect(draft.status).toBe("drafted");
     expect(draft.compliance_result.pass).toBe(true);
 
-    const approved = await approveArtifact(draft.id, draft.revision);
+    const approved = await approveArtifact(draft.id, draft.revision, { agentId: draft.agent_id });
     expect(approved).toBeTruthy();
     expect(approved!.artifact.status).toBe("approved");
     expect(approved!.connector).toMatchObject({

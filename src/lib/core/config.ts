@@ -93,8 +93,9 @@ export const config = {
   },
 
   followupboss: {
-    apiKey: env("FOLLOWUPBOSS_API_KEY"),
     baseUrl: env("FOLLOWUPBOSS_BASE_URL") ?? "https://api.followupboss.com/v1",
+    systemName: env("FOLLOWUPBOSS_SYSTEM_NAME"),
+    systemKey: env("FOLLOWUPBOSS_SYSTEM_KEY"),
   },
 
   gohighlevel: {

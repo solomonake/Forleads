@@ -10,6 +10,7 @@ import type {
   Agent,
   AgentTrace,
   Artifact,
+  ArtifactStatus,
   ConnectorAccount,
   ConnectorProvider,
   ConnectorWrite,
@@ -55,7 +56,8 @@ export interface Repository {
   updateArtifactAtRevision(
     id: string,
     expectedRevision: number,
-    patch: Partial<Artifact>
+    patch: Partial<Artifact>,
+    expectedStatuses?: ArtifactStatus[],
   ): Promise<Artifact | null>;
   listArtifacts(agentId: string): Promise<Artifact[]>;
 
@@ -105,6 +107,8 @@ export interface Repository {
     provider: ConnectorProvider,
   ): Promise<ConnectorCredential | null>;
   getConnectorWrite(key: string): Promise<ConnectorWrite | null>;
+  /** Atomically reserve an external write before the provider call. */
+  claimConnectorWrite(write: ConnectorWrite): Promise<boolean>;
   saveConnectorWrite(write: ConnectorWrite): Promise<ConnectorWrite>;
 
   // memories (lead-scoped recall)
@@ -202,9 +206,18 @@ export class InMemoryRepository implements Repository {
     this.s.artifacts.set(id, next);
     return next;
   }
-  async updateArtifactAtRevision(id: string, expectedRevision: number, patch: Partial<Artifact>) {
+  async updateArtifactAtRevision(
+    id: string,
+    expectedRevision: number,
+    patch: Partial<Artifact>,
+    expectedStatuses?: ArtifactStatus[],
+  ) {
     const cur = this.s.artifacts.get(id);
-    if (!cur || cur.revision !== expectedRevision) return null;
+    if (
+      !cur
+      || cur.revision !== expectedRevision
+      || (expectedStatuses && !expectedStatuses.includes(cur.status))
+    ) return null;
     const next = { ...cur, ...patch };
     this.s.artifacts.set(id, next);
     return next;
@@ -330,6 +343,11 @@ export class InMemoryRepository implements Repository {
   }
   async getConnectorWrite(key: string) {
     return this.s.connectorWrites.get(key) ?? null;
+  }
+  async claimConnectorWrite(write: ConnectorWrite) {
+    if (this.s.connectorWrites.has(write.idempotency_key)) return false;
+    this.s.connectorWrites.set(write.idempotency_key, write);
+    return true;
   }
   async saveConnectorWrite(write: ConnectorWrite) {
     this.s.connectorWrites.set(write.idempotency_key, write);

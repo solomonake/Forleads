@@ -131,7 +131,7 @@ describe("draft state transitions + human gate", () => {
     });
     expect(artifact.status).toBe("drafted");
 
-    const result = await approveArtifact(artifact.id, artifact.revision);
+    const result = await approveArtifact(artifact.id, artifact.revision, { agentId: artifact.agent_id });
     expect(result).toBeTruthy();
     expect(result!.artifact.status).toBe("approved");
     expect(result!.artifact.external_draft_ref).toBeTruthy();
@@ -150,9 +150,9 @@ describe("draft state transitions + human gate", () => {
       evidence: await repo.listEvidence(lead.id),
       trigger: "test",
     });
-    const a = await approveArtifact(artifact.id, artifact.revision);
+    const a = await approveArtifact(artifact.id, artifact.revision, { agentId: artifact.agent_id });
     resetIdempotencyLedger(); // simulate a cold server instance
-    const b = await approveArtifact(artifact.id, artifact.revision);
+    const b = await approveArtifact(artifact.id, artifact.revision, { agentId: artifact.agent_id });
     expect(b!.connector.deduped).toBe(true);
     expect(a!.connector.externalId).toBe(b!.connector.externalId);
   });
@@ -216,7 +216,7 @@ describe("awaiting_reply_days condition (reply-watch bump)", () => {
       evidence,
       trigger: "test",
     });
-    await approveArtifact(drafted.id, drafted.revision);
+    await approveArtifact(drafted.id, drafted.revision, { agentId: drafted.agent_id });
     const approved = (await repo.getArtifact(drafted.id))!;
     const fourDaysAgo = new Date(Date.now() - 4 * 86400000).toISOString();
     const staleApproved = { ...approved, approved_at: fourDaysAgo, updated_at: fourDaysAgo };

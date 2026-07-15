@@ -8,6 +8,8 @@ import { loadTenantCredential } from "@/lib/auth/credentials";
 import type { ConnectorProvider } from "@/lib/core/types";
 import { CREDENTIAL_SCHEMAS, type CredentialField } from "./credential-schema";
 import { ALL_PROVIDERS } from "./index";
+import { config } from "@/lib/core/config";
+import type { FollowUpBossCredential } from "./followupboss";
 
 export interface TenantConnectorStatus {
   provider: ConnectorProvider;
@@ -20,6 +22,7 @@ export interface TenantConnectorStatus {
   connected: boolean;
   /** Best available label (e.g. connected email address, saved location id). */
   connectedLabel?: string;
+  credentialVerified?: boolean;
   /** Capabilities the connector exposes when live. */
   capabilities: string[];
   /** OAuth-scope strings (or read-only descriptors for API-key providers). */
@@ -50,8 +53,8 @@ const DISPLAY: Record<
   },
   followupboss: {
     displayName: "Follow Up Boss · CRM",
-    summary: "Write notes, tasks, and appointments to your FUB workspace after approval.",
-    capabilities: ["writeCrmNote", "createTask", "createCalendarEvent", "syncContacts"],
+    summary: "Sync exact CRM contact-address matches and write person-bound notes and tasks after approval.",
+    capabilities: ["writeCrmNote", "createTask", "syncContacts"],
   },
   gohighlevel: {
     displayName: "GoHighLevel · CRM / agencies",
@@ -73,8 +76,6 @@ const DISPLAY: Record<
 const BLOCKED: Partial<Record<ConnectorProvider, string>> = {
   microsoft:
     "Microsoft onboarding is paused until refreshed OAuth tokens are persisted and reconnect behavior is verified.",
-  followupboss:
-    "Follow Up Boss onboarding is paused until contact import persists provider person IDs and every note, task, and appointment binds the correct person.",
   gohighlevel:
     "GoHighLevel onboarding is paused until contact import persists provider IDs and note/task calls use contact-bound endpoints.",
   twilio:
@@ -135,7 +136,7 @@ async function statusFor(
     };
   }
   if (schema) {
-    const creds = await loadTenantCredential<Record<string, string>>(agentId, provider);
+    const creds = await loadTenantCredential<Record<string, string> & FollowUpBossCredential>(agentId, provider);
     const connected = Boolean(creds);
     // Best-available label: locationId for GHL, fromNumber for Twilio, and
     // "Connected" otherwise — the /test endpoint returns a friendlier label
@@ -146,19 +147,26 @@ async function statusFor(
         connectedLabel = `Location ${creds.locationId}`;
       } else if (provider === "twilio" && creds.fromNumber) {
         connectedLabel = `from ${creds.fromNumber}`;
+      } else if (provider === "followupboss" && creds.identity?.label) {
+        connectedLabel = creds.identity.label;
       } else {
         connectedLabel = "Credential saved";
       }
     }
+    const dynamicBlocked = provider === "followupboss"
+      && (!config.followupboss.systemName || !config.followupboss.systemKey)
+      ? "Register Forleads with Follow Up Boss and deploy the issued X-System credentials before adding customer API keys."
+      : BLOCKED[provider];
     return {
       provider,
       displayName: schema.displayName ?? meta.displayName,
       summary: schema.summary ?? meta.summary,
       authKind: "apiKey",
-      availability: BLOCKED[provider] ? "blocked" : "ready",
-      blockedReason: BLOCKED[provider],
+      availability: dynamicBlocked ? "blocked" : "ready",
+      blockedReason: dynamicBlocked,
       connected,
       connectedLabel,
+      credentialVerified: provider === "followupboss" ? Boolean(creds?.identity) : undefined,
       capabilities: meta.capabilities,
       docsUrl: schema.docsUrl,
       fields: schema.fields,

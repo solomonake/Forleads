@@ -75,7 +75,7 @@ npm run agent:scorecard
 
 ---
 
-## Mock ⇆ live: what works with which keys
+## Capability posture: configuration is not proof
 
 | Capability | Mock (default, $0) | Live (add env) |
 |---|---|---|
@@ -85,10 +85,15 @@ npm run agent:scorecard
 | Imagery | ✅ mock vision captions | `MAPILLARY_TOKEN` |
 | Scouts/Reducer/Composer/Compliance | ✅ deterministic | `FORLEADS_AGENT_MODE=live` + `ANTHROPIC_API_KEY` |
 | Gmail draft | ✅ labeled mock | `GOOGLE_*` OAuth → real `drafts.create` (MIME/base64url ready) |
-| Calendar / FUB / GHL / Twilio / Zapier | ✅ labeled mock | matching keys in `.env.local` |
+| Google Calendar | ✅ labeled mock | verified Google OAuth → real events |
+| Follow Up Boss | ✅ labeled mock | registered FUB system + tenant key + identity test + exact-match sync; notes/tasks only |
+| GoHighLevel / Twilio | ✅ labeled mock | blocked from onboarding until contact/consent safety gates ship |
+| Zapier outbound | ✅ labeled mock | single-environment `ZAPIER_WEBHOOK_URL`; tenant routing still required for multi-tenant use |
 | Persistence | ✅ in-memory | `FORLEADS_PERSIST=supabase` + `SUPABASE_*` |
 
-See `.env.example` for every key. The **Connector Hub** screen shows mock/live status live.
+See `.env.example` and `docs/operator-setup-guide.md`. The **Connect** screen
+separates blocked, configured, identity-verified, and capability-ready states;
+key presence alone never proves a working integration.
 
 ---
 

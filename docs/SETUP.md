@@ -94,9 +94,9 @@ client as `connected · live`.
 ## 3. Supabase (real persistence + RLS + pgvector)
 
 1. **supabase.com → New project.** Save the project ref, DB password, and the API keys.
-2. Apply the schema. Easiest: **SQL Editor → paste & run** these two files in order:
-   - `supabase/migrations/0001_init.sql`
-   - `supabase/migrations/0002_rls.sql`
+2. Apply every file in `supabase/migrations/` in numeric order. Do not stop
+   after the first two; health checks require the later revision,
+   idempotency, credential, memory, and reviewed-CRM-binding columns.
 
    Or with the Supabase CLI:
    ```bash
@@ -112,7 +112,11 @@ client as `connected · live`.
    SUPABASE_SERVICE_ROLE_KEY=<service role key>   # server-only, never NEXT_PUBLIC
    FORLEADS_PERSIST=supabase
    ```
-5. The repository interface (`src/lib/db/repository.ts`) is the seam — the in-memory repo and a Supabase repo implement the same `Repository`. With `FORLEADS_PERSIST=supabase` the app reads the Supabase config; the in-memory fallback keeps it running if creds are partial. (The Supabase-backed repo class is the one remaining wire-up — every method maps 1:1 to a table.)
+5. The repository interface (`src/lib/db/repository.ts`) is the seam — the
+   in-memory repo and implemented Supabase repo share the same contract. When
+   `FORLEADS_PERSIST=supabase` is selected, missing server credentials fail
+   closed; the app never accepts apparently durable work into process memory.
+   Confirm `/api/health` returns 200 after the migration and deployment.
 
 > Free-tier note: Supabase pauses a project after ~7 days idle. Add a cron ping (Vercel Cron or GitHub Action hitting `/api/leads`) during active use.
 
@@ -143,12 +147,25 @@ This is the "ready in my drafts" magic. The MIME/base64url + `drafts.create` cal
 
 Connector Hub will then show **Google · connected · live** and approvals create real Gmail drafts.
 
-### Other connectors (same pattern — add keys, mock flips to live)
-- **Follow Up Boss:** `FOLLOWUPBOSS_API_KEY` (Basic auth, key as username). Notes/tasks/appointments + contact sync.
-- **GoHighLevel:** `GHL_API_KEY` + `GHL_LOCATION_ID`.
-- **Twilio:** `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` + `TWILIO_FROM_NUMBER` (approved SMS only).
-- **Zapier:** set `ZAPIER_WEBHOOK_URL` to post out; `ZAPIER_WEBHOOK_SECRET` guards the inbound `/api/connectors/zapier/inbound`.
-- **Claude (live reasoning):** `ANTHROPIC_API_KEY` + `FORLEADS_AGENT_MODE=live`.
+### Other connectors — capability truth, not key-presence badges
+
+- **Follow Up Boss:** first register Forleads with FUB and deploy the issued
+  `FOLLOWUPBOSS_SYSTEM_NAME` and `FOLLOWUPBOSS_SYSTEM_KEY`. Each agent then
+  saves their own API key in **Connect**, passes the identity test, runs the
+  exact-address person overlay, records channel permission, and proves one
+  person-bound note and task in the real account. See
+  `docs/operator-setup-guide.md`. API-key presence alone never flips this live;
+  appointments are not routed to FUB.
+- **GoHighLevel:** blocked. Do not add `GHL_API_KEY` or `GHL_LOCATION_ID` until
+  tenant-scoped contact import and person-bound writes ship.
+- **Twilio:** blocked. Do not add credentials until consent/revocation, DNC,
+  quiet-hours, A2P, sender scope, and delivery callbacks ship.
+- **Zapier:** `ZAPIER_WEBHOOK_URL` enables the approval-gated outbound bridge.
+  Keep it single-environment until tenant-bound routing ships;
+  `ZAPIER_WEBHOOK_SECRET` only guards the current inbound endpoint.
+- **Claude (live reasoning):** `ANTHROPIC_API_KEY` plus
+  `FORLEADS_AGENT_MODE=live`; verify a real model response separately from the
+  configured mode.
 
 ---
 

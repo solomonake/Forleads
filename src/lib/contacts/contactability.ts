@@ -29,6 +29,7 @@ function channel(
   value: string | undefined,
   permission: LeadContact["emailPermission"],
   legacyOptOut: boolean | undefined,
+  hasRelationshipBasis: boolean,
 ): ContactabilityChannel {
   const label = name === "email" ? "Email" : name === "sms" ? "SMS" : "Call";
   if (!value?.trim()) {
@@ -38,16 +39,23 @@ function channel(
     return { channel: name, label, value, state: "blocked", detail: "Do not contact" };
   }
   if (permission === "allowed") {
+    if (!hasRelationshipBasis) {
+      return { channel: name, label, value, state: "unknown", detail: "Permission basis must be recorded" };
+    }
     return { channel: name, label, value, state: "allowed", detail: "Allowed by recorded relationship" };
   }
   return { channel: name, label, value, state: "unknown", detail: "Available; permission not verified" };
 }
 
 export function contactabilityPassport(contact: LeadContact | undefined): ContactabilityPassport {
+  // Preserve legacy manual passports where sourceLabel was the relationship
+  // basis, but never let an imported CRM provenance label count as permission.
+  const relationshipBasis = contact?.relationshipBasis?.trim()
+    || (contact?.source !== "crm" ? contact?.sourceLabel?.trim() : undefined);
   const channels = [
-    channel("email", contact?.email, contact?.emailPermission, contact?.optOutEmail),
-    channel("sms", contact?.phone, contact?.smsPermission, contact?.optOutSms),
-    channel("call", contact?.phone, contact?.callPermission, undefined),
+    channel("email", contact?.email, contact?.emailPermission, contact?.optOutEmail, Boolean(relationshipBasis)),
+    channel("sms", contact?.phone, contact?.smsPermission, contact?.optOutSms, Boolean(relationshipBasis)),
+    channel("call", contact?.phone, contact?.callPermission, undefined, Boolean(relationshipBasis)),
   ];
   const present = channels.filter((entry) => entry.state !== "missing");
   const summary = present.length === 0

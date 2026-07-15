@@ -23,6 +23,7 @@ const TABS: { key: string; label: string; match: (a: Artifact) => boolean }[] = 
 
 const statusPill: Record<ArtifactStatus, string> = {
   drafted: "pill-mock",
+  approving: "pill-mock",
   blocked: "pill-blocked",
   approved: "pill-live",
   sent: "pill-live",

@@ -183,6 +183,10 @@ export async function persistOutcomeMemory(
   if (!artifact.lead_surface_id) return null;
   try {
     const repo = await getRepo();
+    const prior = (await repo.listOutcomeMemories(artifact.lead_surface_id)).find(
+      (memory) => memory.ref === artifact.id && memory.text.startsWith(`[${verdict}]`),
+    );
+    if (prior) return prior;
     const embedder = getEmbedder();
     const detailLabel = verdict === "rejected" ? "reason" : "edited";
     const tail = editedExcerpt

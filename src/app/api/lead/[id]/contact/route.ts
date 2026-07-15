@@ -32,6 +32,7 @@ const contactPatch = withRoute<{ params: { id: string } }>(
         typeof b.optOutSms === "boolean" ? (b.optOutSms as boolean) : undefined,
       source: optStr(b, "source", { allowed: CONTACT_SOURCES }),
       sourceLabel: optStr(b, "sourceLabel", { max: 200 }),
+      relationshipBasis: optStr(b, "relationshipBasis", { max: 500 }),
       emailPermission: optStr(b, "emailPermission", { allowed: CONTACT_PERMISSIONS }),
       smsPermission: optStr(b, "smsPermission", { allowed: CONTACT_PERMISSIONS }),
       callPermission: optStr(b, "callPermission", { allowed: CONTACT_PERMISSIONS }),
@@ -65,12 +66,31 @@ const contactPatch = withRoute<{ params: { id: string } }>(
     }
 
     // Merge: any field the caller omitted keeps its prior value.
+    const normalizedEmail = (value: string | undefined) => value?.trim().toLowerCase() || undefined;
+    const normalizedPhone = (value: string | undefined) => value?.replace(/\D/g, "") || undefined;
+    const normalizedName = (value: string | undefined) => value?.trim().replace(/\s+/g, " ").toLowerCase() || undefined;
+    const emailValueChanged = body.email !== undefined
+      && normalizedEmail(body.email) !== normalizedEmail(existing.contact?.email);
+    const phoneValueChanged = body.phone !== undefined
+      && normalizedPhone(body.phone) !== normalizedPhone(existing.contact?.phone);
+    const nameValueChanged = body.name !== undefined
+      && normalizedName(body.name) !== normalizedName(existing.contact?.name);
+    const emailChanged = Boolean(normalizedEmail(existing.contact?.email)) && emailValueChanged;
+    const phoneChanged = Boolean(normalizedPhone(existing.contact?.phone)) && phoneValueChanged;
     const merged: LeadContact = { ...(existing.contact ?? {}) };
     if (body.name !== undefined) merged.name = body.name || undefined;
     if (body.email !== undefined) merged.email = body.email || undefined;
     if (body.phone !== undefined) merged.phone = body.phone || undefined;
     if (body.source !== undefined) merged.source = body.source;
     if (body.sourceLabel !== undefined) merged.sourceLabel = body.sourceLabel || undefined;
+    if (body.relationshipBasis !== undefined) {
+      merged.relationshipBasis = body.relationshipBasis || undefined;
+    }
+    // Backwards-compatible manual passports use their source detail as the
+    // relationship basis. CRM provenance never receives this shortcut.
+    if (!merged.relationshipBasis && body.sourceLabel && merged.source !== "crm") {
+      merged.relationshipBasis = body.sourceLabel;
+    }
     if (body.emailPermission !== undefined) {
       merged.emailPermission = body.emailPermission;
       merged.optOutEmail = body.emailPermission === "opted_out";
@@ -86,12 +106,32 @@ const contactPatch = withRoute<{ params: { id: string } }>(
       merged.smsPermission = body.optOutSms ? "opted_out" : "unknown";
     }
     if (body.callPermission !== undefined) merged.callPermission = body.callPermission;
+    // Permission belongs to the endpoint that was verified, not merely to the
+    // lead. Changing an email/phone resets positive permission while retaining
+    // every opt-out conservatively. Any identity edit invalidates CRM person
+    // bindings so a subsequent write must pass through a fresh sync/review.
+    if (emailChanged) {
+      const optedOut = body.emailPermission === "opted_out" || existing.contact?.optOutEmail;
+      merged.emailPermission = optedOut ? "opted_out" : "unknown";
+      merged.optOutEmail = Boolean(optedOut);
+    }
+    if (phoneChanged) {
+      const smsOptedOut = body.smsPermission === "opted_out" || existing.contact?.optOutSms;
+      const callOptedOut = body.callPermission === "opted_out"
+        || existing.contact?.callPermission === "opted_out";
+      merged.smsPermission = smsOptedOut ? "opted_out" : "unknown";
+      merged.optOutSms = Boolean(smsOptedOut);
+      merged.callPermission = callOptedOut ? "opted_out" : "unknown";
+    }
+    if ((emailValueChanged || phoneValueChanged || nameValueChanged) && merged.providerRefs) {
+      merged.providerRefs = undefined;
+    }
     if (!merged.source && (merged.name || merged.email || merged.phone)) merged.source = "agent_entered";
     if (
-      [body.emailPermission, body.smsPermission, body.callPermission].includes("allowed")
-      && !merged.sourceLabel?.trim()
+      [merged.emailPermission, merged.smsPermission, merged.callPermission].includes("allowed")
+      && !merged.relationshipBasis?.trim()
     ) {
-      throw new ValidationError("source detail is required before a channel can be marked allowed");
+      throw new ValidationError("relationship or permission basis is required before a channel can be marked allowed");
     }
     if (existing.contact?.source === "crm") {
       merged.source = "crm";

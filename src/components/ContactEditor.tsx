@@ -38,6 +38,7 @@ export function ContactEditor({ lead, onSaved, onError }: Props) {
     phone: lead.contact?.phone ?? "",
     source: lead.contact?.source ?? "agent_entered" as ContactSource,
     sourceLabel: lead.contact?.sourceLabel ?? "",
+    relationshipBasis: lead.contact?.relationshipBasis ?? "",
     emailPermission: permission(lead.contact, "email"),
     smsPermission: permission(lead.contact, "sms"),
     callPermission: permission(lead.contact, "call"),
@@ -47,6 +48,7 @@ export function ContactEditor({ lead, onSaved, onError }: Props) {
   const [phone, setPhone] = useState(initial.phone);
   const [source, setSource] = useState<ContactSource>(initial.source);
   const [sourceLabel, setSourceLabel] = useState(initial.sourceLabel);
+  const [relationshipBasis, setRelationshipBasis] = useState(initial.relationshipBasis);
   const [emailPermission, setEmailPermission] = useState<ContactPermission>(initial.emailPermission);
   const [smsPermission, setSmsPermission] = useState<ContactPermission>(initial.smsPermission);
   const [callPermission, setCallPermission] = useState<ContactPermission>(initial.callPermission);
@@ -58,6 +60,7 @@ export function ContactEditor({ lead, onSaved, onError }: Props) {
     setPhone(initial.phone);
     setSource(initial.source);
     setSourceLabel(initial.sourceLabel);
+    setRelationshipBasis(initial.relationshipBasis);
     setEmailPermission(initial.emailPermission);
     setSmsPermission(initial.smsPermission);
     setCallPermission(initial.callPermission);
@@ -69,6 +72,7 @@ export function ContactEditor({ lead, onSaved, onError }: Props) {
     || phone.trim() !== initial.phone.trim()
     || source !== initial.source
     || sourceLabel.trim() !== initial.sourceLabel.trim()
+    || relationshipBasis.trim() !== initial.relationshipBasis.trim()
     || emailPermission !== initial.emailPermission
     || smsPermission !== initial.smsPermission
     || callPermission !== initial.callPermission;
@@ -80,12 +84,16 @@ export function ContactEditor({ lead, onSaved, onError }: Props) {
     phone: phone.trim() || undefined,
     source,
     sourceLabel: sourceLabel.trim() || undefined,
+    relationshipBasis: relationshipBasis.trim()
+      || (source !== "crm" ? sourceLabel.trim() : undefined),
     emailPermission,
     smsPermission,
     callPermission,
   };
   const passport = contactabilityPassport(draftContact);
-  const needsPermissionBasis = !sourceLabel.trim()
+  const effectiveBasis = relationshipBasis.trim()
+    || (source !== "crm" ? sourceLabel.trim() : "");
+  const needsPermissionBasis = !effectiveBasis
     && [emailPermission, smsPermission, callPermission].includes("allowed");
 
   async function save() {
@@ -100,6 +108,7 @@ export function ContactEditor({ lead, onSaved, onError }: Props) {
           phone: phone.trim(),
           source,
           sourceLabel: sourceLabel.trim(),
+          relationshipBasis: effectiveBasis,
           emailPermission,
           smsPermission,
           callPermission,
@@ -135,6 +144,20 @@ export function ContactEditor({ lead, onSaved, onError }: Props) {
                 : "At least one channel has a recorded relationship basis."}
         </span>
       </div>
+      {initial.source === "crm" && (
+        <div className="contact-editor-row">
+          <label>
+            <span>Relationship / permission basis {needsPermissionBasis ? "— required for allowed use" : ""}</span>
+            <input
+              type="text"
+              placeholder="Past client, referral, open house, written opt-in…"
+              value={relationshipBasis}
+              onChange={(event) => setRelationshipBasis(event.target.value)}
+              autoComplete="off"
+            />
+          </label>
+        </div>
+      )}
 
       <div className="contact-passport-meta">
         <span>{passport.source}</span>
@@ -177,7 +200,7 @@ export function ContactEditor({ lead, onSaved, onError }: Props) {
           </select>
         </label>
         <label>
-          <span>Source detail {needsPermissionBasis ? "— required for allowed use" : ""}</span>
+          <span>Source detail {source !== "crm" && needsPermissionBasis ? "— required for allowed use" : ""}</span>
           <input
             type="text"
             placeholder="Open house, referral, CRM…"

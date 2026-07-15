@@ -39,7 +39,7 @@ describe("artifact revision safety", () => {
     expect(revised?.revision).toBe(2);
     expect(revised?.status).toBe("blocked");
     expect(revised?.edit_history?.length).toBeGreaterThan(0);
-    await expect(approveArtifact(artifact.id, 1)).rejects.toThrow(/revision/);
+    await expect(approveArtifact(artifact.id, 1, { agentId: artifact.agent_id })).rejects.toThrow(/revision/);
   });
 
   it("uses the revision in connector idempotency", async () => {
@@ -60,7 +60,7 @@ describe("artifact revision safety", () => {
       evidence: await repo.listEvidence(lead.id),
       trigger: "test",
     });
-    const first = await approveArtifact(artifact.id, artifact.revision);
+    const first = await approveArtifact(artifact.id, artifact.revision, { agentId: artifact.agent_id });
     expect(first?.artifact.approved_revision).toBe(artifact.revision);
     expect(first?.artifact.external_draft_ref?.idempotencyKey).toBeTruthy();
   });

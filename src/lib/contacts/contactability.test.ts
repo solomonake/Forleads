@@ -28,11 +28,19 @@ describe("contactabilityPassport", () => {
       phone: "+1 405 555 0100",
       source: "first_party",
       sourceLabel: "Open-house sign-in",
+      relationshipBasis: "Open-house sign-in and email follow-up permission",
       verifiedAt: "2026-07-15T12:00:00.000Z",
       emailPermission: "allowed",
       smsPermission: "opted_out",
       callPermission: "allowed",
-      providerRefs: { followupboss: "123" },
+      providerRefs: {
+        followupboss: {
+          contactId: "123",
+          workspaceId: "workspace-1",
+          credentialVersion: 1,
+          syncedAt: "2026-07-15T12:00:00.000Z",
+        },
+      },
     });
 
     expect(passport.summary).toBe("contactable");
@@ -43,6 +51,20 @@ describe("contactabilityPassport", () => {
       ["sms", "blocked"],
       ["call", "allowed"],
     ]);
+  });
+
+  it("does not turn CRM address-match provenance into outreach permission", () => {
+    const passport = contactabilityPassport({
+      email: "crm@example.test",
+      source: "crm",
+      sourceLabel: "Follow Up Boss · exact CRM contact-address match",
+      emailPermission: "allowed",
+    });
+    expect(passport.summary).toBe("verification_needed");
+    expect(passport.channels.find((entry) => entry.channel === "email")).toMatchObject({
+      state: "unknown",
+      detail: "Permission basis must be recorded",
+    });
   });
 
   it("does not infer a relationship when no contact exists", () => {

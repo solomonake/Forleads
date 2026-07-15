@@ -22,6 +22,7 @@ interface TenantProviderStatus {
   blockedReason?: string;
   connected: boolean;
   connectedLabel?: string;
+  credentialVerified?: boolean;
   capabilities: string[];
   scopes?: string[];
   docsUrl?: string;
@@ -110,11 +111,25 @@ interface TestOutcome {
   error?: string;
 }
 
+interface SyncOutcome {
+  ok: boolean;
+  fetched?: number;
+  matched?: number;
+  updated?: number;
+  unmatched?: number;
+  ambiguous?: number;
+  duplicateIds?: number;
+  complete?: boolean;
+  nextCursor?: string;
+  error?: string;
+}
+
 export function ConnectorHub() {
   const [providers, setProviders] = useState<TenantProviderStatus[]>([]);
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [modal, setModal] = useState<TenantProviderStatus | null>(null);
   const [test, setTest] = useState<Record<string, TestOutcome | "pending">>({});
+  const [sync, setSync] = useState<Record<string, SyncOutcome | "pending">>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
 
   async function refresh() {
@@ -154,9 +169,31 @@ export function ConnectorHub() {
       });
       const data = (await res.json()) as TestOutcome;
       setTest((t) => ({ ...t, [provider]: data }));
+      if (data.ok) await refresh();
     } catch (e) {
       setTest((t) => ({
         ...t,
+        [provider]: { ok: false, error: e instanceof Error ? e.message : "Network error" },
+      }));
+    }
+  }
+
+  async function runSync(provider: string) {
+    setSync((s) => ({ ...s, [provider]: "pending" }));
+    try {
+      const res = await fetch("/api/connectors/followupboss/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = (await res.json().catch(() => ({}))) as Omit<SyncOutcome, "ok">;
+      setSync((s) => ({
+        ...s,
+        [provider]: res.ok ? { ...data, ok: true } : { ok: false, error: data.error ?? `HTTP ${res.status}` },
+      }));
+    } catch (e) {
+      setSync((s) => ({
+        ...s,
         [provider]: { ok: false, error: e instanceof Error ? e.message : "Network error" },
       }));
     }
@@ -179,9 +216,11 @@ export function ConnectorHub() {
             status={p}
             busy={busy[p.provider] ?? false}
             testOutcome={test[p.provider]}
+            syncOutcome={sync[p.provider]}
             onOpenModal={() => setModal(p)}
             onDisconnect={() => disconnect(p.provider)}
             onTest={() => runTest(p.provider)}
+            onSync={() => runSync(p.provider)}
           />
         ))}
       </div>
@@ -232,22 +271,28 @@ function ConnectorCard({
   status,
   busy,
   testOutcome,
+  syncOutcome,
   onOpenModal,
   onDisconnect,
   onTest,
+  onSync,
 }: {
   status: TenantProviderStatus;
   busy: boolean;
   testOutcome?: TestOutcome | "pending";
+  syncOutcome?: SyncOutcome | "pending";
   onOpenModal: () => void;
   onDisconnect: () => void;
   onTest: () => void;
+  onSync: () => void;
 }) {
   const label =
     status.availability === "blocked"
       ? status.connected
         ? "Credential saved · blocked"
         : "Blocked · not ready"
+      : status.connected && status.credentialVerified === false
+        ? "Credential saved · test required"
       : status.connected && status.connectedLabel
       ? `Connected · ${status.connectedLabel}`
       : status.connected
@@ -260,7 +305,7 @@ function ConnectorCard({
       <div className="rtitle">
         <span>{status.displayName}</span>
         <span
-          className={`pill-status ${status.connected && status.availability === "ready" ? "pill-live" : "pill-mock"}`}
+          className={`pill-status ${status.connected && status.availability === "ready" && status.credentialVerified !== false ? "pill-live" : "pill-mock"}`}
         >
           {label}
         </span>
@@ -293,6 +338,17 @@ function ConnectorCard({
             <button className="minibtn" onClick={onTest} disabled={busy}>
               {testOutcome === "pending" ? "Testing…" : "Test"}
             </button>
+            {status.provider === "followupboss" && status.credentialVerified && (
+              <button
+                className="minibtn primary"
+                onClick={() => onSync()}
+                disabled={busy || syncOutcome === "pending"}
+              >
+                {syncOutcome === "pending"
+                  ? "Syncing…"
+                  : "Sync exact matches"}
+              </button>
+            )}
             <button className="minibtn" onClick={onOpenModal} disabled={busy}>
               Update
             </button>
@@ -331,6 +387,22 @@ function ConnectorCard({
           {testOutcome.ok
             ? `Test passed${testOutcome.label ? ` — ${testOutcome.label}` : ""}.`
             : `Test failed: ${testOutcome.error ?? "unknown error"}`}
+        </div>
+      )}
+      {syncOutcome && syncOutcome !== "pending" && (
+        <div
+          className="rmeta"
+          style={{ color: syncOutcome.ok ? "var(--ok)" : "var(--danger)", marginTop: 6 }}
+          data-testid={`sync-result-${status.provider}`}
+        >
+          {syncOutcome.ok
+            ? `Sync ${syncOutcome.complete ? "complete" : "paused safely"}: ${syncOutcome.fetched ?? 0} people read, ${syncOutcome.matched ?? 0} exact address matches, ${syncOutcome.updated ?? 0} leads updated, ${syncOutcome.ambiguous ?? 0} ambiguous left untouched.`
+            : `Sync failed: ${syncOutcome.error ?? "unknown error"}`}
+          {syncOutcome.ok && (
+            <div className="setup-note">
+              A CRM contact address is only a match signal, never proof that the person owns the property. Outreach permissions remain unknown until you record their source.
+            </div>
+          )}
         </div>
       )}
     </div>

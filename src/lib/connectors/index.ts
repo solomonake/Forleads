@@ -7,9 +7,12 @@
 
 import { config } from "@/lib/core/config";
 import type { ActionType, ConnectorProvider } from "@/lib/core/types";
-import { loadTenantCredential } from "@/lib/auth/credentials";
+import { loadTenantCredential, loadTenantCredentialRecord } from "@/lib/auth/credentials";
 import { GoogleCalendarConnector } from "./calendar";
-import { FollowUpBossConnector } from "./followupboss";
+import {
+  FollowUpBossConnector,
+  type FollowUpBossCredential,
+} from "./followupboss";
 import { GmailDraftConnector } from "./gmail";
 import { GoHighLevelConnector } from "./gohighlevel";
 import { MockConnector } from "./mock";
@@ -52,9 +55,11 @@ export function getConnector(provider: ConnectorProvider): Connector {
       return new MockConnector("microsoft", config.allowMockConnectorWrites);
     case "followupboss":
       return new FollowUpBossConnector(
-        config.followupboss.apiKey,
+        undefined,
         config.followupboss.baseUrl,
         config.allowMockConnectorWrites,
+        config.followupboss.systemName,
+        config.followupboss.systemKey,
       );
     case "gohighlevel":
       return new GoHighLevelConnector(
@@ -116,12 +121,17 @@ export async function getConnectorForTenant(
       return new OutlookDraftConnector(tokens.access_token, config.allowMockConnectorWrites);
     }
     case "followupboss": {
-      const creds = await tenantApiCreds("followupboss", agentId);
-      const apiKey = creds?.apiKey ?? config.followupboss.apiKey;
+      const record = agentId
+        ? await loadTenantCredentialRecord<FollowUpBossCredential>(agentId, "followupboss")
+        : null;
       return new FollowUpBossConnector(
-        apiKey,
+        record?.payload.apiKey,
         config.followupboss.baseUrl,
         config.allowMockConnectorWrites,
+        config.followupboss.systemName,
+        config.followupboss.systemKey,
+        record?.payload.identity,
+        record?.row.version,
       );
     }
     case "gohighlevel": {
@@ -196,7 +206,7 @@ export async function connectorForAction(
       // Prefer a connected CRM for THIS tenant; fall back to env. Fails closed
       // downstream when nothing is configured.
       const fub = await tenantApiCreds("followupboss", opts?.agentId);
-      if (fub?.apiKey || config.followupboss.apiKey) {
+      if (fub?.apiKey) {
         return getConnectorForTenant("followupboss", opts?.agentId);
       }
       const ghl = await tenantApiCreds("gohighlevel", opts?.agentId);

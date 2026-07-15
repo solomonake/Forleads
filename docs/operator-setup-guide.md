@@ -111,6 +111,70 @@ it as single-environment until tenant-bound credentials and routing ship.
 `N8N_WEBHOOK_URL` alone is not wired. Do not enable multi-tenant inbound Zapier
 until its global demo-tenant routing is replaced.
 
+### Follow Up Boss: exact-address person overlay and approved CRM writes
+
+The adapter is implemented, but the platform owner must complete Follow Up
+Boss system registration before customer credentials can be accepted. Follow
+Up Boss requires registered `X-System` and `X-System-Key` headers on every API
+request made for a customer account. An API key by itself deliberately remains
+blocked.
+
+Platform owner, once:
+
+1. Open the official [system registration form](https://apps.followupboss.com/system-registration/)
+   and register **Forleads**. If pursuing a public partnership, contact the
+   partner address linked from the official [registration and identification
+   guide](https://docs.followupboss.com/reference/identification).
+2. Review the Follow Up Boss API Terms of Use and record the approved system
+   name, key, intended read/write use, support owner, and revocation procedure.
+3. Add the issued values to the target Vercel environment as
+   `FOLLOWUPBOSS_SYSTEM_NAME` and `FOLLOWUPBOSS_SYSTEM_KEY`. Do not put them in
+   the browser or repository. Customer API keys are always saved through the
+   tenant-scoped **Connect** flow; there is no shared environment-key fallback.
+4. Apply migrations `0011_artifact_connector_binding.sql`,
+   `0012_connector_credential_uniqueness.sql`, and
+   `0013_artifact_approval_claim.sql` with the normal reviewed migration
+   process. They freeze the CRM target seen at review time, enforce one active
+   credential generation per tenant, and reserve the reviewed revision before
+   provider I/O; they do not expose the API key.
+5. Redeploy with approval. Confirm **Connect** changes Follow Up Boss from
+   blocked to ready, while still showing not connected.
+
+Each design-partner agent:
+
+1. In Follow Up Boss, use **Admin → API** to create/copy the API key for the
+   intended user. The key has that user's permissions; prefer the least
+   privileged user whose assigned contacts must be read and updated.
+2. In Forleads, open **Connect → Follow Up Boss → Add credentials**, paste the
+   key, and save it. The encrypted tenant credential is isolated from other
+   agents.
+3. Select **Test**. Forleads reads `/identity`, resolves exactly one active FUB
+   user, and binds the credential to that workspace and user. A saved key is
+   not considered verified until this passes.
+4. Select **Sync exact matches**. Forleads reads a complete bounded snapshot of
+   up to 500 people and only overlays a person when their FUB contact address
+   exactly matches one Forleads property. Ambiguous, duplicated, conflicting,
+   or cross-tenant matches are left untouched. Accounts over the current
+   snapshot ceiling fail with no changes; do not onboard them until staged
+   large-account sync ships.
+5. Open the matched lead. Confirm the name/email/phone is the expected person,
+   then record the relationship source and channel permissions in the
+   Contactability Passport. A FUB contact address is never treated as property
+   ownership or permission to contact.
+6. Draft one CRM note and one task, review the displayed CRM target, approve
+   each once, and confirm the real note/task is attached to the intended FUB
+   person. Do not repeat an uncertain write: a timeout or unreadable response
+   is held for manual reconciliation rather than retried blindly.
+7. Rotate/remove the tenant key in both systems when access changes. A changed
+   credential version invalidates old contact bindings; re-test, re-sync, and
+   create a new draft before the next write.
+
+Appointment writes are not routed to FUB in this release. Calendar approvals
+continue through the verified Google path. Production FUB onboarding remains
+blocked until system registration is issued and the owner records a real
+sandbox proof for people read, note write, task write, 401, 403, 429, ambiguous
+identity, and indeterminate-write reconciliation.
+
 ## Blocked — do not collect credentials yet
 
 ### Microsoft 365
@@ -120,7 +184,7 @@ persisted. Do not onboard users until that defect and reconnect tests are
 closed. When unblocked, the callback is
 `/api/auth/microsoft/callback` (not `/api/connectors/microsoft/callback`).
 
-### Follow Up Boss and GoHighLevel
+### GoHighLevel
 
 Do not request customer keys yet. Current contact sync does not persist people,
 and note/task calls do not bind the required provider contact id. The unlock is

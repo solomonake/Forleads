@@ -23,7 +23,9 @@ export const POST = withRoute("draft", async (req: NextRequest) => {
   if (limited) return limited;
   const repo = await getRepo();
   const lead = await repo.getLead(body.leadId);
-  if (!lead) return NextResponse.json({ error: "lead not found" }, { status: 404 });
+  if (!lead || lead.agent_id !== agentId) {
+    return NextResponse.json({ error: "lead not found" }, { status: 404 });
+  }
   const agent = (await repo.getAgent(agentId)) ?? DEMO_AGENT;
   const evidence = await repo.listEvidence(body.leadId);
 

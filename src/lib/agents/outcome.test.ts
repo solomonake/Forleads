@@ -7,7 +7,7 @@
 // recallOutcomes filters by actionType and surfaces only outcome-kind rows.
 // ============================================================================
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   approveArtifact,
   draftArtifact,
@@ -32,6 +32,7 @@ interface RepoGlobal {
 const g = globalThis as unknown as RepoGlobal;
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   g.__forleadsRepo = undefined;
   g.__forleadsSeeded = undefined;
   g.__forleadsCache = undefined;
@@ -69,7 +70,7 @@ describe("approveArtifact → outcome memory", () => {
       // blocks, the test setup needs adjusting, not the test logic.
       throw new Error(`setup produced a blocked artifact: ${JSON.stringify(artifact.compliance_result.flags)}`);
     }
-    await approveArtifact(artifact.id, artifact.revision);
+    await approveArtifact(artifact.id, artifact.revision, { agentId: artifact.agent_id });
 
     const repo = await getRepo();
     const events = (await repo.listEvents(DEMO_AGENT_ID)).filter(
@@ -97,7 +98,7 @@ describe("approveArtifact after revision", () => {
       payload: { ...(artifact.payload as EmailPayload), body: edited },
     });
     if (!revised) throw new Error("revision failed");
-    await approveArtifact(revised.id, revised.revision);
+    await approveArtifact(revised.id, revised.revision, { agentId: revised.agent_id });
 
     const repo = await getRepo();
     const after = await repo.getArtifact(artifact.id);
@@ -115,7 +116,7 @@ describe("approveArtifact after revision", () => {
   it("does NOT mark `edited` if the user's body matches the original verbatim", async () => {
     const { lead, artifact } = await setup("15 Unchanged Way");
     if (artifact.status === "blocked") throw new Error("setup blocked");
-    await approveArtifact(artifact.id, artifact.revision);
+    await approveArtifact(artifact.id, artifact.revision, { agentId: artifact.agent_id });
 
     const outcomes = await recallOutcomes(lead, "email");
     expect(outcomes.length).toBe(1);
@@ -126,7 +127,7 @@ describe("approveArtifact after revision", () => {
     const { artifact } = await setup("16 Revision Key Way");
     if (artifact.status === "blocked") throw new Error("setup blocked");
 
-    const first = await approveArtifact(artifact.id, artifact.revision);
+    const first = await approveArtifact(artifact.id, artifact.revision, { agentId: artifact.agent_id });
     const edited = "A materially different approved body.";
     const revised = await reviseArtifact({
       artifactId: artifact.id,
@@ -135,7 +136,7 @@ describe("approveArtifact after revision", () => {
       payload: { ...(artifact.payload as EmailPayload), body: edited },
     });
     if (!revised) throw new Error("revision failed");
-    const second = await approveArtifact(revised.id, revised.revision);
+    const second = await approveArtifact(revised.id, revised.revision, { agentId: revised.agent_id });
 
     expect(first?.connector.deduped).toBe(false);
     expect(second?.connector.deduped).toBe(false);
@@ -153,6 +154,7 @@ describe("approveArtifact after revision", () => {
     try {
       await expect(
         approveArtifact(artifact.id, artifact.revision, {
+          agentId: artifact.agent_id,
           googleAccessToken: "expired-token",
         }),
       ).rejects.toThrow(/Connector write failed/);
@@ -165,12 +167,128 @@ describe("approveArtifact after revision", () => {
     expect(await recallOutcomes(lead, "email")).toHaveLength(0);
   });
 
+  it("claims a connector write before I/O so concurrent approvals make one provider call", async () => {
+    const { artifact } = await setup("17 Concurrent Approval Way");
+    if (artifact.status === "blocked") throw new Error("setup blocked");
+    let finishFetch!: (response: Response) => void;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      () => new Promise<Response>((resolve) => { finishFetch = resolve; }),
+    );
+
+    const first = approveArtifact(artifact.id, artifact.revision, {
+      agentId: artifact.agent_id,
+      googleAccessToken: "live-token",
+    });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const second = approveArtifact(artifact.id, artifact.revision, {
+      agentId: artifact.agent_id,
+      googleAccessToken: "live-token",
+    });
+    await expect(second).rejects.toThrow(/in progress|reconciliation|unresolved/);
+    finishFetch(new Response(JSON.stringify({ id: "draft-1" }), { status: 200 }));
+    await expect(first).resolves.toMatchObject({ connector: { ok: true } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("prevents a concurrent edit from replacing the revision being approved", async () => {
+    const { artifact } = await setup("18 Revision Claim Way");
+    if (artifact.status === "blocked") throw new Error("setup blocked");
+    let finishFetch!: (response: Response) => void;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      () => new Promise<Response>((resolve) => { finishFetch = resolve; }),
+    );
+    const approval = approveArtifact(artifact.id, artifact.revision, {
+      agentId: artifact.agent_id,
+      googleAccessToken: "live-token",
+    });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    await expect(reviseArtifact({
+      artifactId: artifact.id,
+      agentId: artifact.agent_id,
+      expectedRevision: artifact.revision,
+      payload: { ...(artifact.payload as EmailPayload), body: "Concurrent replacement" },
+    })).rejects.toThrow(/approval is in progress/);
+
+    finishFetch(new Response(JSON.stringify({ id: "draft-race" }), { status: 200 }));
+    const approved = await approval;
+    expect(approved?.artifact.approved_revision).toBe(artifact.revision);
+    expect((approved?.artifact.payload as EmailPayload).body).not.toBe("Concurrent replacement");
+  });
+
+  it("finalizes local state from a durable success after a crash window", async () => {
+    const { lead, artifact } = await setup("19 Durable Recovery Way");
+    if (artifact.status === "blocked") throw new Error("setup blocked");
+    const repo = await getRepo();
+    const originalUpdate = repo.updateArtifactAtRevision.bind(repo);
+    let failFinalize = true;
+    vi.spyOn(repo, "updateArtifactAtRevision").mockImplementation(
+      async (id, revision, patch, statuses) => {
+        if (failFinalize && (patch.status === "approved" || patch.status === "sent")) return null;
+        return originalUpdate(id, revision, patch, statuses);
+      },
+    );
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: "draft-recover" }), { status: 200 }),
+    );
+
+    await expect(approveArtifact(artifact.id, artifact.revision, {
+      agentId: artifact.agent_id,
+      googleAccessToken: "live-token",
+    })).rejects.toThrow(/reconciliation is required/);
+    expect((await repo.getArtifact(artifact.id))?.status).toBe("approving");
+
+    failFinalize = false;
+    const recovered = await approveArtifact(artifact.id, artifact.revision, {
+      agentId: artifact.agent_id,
+      googleAccessToken: "live-token",
+    });
+    expect(recovered?.artifact.status).toBe("approved");
+    expect(recovered?.connector.deduped).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((await repo.listEvents(artifact.agent_id)).filter((e) => e.type === "artifact.approved")).toHaveLength(1);
+    expect(await recallOutcomes(lead, "email")).toHaveLength(1);
+  });
+
+  it("safely resumes an approval claimed before the connector ledger existed", async () => {
+    const { artifact } = await setup("20 Pre-ledger Recovery Way");
+    if (artifact.status === "blocked") throw new Error("setup blocked");
+    const repo = await getRepo();
+    const originalClaim = repo.claimConnectorWrite.bind(repo);
+    let failReservation = true;
+    vi.spyOn(repo, "claimConnectorWrite").mockImplementation(async (write) => {
+      if (failReservation) {
+        failReservation = false;
+        throw new Error("simulated database interruption before reservation");
+      }
+      return originalClaim(write);
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ id: "draft-resumed" }), { status: 200 }),
+    );
+
+    await expect(approveArtifact(artifact.id, artifact.revision, {
+      agentId: artifact.agent_id,
+      googleAccessToken: "live-token",
+    })).rejects.toThrow(/database interruption/);
+    expect((await repo.getArtifact(artifact.id))?.status).toBe("approving");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const resumed = await approveArtifact(artifact.id, artifact.revision, {
+      agentId: artifact.agent_id,
+      googleAccessToken: "live-token",
+    });
+    expect(resumed?.artifact.status).toBe("approved");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("does not approve when Google credentials need reconnection", async () => {
     const { lead, artifact } = await setup("18 Stale Google Credential Lane");
     if (artifact.status === "blocked") throw new Error("setup blocked");
 
     await expect(
       approveArtifact(artifact.id, artifact.revision, {
+        agentId: artifact.agent_id,
         googleCredentialError: "Google credential needs reconnection. invalid_grant",
       }),
     ).rejects.toThrow(/Google credential needs reconnection/);
@@ -216,7 +334,7 @@ describe("recallOutcomes filters", () => {
   it("returns only outcome-kind memories for the lead", async () => {
     const { lead, artifact } = await setup("21 Filter St");
     if (artifact.status === "blocked") throw new Error("setup blocked");
-    await approveArtifact(artifact.id, artifact.revision);
+    await approveArtifact(artifact.id, artifact.revision, { agentId: artifact.agent_id });
 
     // The lead also has evidence + note memories floating around; recallOutcomes
     // must NOT surface them.

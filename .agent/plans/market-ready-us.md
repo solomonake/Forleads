@@ -117,7 +117,9 @@ owner-to-contact separation are tested; live endpoint probe is recorded.
 - Replace misleading FUB/GHL capabilities with setup-blocked states until
   contact import/id mapping and provider-contract tests pass.
 - Implement a real FUB overlay: import people, attach provider person ids,
-  enrich property relationships, then write notes/tasks/appointments back.
+  enrich property relationships, then write person-bound notes/tasks back.
+  Keep calendar holds on Google until a separate FUB appointment destination
+  is product-routed and verified.
 
 Acceptance: no public owner field becomes a consented contact; live writes bind
 the correct provider person; pagination, duplicates, missing address, cross-
@@ -193,4 +195,3 @@ read-only production `/api/health`; CI before merge.
 keys, SMS business/A2P registration, legal review of data/outreach terms,
 design-partner recruitment, pricing collection, deployment or production
 mutation not already implied by an explicitly approved merge.
-

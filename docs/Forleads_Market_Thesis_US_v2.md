@@ -56,8 +56,9 @@ already optimize high-volume motivated-seller list and outreach workflows.
   next paid or official lane.
 - Contactability Passport: keep consent and channel eligibility with every
   person/property relationship.
-- FUB Live Overlay: import people/stages, attach property evidence, and write
-  approved notes/tasks/appointments back.
+- FUB Live Overlay: import people conservatively, attach property evidence,
+  and write approved person-bound notes/tasks back. Calendar holds remain on
+  the verified Google path until a separate FUB appointment route is reviewed.
 - Porch Mode: capture outcome, voice note, photo, contact change, and next visit
   in seconds on mobile.
 - Farm Table: properties by evidence, relationship, last touch, and next action,
@@ -116,4 +117,3 @@ Use agent outcomes: `Find the properties worth your next hour`, `See the proof`,
 Avoid internal architecture on the first screen: `operator`, `scout swarm`,
 `lead surface`, and `pipeline launch`. Keep those concepts in trace and support
 surfaces where they help explain the system.
-

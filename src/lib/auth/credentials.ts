@@ -1,6 +1,6 @@
 import { nowISO, uuid } from "@/lib/core/ids";
 import { getRepo } from "@/lib/db";
-import type { ConnectorProvider } from "@/lib/core/types";
+import type { ConnectorCredential, ConnectorProvider } from "@/lib/core/types";
 import type { GoogleTokens } from "./session";
 import { sealValue, unsealValue } from "./session";
 
@@ -47,6 +47,42 @@ export async function loadTenantCredential<T>(
   const row = await repo.findConnectorCredential(agentId, provider);
   if (!row) return null;
   return unsealValue<T>(row.encrypted_payload);
+}
+
+export interface TenantCredentialRecord<T> {
+  row: ConnectorCredential;
+  payload: T;
+}
+
+/** Load payload plus immutable credential-generation metadata. Provider
+ * bindings record this version so rotating a key cannot silently retarget a
+ * provider-local numeric person id into another workspace. */
+export async function loadTenantCredentialRecord<T>(
+  agentId: string,
+  provider: ConnectorProvider,
+): Promise<TenantCredentialRecord<T> | null> {
+  const row = await (await getRepo()).findConnectorCredential(agentId, provider);
+  if (!row) return null;
+  const payload = unsealValue<T>(row.encrypted_payload);
+  return payload === null ? null : { row, payload };
+}
+
+/** Enrich a verified credential in place without creating a new credential
+ * generation. Used to persist provider identity after a read-only probe. */
+export async function updateTenantCredentialPayload<T>(
+  agentId: string,
+  provider: ConnectorProvider,
+  payload: T,
+): Promise<boolean> {
+  const repo = await getRepo();
+  const row = await repo.findConnectorCredential(agentId, provider);
+  if (!row) return false;
+  await repo.upsertConnectorCredential({
+    ...row,
+    encrypted_payload: sealValue(payload),
+    updated_at: nowISO(),
+  });
+  return true;
 }
 
 /** Revoke all live credential rows for this tenant+provider (idempotent). */

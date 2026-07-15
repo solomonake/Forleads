@@ -50,7 +50,7 @@ describe("POST /api/approve", () => {
 
   it("surfaces connector setup failures instead of internal error", async () => {
     mocks.approveArtifact.mockRejectedValue(
-      new Error("Connector write failed: Follow Up Boss is not configured. Add FOLLOWUPBOSS_API_KEY."),
+      new Error("Connector write failed: Follow Up Boss is not configured. Add a tenant API key after system registration."),
     );
 
     const res = await POST(post({ artifactId: "artifact-1", expectedRevision: 1 }));
@@ -59,7 +59,7 @@ describe("POST /api/approve", () => {
     expect(res.status).toBe(424);
     expect(body.code).toBe("connector_setup_required");
     expect(body.error).toContain("Setup required");
-    expect(body.error).toContain("FOLLOWUPBOSS_API_KEY");
+    expect(body.error).toContain("tenant API key");
     expect(body.error).not.toContain("internal error");
   });
 
@@ -86,6 +86,7 @@ describe("POST /api/approve", () => {
     expect(body.error).toContain("Google credential needs reconnection");
     expect(body.error).toContain("invalid_grant");
     expect(mocks.approveArtifact.mock.calls[0]?.[2]).toMatchObject({
+      agentId: "00000000-0000-0000-0000-000000000001",
       googleAccessToken: undefined,
       googleCredentialError: expect.stringContaining("Google credential needs reconnection"),
     });
