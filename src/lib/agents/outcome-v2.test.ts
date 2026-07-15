@@ -118,7 +118,7 @@ describe("composer reads outcomes (deterministic path)", () => {
       evidence,
       trigger: "test",
     });
-    await approveArtifact(first.id, first.revision);
+    await approveArtifact(first.id, first.revision, { agentId: first.agent_id });
 
     const second = await draftArtifact({
       agent: DEMO_AGENT,
@@ -156,7 +156,7 @@ describe("composer reads outcomes (deterministic path)", () => {
       evidence,
       trigger: "test",
     });
-    await approveArtifact(replacement.id, replacement.revision);
+    await approveArtifact(replacement.id, replacement.revision, { agentId: replacement.agent_id });
 
     const next = await draftArtifact({
       agent: DEMO_AGENT,
@@ -238,7 +238,7 @@ describe("recallOutcomes integration sanity", () => {
         trigger: "test",
       });
       // alternate approve / reject
-      if (i % 2 === 0) await approveArtifact(a.id, a.revision);
+      if (i % 2 === 0) await approveArtifact(a.id, a.revision, { agentId: a.agent_id });
       else await rejectArtifact(a.id, "no");
     }
     const memos = await recallOutcomes(lead, "email");

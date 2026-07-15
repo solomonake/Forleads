@@ -491,7 +491,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       unlocks: "CRM imports, manually captured contacts, Google/Microsoft account context, and consented records.",
       configuredBy: ["operator input", "Google OAuth", "CRM imports"],
       detail: "Forleads should not infer owner/occupant/contact details from an address alone.",
-      env: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "FOLLOWUPBOSS_API_KEY", "GHL_API_KEY"],
+      env: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
     },
     source({
       id: "open-buildings",

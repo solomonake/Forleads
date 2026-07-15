@@ -49,7 +49,6 @@ function PayloadCard({ type, payload }: { type: Artifact["type"]; payload: Artif
     rows.push({ k: "Message", v: p.body });
   } else if (type === "crm_note") {
     const p = payload as CrmNotePayload;
-    if (p.contactRef) rows.push({ k: "Contact", v: p.contactRef });
     rows.push({ k: "Note", v: p.body });
     if (p.tags?.length) rows.push({ k: "Tags", v: p.tags.join(", ") });
   } else {
@@ -183,6 +182,14 @@ export function ReviewTray({
         </div>
 
         <div className="draft-body">
+          {current.connector_binding ? (
+            <div className="field">
+              <span className="k">CRM target</span>
+              <span className="v">
+                {current.connector_binding.label} · {humanizeToken(current.connector_binding.provider)}
+              </span>
+            </div>
+          ) : null}
           {email ? (
             <>
               <div className="field">

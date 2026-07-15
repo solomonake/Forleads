@@ -12,12 +12,15 @@ import type {
   EmailPayload,
   SmsPayload,
   TaskPayload,
+  ProviderContactBinding,
 } from "@/lib/core/types";
 
 export interface ConnectorWriteMeta {
   idempotencyKey: string;
   agentId: string;
   leadSurfaceId?: string;
+  /** Trusted server-resolved binding. Artifact payloads never supply this. */
+  providerContact?: ProviderContactBinding;
 }
 
 export interface ConnectorResult {
@@ -29,6 +32,25 @@ export interface ConnectorResult {
   deduped: boolean; // true if a prior identical write was returned
   mode: "mock" | "live";
   error?: string;
+  state?: "succeeded" | "failed" | "indeterminate";
+}
+
+export interface SyncedConnectorContact {
+  provider: ConnectorProvider;
+  providerContactId: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  addresses: string[];
+}
+
+export interface ContactSyncResult {
+  imported: number;
+  mode: "mock" | "live";
+  contacts?: SyncedConnectorContact[];
+  nextCursor?: string;
+  complete?: boolean;
+  duplicateIds?: number;
 }
 
 export interface HealthStatus {
@@ -57,6 +79,6 @@ export interface Connector {
   ): Promise<ConnectorResult>;
   writeCrmNote(payload: CrmNotePayload, meta: ConnectorWriteMeta): Promise<ConnectorResult>;
   sendSms?(payload: SmsPayload, meta: ConnectorWriteMeta): Promise<ConnectorResult>;
-  syncContacts(meta: ConnectorWriteMeta): Promise<{ imported: number; mode: "mock" | "live" }>;
+  syncContacts(meta: ConnectorWriteMeta, cursor?: string): Promise<ContactSyncResult>;
   healthCheck(): Promise<HealthStatus>;
 }

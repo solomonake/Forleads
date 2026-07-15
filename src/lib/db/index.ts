@@ -19,14 +19,14 @@ const g = globalThis as unknown as RepoGlobal;
 function buildRepo(): Repository {
   if (config.persist === "supabase") {
     // Durable Postgres-backed repo (service-role key, bypasses RLS; see
-    // supabase/migrations). Falls back to memory if creds are partial so the
-    // app never hard-fails — but log loudly so the mode mismatch is visible.
+    // supabase/migrations). Never fall back to memory after durable
+    // persistence was selected: that would accept writes the user believes
+    // are durable and misreport the runtime mode.
     if (config.supabase.url && config.supabase.serviceKey) {
       return new SupabaseRepository(config.supabase.url, config.supabase.serviceKey);
     }
-    console.warn(
-      "[forleads] FORLEADS_PERSIST=supabase but NEXT_PUBLIC_SUPABASE_URL / " +
-        "SUPABASE_SERVICE_ROLE_KEY are missing — falling back to in-memory store.",
+    throw new Error(
+      "FORLEADS_PERSIST=supabase requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
     );
   }
   return new InMemoryRepository(emptyStore());

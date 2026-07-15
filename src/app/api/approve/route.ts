@@ -54,6 +54,7 @@ export const POST = withRoute("approve", async (req: NextRequest) => {
   let result;
   try {
     result = await approveArtifact(body.artifactId, body.expectedRevision, {
+      agentId,
       googleAccessToken,
       googleCredentialError,
     });

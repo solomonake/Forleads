@@ -198,6 +198,16 @@ export type ContactSource = (typeof CONTACT_SOURCES)[number];
 export const CONTACT_PERMISSIONS = ["unknown", "allowed", "opted_out"] as const;
 export type ContactPermission = (typeof CONTACT_PERMISSIONS)[number];
 
+export interface ProviderContactBinding {
+  /** Provider-local person id. Never accepted from a client-authored artifact. */
+  contactId: string;
+  /** Stable provider account/workspace id captured by credential verification. */
+  workspaceId: string;
+  /** Credential generation that produced this binding. Rotation requires a resync. */
+  credentialVersion: number;
+  syncedAt: ISODate;
+}
+
 export interface LeadContact {
   name?: string;
   email?: string;
@@ -206,14 +216,17 @@ export interface LeadContact {
   optOutSms?: boolean;
   /** How this relationship entered Forleads. Public parcel ownership is never a contact source. */
   source?: ContactSource;
+  /** Provider/source provenance label. This is not permission to contact. */
   sourceLabel?: string;
+  /** Human-recorded relationship or consent basis required for allowed channels. */
+  relationshipBasis?: string;
   /** Last time a human or connected CRM checked this contact record. */
   verifiedAt?: ISODate;
   emailPermission?: ContactPermission;
   smsPermission?: ContactPermission;
   callPermission?: ContactPermission;
-  /** Provider person ids are written only by trusted connector import paths. */
-  providerRefs?: Partial<Record<"followupboss" | "gohighlevel", string>>;
+  /** Workspace-scoped person bindings written only by trusted connector imports. */
+  providerRefs?: Partial<Record<"followupboss" | "gohighlevel", ProviderContactBinding>>;
 }
 
 // ---- Notes & situations -----------------------------------------------------
@@ -272,6 +285,7 @@ export type ActionType = (typeof ACTION_TYPES)[number];
 
 export type ArtifactStatus =
   | "drafted"
+  | "approving"
   | "blocked"
   | "approved"
   | "sent"
@@ -320,7 +334,6 @@ export interface CalendarPayload {
 }
 
 export interface CrmNotePayload {
-  contactRef?: string;
   body: string;
   tags?: string[];
 }
@@ -341,7 +354,7 @@ export interface ModelTrace {
 }
 
 export interface ExternalDraftRef {
-  provider: string;
+  provider: ConnectorProvider;
   externalId: string;
   url?: string;
   idempotencyKey: string;
@@ -358,6 +371,8 @@ export interface Artifact {
   evidence_used: EvidenceCard[];
   compliance_result: ComplianceResult;
   model_trace: ModelTrace;
+  /** Provider target shown during review and revalidated immediately before write. */
+  connector_binding?: ReviewedConnectorBinding;
   external_draft_ref?: ExternalDraftRef;
   trace_id?: UUID;
   revision: number;
@@ -368,6 +383,11 @@ export interface Artifact {
   sent_at?: ISODate;
   snooze_until?: ISODate;
   edit_history?: ArtifactEdit[];
+}
+
+export interface ReviewedConnectorBinding extends ProviderContactBinding {
+  provider: "followupboss" | "gohighlevel";
+  label: string;
 }
 
 export interface ArtifactEdit {
@@ -414,15 +434,16 @@ export interface ConnectorWrite {
   id: UUID;
   agent_id: UUID;
   artifact_id?: UUID;
-  provider: string;
+  provider: ConnectorProvider;
   idempotency_key: string;
   result: {
     ok: boolean;
     externalId?: string;
     url?: string;
     deduped: boolean;
-    mode: string;
+    mode: "mock" | "live";
     error?: string;
+    state?: "pending" | "succeeded" | "failed" | "indeterminate";
   };
   created_at: ISODate;
 }

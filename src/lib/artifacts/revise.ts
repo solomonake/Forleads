@@ -43,6 +43,9 @@ export async function reviseArtifact(input: {
       `Artifact changed since editing began (expected revision ${input.expectedRevision}, current ${artifact.revision}).`
     );
   }
+  if (artifact.status === "approving") {
+    throw new Error("Artifact approval is in progress; wait for reconciliation before editing.");
+  }
 
   const compliance = lintArtifactText(textParts(input.payload));
   const updatedAt = nowISO();
@@ -57,7 +60,7 @@ export async function reviseArtifact(input: {
     sent_at: undefined,
     external_draft_ref: undefined,
     edit_history: editHistory(artifact, input.payload),
-  });
+  }, [artifact.status]);
   if (!updated) {
     throw new Error("Artifact changed concurrently; reload before saving.");
   }

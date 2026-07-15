@@ -64,7 +64,7 @@ describe("outcome.recorded always emits, even when persist fails", () => {
     if (artifact.status === "blocked") throw new Error("setup blocked");
 
     await poisonSaveMemoryAfterSetup();
-    await approveArtifact(artifact.id, artifact.revision);
+    await approveArtifact(artifact.id, artifact.revision, { agentId: artifact.agent_id });
 
     const repo = await getRepo();
     const events = (await repo.listEvents(DEMO_AGENT_ID)).filter(

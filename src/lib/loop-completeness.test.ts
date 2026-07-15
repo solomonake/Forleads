@@ -109,7 +109,7 @@ describe("product completion loop (end to end, deterministic)", () => {
 
     // 5. Human approval yields a connector result. In tests the adapter is the
     //    local mock — an external ref with no real outbound write.
-    const approved = await approveArtifact(draft.id, draft.revision);
+    const approved = await approveArtifact(draft.id, draft.revision, { agentId: draft.agent_id });
     expect(approved).toBeTruthy();
     expect(approved!.artifact.status).toBe("approved");
     expect(approved!.artifact.approved_revision).toBe(draft.revision);

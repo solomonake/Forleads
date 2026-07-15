@@ -23,15 +23,16 @@ beforeEach(() => {
 });
 
 describe("getConnectorForTenant", () => {
-  it("uses this agent's saved FUB key over the env fallback", async () => {
+  it("loads this agent's saved FUB key without claiming the capability is live", async () => {
     await saveTenantCredential("agent-a", "followupboss", { apiKey: "per_tenant_key" });
     const connector = (await getConnectorForTenant(
       "followupboss",
       "agent-a",
     )) as FollowUpBossConnector;
-    expect(connector.mode).toBe("live");
-    // authHeader is private; the mode + the apiKey being wired is enough:
-    // the constructor sets mode='live' only when an apiKey was passed.
+    // An API key is configuration evidence, not capability proof. The
+    // connector stays mock until the registered system headers and a verified
+    // workspace/user identity are present as well.
+    expect(connector.mode).toBe("mock");
     expect((connector as unknown as { apiKey: string }).apiKey).toBe("per_tenant_key");
   });
 
@@ -45,19 +46,17 @@ describe("getConnectorForTenant", () => {
     expect(connector.mode).toBe("mock");
   });
 
-  it("falls back to env when no tenant key exists", async () => {
+  it("does not fall back to a global env key in multi-tenant mode", async () => {
     const prev = process.env.FOLLOWUPBOSS_API_KEY;
     process.env.FOLLOWUPBOSS_API_KEY = "env_default";
     try {
-      // config caches at module scope; verify behavior through the shape.
       const connector = (await getConnectorForTenant(
         "followupboss",
         "agent-c",
       )) as FollowUpBossConnector;
-      // We don't assert the specific string here (config caches at first read
-      // in the process), but we do assert non-live vs live is decided by the
-      // fallback path — no throw, valid connector.
       expect(connector).toBeInstanceOf(FollowUpBossConnector);
+      expect((connector as unknown as { apiKey: string | undefined }).apiKey).toBeUndefined();
+      expect(connector.mode).toBe("mock");
     } finally {
       if (prev === undefined) delete process.env.FOLLOWUPBOSS_API_KEY;
       else process.env.FOLLOWUPBOSS_API_KEY = prev;

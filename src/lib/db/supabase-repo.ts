@@ -27,6 +27,7 @@ import type {
   Agent,
   AgentTrace,
   Artifact,
+  ArtifactStatus,
   ConnectorAccount,
   ConnectorProvider,
   ConnectorWrite,
@@ -146,6 +147,7 @@ const artifactToRow = (a: Artifact): Row => ({
   evidence_used: a.evidence_used,
   compliance_result: a.compliance_result,
   model_trace: a.model_trace,
+  connector_binding: a.connector_binding ?? null,
   external_draft_ref: a.external_draft_ref ?? null,
   trace_id: a.trace_id ?? null,
   revision: a.revision,
@@ -168,6 +170,7 @@ const artifactFromRow = (r: Row): Artifact => ({
   evidence_used: r.evidence_used ?? [],
   compliance_result: r.compliance_result,
   model_trace: r.model_trace,
+  connector_binding: r.connector_binding ?? undefined,
   external_draft_ref: r.external_draft_ref ?? undefined,
   trace_id: r.trace_id ?? undefined,
   revision: Number(r.revision ?? 1),
@@ -188,6 +191,7 @@ const artifactPatchToRow = (p: Partial<Artifact>): Row => {
   if (p.evidence_used !== undefined) row.evidence_used = p.evidence_used;
   if (p.compliance_result !== undefined) row.compliance_result = p.compliance_result;
   if (p.model_trace !== undefined) row.model_trace = p.model_trace;
+  if ("connector_binding" in p) row.connector_binding = p.connector_binding ?? null;
   if ("external_draft_ref" in p) row.external_draft_ref = p.external_draft_ref ?? null;
   if (p.trace_id !== undefined) row.trace_id = p.trace_id;
   if (p.revision !== undefined) row.revision = p.revision;
@@ -505,18 +509,21 @@ export class SupabaseRepository implements Repository {
     );
     return data ? artifactFromRow(data) : null;
   }
-  async updateArtifactAtRevision(id: string, expectedRevision: number, patch: Partial<Artifact>) {
+  async updateArtifactAtRevision(
+    id: string,
+    expectedRevision: number,
+    patch: Partial<Artifact>,
+    expectedStatuses?: ArtifactStatus[],
+  ) {
     const row = artifactPatchToRow(patch);
     if (Object.keys(row).length === 0) return this.getArtifact(id);
-    const data = unwrap(
-      await this.sb
-        .from("artifact")
-        .update(row)
-        .eq("id", id)
-        .eq("revision", expectedRevision)
-        .select()
-        .maybeSingle(),
-    );
+    let query = this.sb
+      .from("artifact")
+      .update(row)
+      .eq("id", id)
+      .eq("revision", expectedRevision);
+    if (expectedStatuses?.length) query = query.in("status", expectedStatuses);
+    const data = unwrap(await query.select().maybeSingle());
     return data ? artifactFromRow(data) : null;
   }
   async listArtifacts(agentId: string) {
@@ -867,6 +874,23 @@ export class SupabaseRepository implements Repository {
       result: data.result_json,
       created_at: data.created_at,
     } satisfies ConnectorWrite;
+  }
+  async claimConnectorWrite(write: ConnectorWrite) {
+    const { error } = await this.sb.from("connector_write").insert({
+      id: write.id,
+      agent_id: write.agent_id,
+      artifact_id: write.artifact_id ?? null,
+      provider: write.provider,
+      idempotency_key: write.idempotency_key,
+      external_id: null,
+      status: "pending",
+      result_json: write.result,
+      created_at: write.created_at,
+    });
+    if (!error) return true;
+    if ((error as { code?: string }).code === "23505") return false;
+    unwrap({ data: null, error });
+    return false;
   }
   async saveConnectorWrite(write: ConnectorWrite) {
     unwrap(

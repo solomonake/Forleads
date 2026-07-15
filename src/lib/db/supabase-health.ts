@@ -5,7 +5,7 @@ const REQUIRED_SCHEMA = [
   {
     label: "artifact revisions",
     table: "artifact",
-    columns: "revision,updated_at,approved_revision",
+    columns: "revision,updated_at,approved_revision,connector_binding",
   },
   {
     label: "event idempotency",

@@ -22,6 +22,7 @@ import type {
   ScoutResult,
   ScoutType,
   Situation,
+  ReviewedConnectorBinding,
 } from "@/lib/core/types";
 import { planDispatch } from "@/lib/agents/dispatcher";
 import { runScout, runScoutCached } from "@/lib/agents/scouts";
@@ -43,7 +44,8 @@ import { config } from "@/lib/core/config";
 import { lintArtifactText } from "@/lib/agents/compliance";
 import { buildTrace } from "@/lib/agents/trace";
 import { connectorForAction } from "@/lib/connectors";
-import { getRepo } from "@/lib/db";
+import type { ConnectorResult } from "@/lib/connectors/types";
+import { getRepo, type Repository } from "@/lib/db";
 import { log } from "@/lib/observability";
 
 // ---- Events -----------------------------------------------------------------
@@ -57,11 +59,7 @@ export async function emit(
   idempotencyKeyValue?: string,
 ): Promise<DomainEvent> {
   const repo = await getRepo();
-  if (idempotencyKeyValue) {
-    const prior = await repo.getEventByIdempotencyKey(agentId, idempotencyKeyValue);
-    if (prior) return prior;
-  }
-  const event = await repo.appendEvent({
+  const event: DomainEvent = {
     id: uuid(),
     agent_id: agentId,
     lead_surface_id: leadId,
@@ -70,7 +68,17 @@ export async function emit(
     source,
     idempotency_key: idempotencyKeyValue,
     created_at: nowISO(),
-  });
+  };
+  if (idempotencyKeyValue) {
+    const prior = await repo.getEventByIdempotencyKey(agentId, idempotencyKeyValue);
+    if (prior) return prior;
+    const claimed = await repo.claimEvent(event);
+    if (!claimed) {
+      return (await repo.getEventByIdempotencyKey(agentId, idempotencyKeyValue)) ?? event;
+    }
+  } else {
+    await repo.appendEvent(event);
+  }
   if (["artifact.edited", "artifact.approved", "artifact.sent", "email.reply"].includes(type)) {
     await persistEventMemory(event).catch(() => null);
   }
@@ -492,6 +500,9 @@ async function persistBlockedArtifact(args: {
 export async function draftArtifact(input: DraftInput): Promise<Artifact> {
   const repo = await getRepo();
   const { agent, lead } = input;
+  if (agent.id !== lead.agent_id) {
+    throw new Error("Cannot draft across tenant boundaries.");
+  }
 
   // Contactability gate: require a real channel, honor every opt-out, and
   // require explicit SMS permission. Fail closed BEFORE the composer runs so
@@ -546,6 +557,30 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
   // A live draft is tagged by its prompt version; reflect that in the trace.
   const isLive = composed.promptVersion.startsWith("composer-live");
 
+  let connectorBinding: ReviewedConnectorBinding | undefined;
+  if (input.actionType === "crm_note" || input.actionType === "task") {
+    const target = await connectorForAction(input.actionType, { agentId: agent.id });
+    if (target.provider === "followupboss" || target.provider === "gohighlevel") {
+      const binding = lead.contact?.providerRefs?.[target.provider];
+      if (binding) {
+        connectorBinding = {
+          ...binding,
+          provider: target.provider,
+          label: lead.contact?.name ?? "Known contact",
+        };
+      } else if (target.mode === "live") {
+        compliance.pass = false;
+        compliance.flags.push({
+          span: "CRM target",
+          category: "crm_binding_missing",
+          issue: `Cannot draft this ${input.actionType === "task" ? "task" : "note"}: the contact is not bound to ${target.provider}.`,
+          fix: "Test the CRM credential, sync contacts, and reopen this draft.",
+          severity: "block",
+        });
+      }
+    }
+  }
+
   const artifactId = uuid();
   const traceId = uuid();
 
@@ -567,6 +602,7 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
         ? composed.modelUsage.inputTokens + composed.modelUsage.outputTokens
         : undefined,
     },
+    connector_binding: connectorBinding,
     trace_id: traceId,
     revision: 1,
     created_at: nowISO(),
@@ -618,14 +654,119 @@ export interface ApproveResult {
   connector: { provider: string; externalId?: string; url?: string; deduped: boolean; mode: string; ok: boolean; error?: string };
 }
 
+async function finalizeApprovedArtifact(args: {
+  repo: Repository;
+  artifact: Artifact;
+  lead: LeadSurface;
+  result: ConnectorResult;
+  key: string;
+  deduped: boolean;
+}): Promise<ApproveResult> {
+  const { repo, artifact, result, key, deduped } = args;
+  const isEmailDraft = artifact.type === "email";
+  const current = await repo.getArtifact(artifact.id);
+  if (!current) throw new Error("Artifact disappeared while finalizing approval.");
+
+  let updated = current;
+  if (current.status !== "approved" && current.status !== "sent") {
+    const approvedAt = nowISO();
+    const finalized = await repo.updateArtifactAtRevision(artifact.id, artifact.revision, {
+      status: isEmailDraft ? "approved" : "sent",
+      approved_at: approvedAt,
+      approved_revision: artifact.revision,
+      updated_at: approvedAt,
+      sent_at: isEmailDraft ? undefined : approvedAt,
+      external_draft_ref: result.externalId
+        ? { provider: result.provider, externalId: result.externalId, url: result.url, idempotencyKey: key }
+        : undefined,
+    }, ["approving", "drafted"]);
+    if (!finalized) {
+      throw new Error("Artifact changed while finalizing a successful connector write; reconciliation is required.");
+    }
+    updated = finalized;
+  }
+
+  const trace = await repo.getTraceForArtifact(artifact.id);
+  if (trace) {
+    trace.connector = {
+      provider: result.provider,
+      action: artifact.type,
+      idempotencyKey: key,
+      sent: !isEmailDraft,
+    };
+    await repo.saveTrace(trace);
+  }
+
+  await emit(
+    artifact.agent_id,
+    "artifact.approved",
+    { artifactId: artifact.id, provider: result.provider, deduped },
+    "pipeline",
+    artifact.lead_surface_id,
+    `${key}:artifact-approved`,
+  );
+  await emit(
+    artifact.agent_id,
+    "connector.write",
+    { provider: result.provider, idempotencyKey: key, ok: result.ok },
+    "connector",
+    artifact.lead_surface_id,
+    `${key}:connector-write`,
+  );
+
+  const latestEdit = artifact.edit_history?.at(-1);
+  const editedExcerpt = latestEdit?.field === "body" ? latestEdit.after.slice(0, 240) : undefined;
+  const verdict = editedExcerpt ? "edited" : "approved";
+  const outcomeMem = await persistOutcomeMemory(updated, verdict, editedExcerpt);
+  await emit(
+    artifact.agent_id,
+    "outcome.recorded",
+    {
+      verdict,
+      artifactId: artifact.id,
+      persisted: outcomeMem !== null,
+      ...(outcomeMem ? { memoryId: outcomeMem.id } : {}),
+    },
+    "memory",
+    artifact.lead_surface_id,
+    `${key}:outcome-recorded`,
+  );
+
+  if (artifact.lead_surface_id) {
+    const latestLead = await repo.getLead(artifact.lead_surface_id);
+    if (latestLead) {
+      await repo.upsertLead({
+        ...latestLead,
+        status: nextStatus(latestLead.status),
+        last_worked_at: nowISO(),
+      });
+    }
+  }
+
+  return {
+    artifact: updated,
+    connector: {
+      provider: result.provider,
+      externalId: result.externalId,
+      url: result.url,
+      deduped,
+      mode: result.mode,
+      ok: result.ok,
+      error: result.error,
+    },
+  };
+}
+
 export async function approveArtifact(
   artifactId: string,
   expectedRevision: number,
-  opts?: { googleAccessToken?: string; googleCredentialError?: string }
+  opts: { agentId: string; googleAccessToken?: string; googleCredentialError?: string },
 ): Promise<ApproveResult | null> {
   const repo = await getRepo();
   const artifact = await repo.getArtifact(artifactId);
-  if (!artifact) return null;
+  if (!artifact || artifact.agent_id !== opts.agentId) return null;
+  const lead = artifact.lead_surface_id ? await repo.getLead(artifact.lead_surface_id) : null;
+  if (!lead || lead.agent_id !== opts.agentId) return null;
   if (artifact.revision !== expectedRevision) {
     throw new Error(
       `Artifact changed since review (expected revision ${expectedRevision}, current ${artifact.revision}).`
@@ -649,24 +790,115 @@ export async function approveArtifact(
     ...opts,
     agentId: artifact.agent_id,
   });
+  let providerContact;
+  if (connector.provider === "followupboss" || connector.provider === "gohighlevel") {
+    const reviewed = artifact.connector_binding;
+    const current = lead.contact?.providerRefs?.[connector.provider];
+    if (
+      !reviewed
+      || reviewed.provider !== connector.provider
+      || !current
+      || reviewed.contactId !== current.contactId
+      || reviewed.workspaceId !== current.workspaceId
+      || reviewed.credentialVersion !== current.credentialVersion
+    ) {
+      throw new Error("Connector write failed: CRM contact binding changed or is missing. Sync contacts and create a new draft for review.");
+    }
+    providerContact = current;
+  }
   const key = idempotencyKey([
     artifact.id,
     String(artifact.revision),
     artifact.type,
     connector.provider,
+    providerContact?.workspaceId ?? "no-workspace",
+    providerContact?.contactId ?? "no-contact",
   ]);
-  const meta = { idempotencyKey: key, agentId: artifact.agent_id, leadSurfaceId: artifact.lead_surface_id };
+  const meta = {
+    idempotencyKey: key,
+    agentId: artifact.agent_id,
+    leadSurfaceId: artifact.lead_surface_id,
+    providerContact,
+  };
 
   const durablePrior = await repo.getConnectorWrite(key);
   if (durablePrior) {
-    return {
+    if (!durablePrior.result.ok) {
+      throw new Error("Connector write failed: a prior attempt is unresolved. Inspect the provider before revising and retrying.");
+    }
+    return finalizeApprovedArtifact({
+      repo,
       artifact,
-      connector: {
+      lead,
+      result: {
         provider: durablePrior.provider,
         ...durablePrior.result,
-        deduped: true,
+        state: durablePrior.result.state === "pending" ? "succeeded" : durablePrior.result.state,
+        idempotencyKey: key,
       },
-    };
+      key,
+      deduped: true,
+    });
+  }
+
+  // `approving` with no ledger row is a safe pre-I/O crash window: provider
+  // calls are reachable only after the atomic connector-write reservation.
+  // A retry may therefore resume at the reservation step. If a row exists,
+  // the durable-prior branch above handles success/pending/reconciliation.
+  const resumeBeforeProvider = artifact.status === "approving";
+  if (artifact.status !== "drafted" && !resumeBeforeProvider) {
+    throw new Error(`Cannot approve an artifact in ${artifact.status} state.`);
+  }
+  if (!resumeBeforeProvider) {
+    const approvalClaim = await repo.updateArtifactAtRevision(
+      artifact.id,
+      artifact.revision,
+      { status: "approving", updated_at: nowISO() },
+      ["drafted"],
+    );
+    if (!approvalClaim) {
+      const latest = await repo.getArtifact(artifact.id);
+      if (latest?.revision !== artifact.revision) {
+        throw new Error("Artifact changed while approval was starting; reload before approving.");
+      }
+      throw new Error("Artifact approval is already in progress.");
+    }
+  }
+
+  const pendingWrite = {
+    id: uuid(),
+    agent_id: artifact.agent_id,
+    artifact_id: artifact.id,
+    provider: connector.provider,
+    idempotency_key: key,
+    result: {
+      ok: false,
+      deduped: false,
+      mode: connector.mode,
+      state: "pending" as const,
+      error: "provider write pending",
+    },
+    created_at: nowISO(),
+  };
+  const claimed = await repo.claimConnectorWrite(pendingWrite);
+  if (!claimed) {
+    const prior = await repo.getConnectorWrite(key);
+    if (prior?.result.ok) {
+      return finalizeApprovedArtifact({
+        repo,
+        artifact,
+        lead,
+        result: {
+          provider: prior.provider,
+          ...prior.result,
+          state: prior.result.state === "pending" ? "succeeded" : prior.result.state,
+          idempotencyKey: key,
+        },
+        key,
+        deduped: true,
+      });
+    }
+    throw new Error("Connector write failed: another attempt is in progress or requires reconciliation.");
   }
 
   // Route to the right connector method by action type.
@@ -691,9 +923,8 @@ export async function approveArtifact(
       result = await connector.writeCrmNote(artifact.payload as never, meta);
       break;
   }
-  if (result.ok) {
-    await repo.saveConnectorWrite({
-      id: uuid(),
+  await repo.saveConnectorWrite({
+      id: pendingWrite.id,
       agent_id: artifact.agent_id,
       artifact_id: artifact.id,
       provider: result.provider,
@@ -705,97 +936,25 @@ export async function approveArtifact(
         deduped: result.deduped,
         mode: result.mode,
         error: result.error,
+        state: result.state ?? (result.ok ? "succeeded" : "failed"),
       },
-      created_at: nowISO(),
+      created_at: pendingWrite.created_at,
     });
-  }
 
   if (!result.ok) {
+    if (result.state !== "indeterminate") {
+      await repo.updateArtifactAtRevision(
+        artifact.id,
+        artifact.revision,
+        { status: "drafted", updated_at: nowISO() },
+        ["approving"],
+      );
+    }
     throw new Error(
       `Connector write failed: ${result.error ?? `${result.provider} returned an unsuccessful result`}`,
     );
   }
-
-  // Email drafts are "drafted in the user's tool" (sent=false); others are written.
-  const isEmailDraft = artifact.type === "email";
-  const updated = await repo.updateArtifact(artifact.id, {
-    status: isEmailDraft ? "approved" : "sent",
-    approved_at: nowISO(),
-    approved_revision: artifact.revision,
-    updated_at: nowISO(),
-    sent_at: isEmailDraft ? undefined : nowISO(),
-    external_draft_ref: result.externalId
-      ? { provider: result.provider, externalId: result.externalId, url: result.url, idempotencyKey: key }
-      : undefined,
-  });
-
-  // Update the trace's connector record.
-  const trace = await repo.getTraceForArtifact(artifact.id);
-  if (trace) {
-    trace.connector = {
-      provider: result.provider,
-      action: artifact.type,
-      idempotencyKey: key,
-      sent: !isEmailDraft,
-    };
-    await repo.saveTrace(trace);
-  }
-
-  await emit(
-    artifact.agent_id,
-    "artifact.approved",
-    { artifactId: artifact.id, provider: result.provider, deduped: result.deduped },
-    "pipeline",
-    artifact.lead_surface_id
-  );
-  await emit(artifact.agent_id, "connector.write", { provider: result.provider, idempotencyKey: key, ok: result.ok }, "connector", artifact.lead_surface_id);
-
-  // Outcome memory — best-effort. The composer next time can warn before
-  // drafting a duplicate offer to this same lead.
-  const latestEdit = artifact.edit_history?.at(-1);
-  const editedExcerpt =
-    latestEdit?.field === "body" ? latestEdit.after.slice(0, 240) : undefined;
-  const verdict = editedExcerpt ? "edited" : "approved";
-  const outcomeMem = await persistOutcomeMemory(
-    updated!,
-    verdict,
-    editedExcerpt,
-  );
-  // Always emit the verdict event, even if the memory write fell back to
-  // null. The verdict IS the human gate signal — prod observability needs
-  // the count to match real approvals/rejections, not just the ones we
-  // happened to persist.
-  await emit(
-    artifact.agent_id,
-    "outcome.recorded",
-    {
-      verdict,
-      artifactId: artifact.id,
-      persisted: outcomeMem !== null,
-      ...(outcomeMem ? { memoryId: outcomeMem.id } : {}),
-    },
-    "memory",
-    artifact.lead_surface_id,
-  );
-
-  // Advance the lead's status to contacted.
-  if (artifact.lead_surface_id) {
-    const lead = await repo.getLead(artifact.lead_surface_id);
-    if (lead) await repo.upsertLead({ ...lead, status: nextStatus(lead.status), last_worked_at: nowISO() });
-  }
-
-  return {
-    artifact: updated!,
-    connector: {
-      provider: result.provider,
-      externalId: result.externalId,
-      url: result.url,
-      deduped: result.deduped,
-      mode: result.mode,
-      ok: result.ok,
-      error: result.error,
-    },
-  };
+  return finalizeApprovedArtifact({ repo, artifact, lead, result, key, deduped: result.deduped });
 }
 
 // ---- Reject (the OTHER human gate) ------------------------------------------
@@ -819,10 +978,14 @@ export async function rejectArtifact(
   if (opts?.agentId && artifact.agent_id !== opts.agentId) return null;
   // Idempotent: rejecting an already-cancelled artifact is a no-op.
   if (artifact.status === "cancelled") return { artifact };
+  if (artifact.status === "approving") {
+    throw new Error("Artifact approval is in progress; reconcile it before rejecting.");
+  }
 
-  const updated = await repo.updateArtifact(artifact.id, {
+  const updated = await repo.updateArtifactAtRevision(artifact.id, artifact.revision, {
     status: "cancelled",
-  });
+  }, [artifact.status]);
+  if (!updated) throw new Error("Artifact changed concurrently; reload before rejecting.");
 
   await emit(
     artifact.agent_id,

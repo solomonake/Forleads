@@ -29,6 +29,13 @@ const agent: Agent = {
   mode: "crm",
 };
 
+const fubBinding = {
+  contactId: "existing-person-123",
+  workspaceId: "workspace-1",
+  credentialVersion: 1,
+  syncedAt: "2026-07-15T12:00:00.000Z",
+};
+
 function repo(): InMemoryRepository {
   return state.repo as InMemoryRepository;
 }
@@ -126,9 +133,9 @@ describe("PATCH /api/lead/[id]/contact", () => {
     expect(stored?.contact?.phone).toBe("555-1234");
   });
 
-  it("persists source and channel permission while keeping provider refs internal", async () => {
+  it("keeps provider refs internal and invalidates them when local identity changes", async () => {
     await seedLead({
-      contact: { providerRefs: { followupboss: "existing-person-123" } },
+      contact: { providerRefs: { followupboss: fubBinding } },
     });
     const res = await PATCH(patch("lead-1", {
       name: "Known Person",
@@ -139,7 +146,9 @@ describe("PATCH /api/lead/[id]/contact", () => {
       emailPermission: "allowed",
       smsPermission: "opted_out",
       callPermission: "unknown",
-      providerRefs: { followupboss: "attacker-controlled" },
+      providerRefs: {
+        followupboss: { ...fubBinding, contactId: "attacker-controlled" },
+      },
     }), { params: Promise.resolve({ id: "lead-1" }) });
 
     expect(res.status).toBe(200);
@@ -152,8 +161,8 @@ describe("PATCH /api/lead/[id]/contact", () => {
       smsPermission: "opted_out",
       optOutSms: true,
       callPermission: "unknown",
-      providerRefs: { followupboss: "existing-person-123" },
     });
+    expect(stored?.contact?.providerRefs).toBeUndefined();
   });
 
   it("rejects attempts to mark a manual contact as CRM-imported", async () => {
@@ -170,7 +179,7 @@ describe("PATCH /api/lead/[id]/contact", () => {
       contact: {
         source: "crm",
         sourceLabel: "Follow Up Boss",
-        providerRefs: { followupboss: "person-123" },
+        providerRefs: { followupboss: { ...fubBinding, contactId: "person-123" } },
       },
     });
     const res = await PATCH(patch("lead-1", {
@@ -182,8 +191,74 @@ describe("PATCH /api/lead/[id]/contact", () => {
     expect((await repo().getLead("lead-1"))?.contact).toMatchObject({
       source: "crm",
       sourceLabel: "Follow Up Boss",
-      providerRefs: { followupboss: "person-123" },
+      providerRefs: { followupboss: { ...fubBinding, contactId: "person-123" } },
     });
+  });
+
+  it("does not treat CRM match provenance as permission to contact", async () => {
+    await seedLead({
+      contact: {
+        name: "CRM Person",
+        email: "crm@example.test",
+        source: "crm",
+        sourceLabel: "Follow Up Boss · exact CRM contact-address match",
+        providerRefs: { followupboss: fubBinding },
+      },
+    });
+    const blocked = await PATCH(patch("lead-1", {
+      source: "crm",
+      emailPermission: "allowed",
+    }), { params: Promise.resolve({ id: "lead-1" }) });
+    expect(blocked.status).toBe(400);
+
+    const allowed = await PATCH(patch("lead-1", {
+      source: "crm",
+      relationshipBasis: "Past client relationship confirmed by agent",
+      emailPermission: "allowed",
+    }), { params: Promise.resolve({ id: "lead-1" }) });
+    expect(allowed.status).toBe(200);
+    expect((await repo().getLead("lead-1"))?.contact).toMatchObject({
+      source: "crm",
+      sourceLabel: "Follow Up Boss · exact CRM contact-address match",
+      relationshipBasis: "Past client relationship confirmed by agent",
+      emailPermission: "allowed",
+    });
+  });
+
+  it("resets positive endpoint permission and invalidates CRM binding when identity changes", async () => {
+    await seedLead({
+      contact: {
+        name: "CRM Person",
+        email: "old@example.test",
+        phone: "+1 405 555 0100",
+        source: "crm",
+        sourceLabel: "Follow Up Boss · exact CRM contact-address match",
+        relationshipBasis: "Past client",
+        emailPermission: "allowed",
+        smsPermission: "allowed",
+        callPermission: "opted_out",
+        providerRefs: { followupboss: fubBinding },
+      },
+    });
+    const res = await PATCH(patch("lead-1", {
+      source: "crm",
+      email: "new@example.test",
+      phone: "+1 405 555 0199",
+      emailPermission: "allowed",
+      smsPermission: "allowed",
+      callPermission: "allowed",
+      relationshipBasis: "Past client",
+    }), { params: Promise.resolve({ id: "lead-1" }) });
+
+    expect(res.status).toBe(200);
+    expect((await repo().getLead("lead-1"))?.contact).toMatchObject({
+      email: "new@example.test",
+      phone: "+1 405 555 0199",
+      emailPermission: "unknown",
+      smsPermission: "unknown",
+      callPermission: "opted_out",
+    });
+    expect((await repo().getLead("lead-1"))?.contact?.providerRefs).toBeUndefined();
   });
 
   it("requires a documented basis before a channel is marked allowed", async () => {

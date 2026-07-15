@@ -42,7 +42,7 @@ export const CREDENTIAL_SCHEMAS: Record<string, CredentialSchema> = {
   followupboss: {
     provider: "followupboss",
     displayName: "Follow Up Boss",
-    summary: "Write notes, tasks, and appointments to your FUB workspace after approval.",
+    summary: "Sync CRM contacts and write person-bound notes and tasks after approval.",
     docsUrl: "https://app.followupboss.com/2/admin/api",
     fields: [
       {
