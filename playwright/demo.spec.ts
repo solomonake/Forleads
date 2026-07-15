@@ -43,17 +43,21 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
   await expect(leadRail.getByText("Grounded", { exact: true })).toBeVisible({ timeout: 45_000 });
   await expect(leadRail.locator(".card .chip").first()).toBeVisible();
 
-  // The owner-contact step is surfaced right after grounding — fill and save it.
+  // The contactability passport is surfaced right after grounding. Record the
+  // relationship basis and channel permission; a public parcel is not a contact.
   const contactEditor = page.locator('[data-testid="contact-editor"]');
   await expect(contactEditor).toBeVisible();
-  await contactEditor.locator("#contact-name").fill("Alex Owner");
-  await contactEditor.locator('input[type="email"]').fill("alex.owner@example.com");
+  await contactEditor.locator("#contact-name").fill("Alex Contact");
+  await contactEditor.locator('input[type="email"]').fill("alex.contact@example.com");
+  await contactEditor.getByLabel("Relationship source").selectOption("first_party");
+  await contactEditor.getByLabel(/Source detail/).fill("Past client relationship");
+  await contactEditor.getByLabel("Email use").selectOption("allowed");
   const [contactResponse] = await Promise.all([
     page.waitForResponse(
       (response) => response.url().includes("/contact"),
       { timeout: COLD_API_TIMEOUT },
     ),
-    contactEditor.locator("button", { hasText: "Save contact" }).click(),
+    contactEditor.getByRole("button", { name: "Save passport" }).click(),
   ]);
   expect(
     contactResponse.status(),
