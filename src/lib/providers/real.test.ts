@@ -399,6 +399,46 @@ describe("OpenDataPropertyProvider", () => {
     expect(cards[0]?.confidence).toBe("D");
     expect(cards[0]?.reasoning).toContain("don't cover this market yet");
   });
+
+  it("renders Oklahoma County parcel facts with source freshness and honest grades", async () => {
+    globalThis.fetch = async () => new Response(
+      JSON.stringify({
+        features: [{
+          attributes: {
+            location: "2209 COLCHESTER TER EDMOND",
+            SalePrice: 389000,
+            RecordedDate: "2026-07-08",
+            currentmarket: 364500,
+          },
+        }],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+
+    const cards = await new OpenDataPropertyProvider(basePropertyProvider, []).comps({
+      address: "2209 Colchester Ter, Edmond, OK",
+      lng: -97.4503494061,
+      lat: 35.6421376231,
+      scout: "market",
+    });
+
+    expect(cards.find((card) => card.claim === "Open sale record")).toMatchObject({
+      value: "389000 on 2026-07-08",
+      confidence: "C",
+      sources: [{
+        name: "Oklahoma County Assessor Tax Parcels (recorded sale)",
+        as_of: "2026-07-08",
+      }],
+    });
+    expect(cards.find((card) => card.claim === "Assessed value")).toMatchObject({
+      value: "364500 (2026-07-08)",
+      confidence: "B",
+      sources: [{
+        name: "Oklahoma County Assessor Tax Parcels (market assessment)",
+        as_of: "2026-07-08",
+      }],
+    });
+  });
 });
 
 describe("MapillaryImageryProvider", () => {

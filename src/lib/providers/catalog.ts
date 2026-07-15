@@ -25,6 +25,7 @@ export type CatalogStyle =
   | "opendatasoft" // Opendatasoft Explore v2.1: ?where=field like "..."
   | "hmlr-ppd" // HM Land Registry linked-data API, postcode-keyed
   | "dvf-commune" // France DVF per-commune CSV via geo.api.gouv.fr lookup
+  | "arcgis-parcel-point" // ArcGIS parcel polygon intersected by the requested WGS84 point
   | "arcgis-point"; // ArcGIS REST point-intersection query (hazard layers)
 
 export interface CatalogSource {
@@ -145,6 +146,47 @@ export const OPEN_DATA_CATALOG: CatalogSource[] = [
     license: "US Government public domain",
     bbox: [-180, 17, -64, 72],
     verified: "2026-07-05",
+  },
+
+  {
+    id: "oklahoma-county-sales",
+    region: "usa",
+    market: "Oklahoma County, OK",
+    kind: "sales",
+    style: "arcgis-parcel-point",
+    url: "https://services8.arcgis.com/euhkr1dAJeQBIjV0/arcgis/rest/services/TaxParcelsPublics_view/FeatureServer/0/query",
+    name: "Oklahoma County Assessor Tax Parcels (recorded sale)",
+    homepage: "https://www.arcgis.com/home/item.html?id=244ff1c03cf34c459092e10142b13b01&sublayer=0",
+    license: "Oklahoma County public ArcGIS item; no special restrictions stated (checked 2026-07-15)",
+    bbox: [-97.675416, 35.374623, -97.13844, 35.727101],
+    verified: "2026-07-15",
+    cfg: {
+      address: "location",
+      amount: "SalePrice",
+      date: "RecordedDate",
+      where: "SalePrice > 0 AND SalesValidity = 'Valid'",
+      requireAmount: "true",
+    },
+  },
+  {
+    id: "oklahoma-county-assessments",
+    region: "usa",
+    market: "Oklahoma County, OK",
+    kind: "assessment",
+    style: "arcgis-parcel-point",
+    url: "https://services8.arcgis.com/euhkr1dAJeQBIjV0/arcgis/rest/services/TaxParcelsPublics_view/FeatureServer/0/query",
+    name: "Oklahoma County Assessor Tax Parcels (market assessment)",
+    homepage: "https://www.arcgis.com/home/item.html?id=244ff1c03cf34c459092e10142b13b01&sublayer=0",
+    license: "Oklahoma County public ArcGIS item; no special restrictions stated (checked 2026-07-15)",
+    bbox: [-97.675416, 35.374623, -97.13844, 35.727101],
+    verified: "2026-07-15",
+    cfg: {
+      address: "location",
+      amount: "currentmarket",
+      asOf: "2026-07-08",
+      where: "currentmarket > 0",
+      requireAmount: "true",
+    },
   },
 
   {
@@ -693,6 +735,58 @@ async function queryOpendatasoft(source: CatalogSource, q: PropertyQuery): Promi
   return matches;
 }
 
+interface ArcgisFeatureResponse {
+  error?: { code?: number; message?: string };
+  exceededTransferLimit?: boolean;
+  features?: Array<{ attributes?: Record<string, unknown> }>;
+}
+
+async function queryArcgisParcelPoint(source: CatalogSource, q: PropertyQuery): Promise<CatalogMatch[]> {
+  const cfg = source.cfg ?? {};
+  const street = streetPart(q.address);
+  if (!street || !cfg.address) return [];
+
+  const outFields = [cfg.address, cfg.amount, cfg.date, cfg.label]
+    .filter((field): field is string => Boolean(field));
+  const params = new URLSearchParams({
+    f: "json",
+    where: cfg.where ?? "1=1",
+    geometry: `${q.lng},${q.lat}`,
+    geometryType: "esriGeometryPoint",
+    inSR: "4326",
+    spatialRel: "esriSpatialRelIntersects",
+    outFields: Array.from(new Set(outFields)).join(","),
+    returnGeometry: "false",
+    resultRecordCount: "25",
+  });
+  const data = (await fetchJson(`${source.url}?${params.toString()}`)) as ArcgisFeatureResponse;
+  if (data.error) {
+    throw new Error(`ArcGIS ${data.error.code ?? "error"}: ${data.error.message ?? "query failed"}`);
+  }
+  if (!Array.isArray(data.features)) throw new Error("ArcGIS response omitted features");
+  if (data.exceededTransferLimit) throw new Error("ArcGIS parcel point query was truncated");
+
+  const matches: CatalogMatch[] = [];
+  for (const feature of data.features) {
+    const record = feature.attributes;
+    if (!record) continue;
+    const address = composedAddress(record, cfg);
+    // A boundary point can intersect neighboring polygons. Keep only the
+    // parcel whose published situs address matches the requested property.
+    if (!address || !addressesMatch(address, street)) continue;
+    const amount = str(record, cfg.amount);
+    if (cfg.requireAmount === "true" && !amount) continue;
+    matches.push({
+      source,
+      address,
+      amount,
+      date: isoDay(str(record, cfg.date)) ?? cfg.asOf,
+      label: str(record, cfg.label) ?? cfg.labelFallback,
+    });
+  }
+  return matches;
+}
+
 interface HmlrItem {
   pricePaid?: number;
   transactionDate?: string;
@@ -843,6 +937,7 @@ const HANDLERS: Record<Exclude<CatalogStyle, "arcgis-point">, (s: CatalogSource,
   opendatasoft: queryOpendatasoft,
   "hmlr-ppd": queryHmlr,
   "dvf-commune": queryDvf,
+  "arcgis-parcel-point": queryArcgisParcelPoint,
 };
 
 async function queryKinds(q: PropertyQuery, kinds: CatalogKind[]): Promise<CatalogMatch[]> {

@@ -67,6 +67,15 @@ describe("dataSourceReadiness", () => {
     expect(sales?.env).toContain("OPEN_SALES_DATA_URL");
   });
 
+  it("names Oklahoma County coverage without implying statewide parcel depth", () => {
+    clearWatchedEnv();
+
+    const usa = dataSourceReadiness().find((source) => source.id === "region-america");
+
+    expect(usa?.detail).toContain("Oklahoma County, OK");
+    expect(usa?.detail).not.toContain("Oklahoma statewide");
+  });
+
   it("marks operator feeds as running alongside built-ins without exposing URLs", () => {
     clearWatchedEnv();
     process.env.OPEN_SALES_DATA_URL = "https://example.test/sales.csv";

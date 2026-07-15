@@ -19,6 +19,12 @@ const NYC: PropertyQuery = { address: "272 East 3 Street, Manhattan", lng: -73.9
 const LONDON: PropertyQuery = { address: "221B Baker Street, London NW1 6XE", lng: -0.157, lat: 51.523, scout: "market" };
 const KAMPALA: PropertyQuery = { address: "Plot 4 Kira Road, Kampala", lng: 32.582, lat: 0.347, scout: "market" };
 const VANCOUVER: PropertyQuery = { address: "402 Alberta St, Vancouver", lng: -123.114, lat: 49.264, scout: "market" };
+const OKLAHOMA_COUNTY: PropertyQuery = {
+  address: "2209 Colchester Ter, Edmond, OK",
+  lng: -97.4503494061,
+  lat: 35.6421376231,
+  scout: "market",
+};
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -52,6 +58,17 @@ describe("catalog coverage", () => {
     expect(england).toContain("EA Flood Zone 3");
     expect(england).toContain("EA Flood Zone 2");
     expect(england).not.toContain("FEMA NFHL");
+  });
+
+  it("describes Oklahoma as county-partial assessment and sale coverage", () => {
+    const inside = catalogSourcesAt(OKLAHOMA_COUNTY.lng, OKLAHOMA_COUNTY.lat, ["sales", "assessment"])
+      .map((source) => source.id);
+    expect(inside).toEqual(["oklahoma-county-sales", "oklahoma-county-assessments"]);
+
+    const outside = catalogSourcesAt(-97.75, 35.64, ["sales", "assessment"])
+      .map((source) => source.id);
+    expect(outside).not.toContain("oklahoma-county-sales");
+    expect(outside).not.toContain("oklahoma-county-assessments");
   });
 });
 
@@ -177,6 +194,100 @@ describe("queryCatalogSales", () => {
     const matches = await queryCatalogSales(NYC);
 
     expect(matches).toEqual([]);
+  });
+});
+
+describe("Oklahoma County ArcGIS parcel-point pack", () => {
+  it("grounds a valid sale and assessment at the requested parcel point without retrieving owner fields", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      calls.push(url);
+      const where = new URL(url).searchParams.get("where") ?? "";
+      const attributes = {
+        location: "2209 COLCHESTER TER EDMOND",
+        SalePrice: 389000,
+        RecordedDate: "2026-07-08",
+        currentmarket: 364500,
+      };
+      expect(where).toMatch(/SalePrice|currentmarket/);
+      return jsonResponse({ features: [{ attributes }] });
+    };
+
+    const matches = await queryCatalogSales(OKLAHOMA_COUNTY);
+
+    expect(matches.find((match) => match.source.id === "oklahoma-county-sales"))
+      .toMatchObject({ amount: "389000", date: "2026-07-08" });
+    expect(matches.find((match) => match.source.id === "oklahoma-county-assessments"))
+      .toMatchObject({ amount: "364500", date: "2026-07-08" });
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      const params = new URL(call).searchParams;
+      expect(params.get("geometry")).toBe(`${OKLAHOMA_COUNTY.lng},${OKLAHOMA_COUNTY.lat}`);
+      expect(params.get("geometryType")).toBe("esriGeometryPoint");
+      expect(params.get("inSR")).toBe("4326");
+      expect(params.get("spatialRel")).toBe("esriSpatialRelIntersects");
+      expect(params.get("returnGeometry")).toBe("false");
+      expect(params.get("outFields")).not.toContain("name1");
+      expect(params.get("outFields")).not.toContain("mailingaddress1");
+    }
+  });
+
+  it("drops neighboring polygons when a boundary point intersects more than one parcel", async () => {
+    globalThis.fetch = async () => jsonResponse({
+      features: [
+        {
+          attributes: {
+            location: "2211 COLCHESTER TER EDMOND",
+            SalePrice: 999999,
+            RecordedDate: "2026-07-08",
+            currentmarket: 999999,
+          },
+        },
+        {
+          attributes: {
+            location: "2209 COLCHESTER TER EDMOND",
+            SalePrice: 389000,
+            RecordedDate: "2026-07-08",
+            currentmarket: 364500,
+          },
+        },
+      ],
+    });
+
+    const matches = await queryCatalogSales(OKLAHOMA_COUNTY);
+
+    expect(matches).toHaveLength(2);
+    expect(matches.every((match) => match.address.startsWith("2209 "))).toBe(true);
+  });
+
+  it("does not turn null values into sale or assessment evidence", async () => {
+    globalThis.fetch = async () => jsonResponse({
+      features: [{ attributes: { location: "2209 COLCHESTER TER EDMOND", SalePrice: null, currentmarket: null } }],
+    });
+
+    await expect(queryCatalogSales(OKLAHOMA_COUNTY)).resolves.toEqual([]);
+  });
+
+  it.each([
+    ["HTTP 429", () => new Response("rate limited", { status: 429 })],
+    ["HTTP 503", () => new Response("unavailable", { status: 503 })],
+    ["ArcGIS 498", () => jsonResponse({ error: { code: 498, message: "Invalid token" } })],
+    ["HTML/WAF", () => new Response("<html>blocked</html>", { status: 200, headers: { "Content-Type": "text/html" } })],
+    ["schema drift", () => jsonResponse({ currentFeatures: [] })],
+    ["truncated response", () => jsonResponse({ exceededTransferLimit: true, features: [] })],
+  ])("fails closed on %s without inventing a no-record result", async (_label, response) => {
+    globalThis.fetch = async () => response();
+
+    await expect(queryCatalogSales(OKLAHOMA_COUNTY)).resolves.toEqual([]);
+  });
+
+  it("fails closed when the ArcGIS request times out", async () => {
+    globalThis.fetch = async () => {
+      throw new DOMException("timed out", "AbortError");
+    };
+
+    await expect(queryCatalogSales(OKLAHOMA_COUNTY)).resolves.toEqual([]);
   });
 });
 

@@ -764,7 +764,7 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
         .map((m) => ({
           amount: m.amount,
           date: m.date,
-          source: { name: m.source.name, url: m.source.homepage },
+          source: { name: m.source.name, url: m.source.homepage, as_of: m.date ?? m.source.verified },
         })),
     ];
     if (saleMatches.length > 0) {
@@ -789,7 +789,11 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
         scout: "market",
         claim: "Assessed value",
         value: `${latest.amount}${latest.date ? ` (${latest.date})` : ""}`,
-        sources: [{ name: latest.source.name, url: latest.source.homepage }],
+        sources: [{
+          name: latest.source.name,
+          url: latest.source.homepage,
+          as_of: latest.date ?? latest.source.verified,
+        }],
         confidence: "B",
         reasoning:
           "Official assessment register matched this address. Assessed value is a taxation figure, not a market price.",
