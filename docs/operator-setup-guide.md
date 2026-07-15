@@ -45,6 +45,22 @@ an operator terms review.
 
 ## Setup now — implemented paths
 
+### Contactability passport (no external account)
+
+1. Ground a property and open its lead rail.
+2. Add a **known contact** only from an agent-known, first-party, connected-CRM,
+   or otherwise documented relationship. Do not copy assessor ownership into a
+   contact record.
+3. Record the relationship source and source detail.
+4. Mark email, SMS, and call permission independently. A saved phone number
+   remains `permission unknown` until a relationship basis is recorded; SMS
+   drafting fails closed until it is explicitly allowed.
+5. Save the passport. Forleads records the server verification time, preserves
+   opt-outs, and shows channel state beside the property and on Deals.
+
+Re-check the passport when a contact changes, a CRM import refreshes, or the
+person opts out. Saving a record documents the check; it never creates consent.
+
 ### Google Workspace: Gmail drafts and Calendar events
 
 Owner/admin:

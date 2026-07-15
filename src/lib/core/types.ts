@@ -193,12 +193,27 @@ export interface LeadSurface {
   last_worked_at: ISODate;
 }
 
+export const CONTACT_SOURCES = ["agent_entered", "first_party", "crm", "other"] as const;
+export type ContactSource = (typeof CONTACT_SOURCES)[number];
+export const CONTACT_PERMISSIONS = ["unknown", "allowed", "opted_out"] as const;
+export type ContactPermission = (typeof CONTACT_PERMISSIONS)[number];
+
 export interface LeadContact {
   name?: string;
   email?: string;
   phone?: string;
   optOutEmail?: boolean;
   optOutSms?: boolean;
+  /** How this relationship entered Forleads. Public parcel ownership is never a contact source. */
+  source?: ContactSource;
+  sourceLabel?: string;
+  /** Last time a human or connected CRM checked this contact record. */
+  verifiedAt?: ISODate;
+  emailPermission?: ContactPermission;
+  smsPermission?: ContactPermission;
+  callPermission?: ContactPermission;
+  /** Provider person ids are written only by trusted connector import paths. */
+  providerRefs?: Partial<Record<"followupboss" | "gohighlevel", string>>;
 }
 
 // ---- Notes & situations -----------------------------------------------------

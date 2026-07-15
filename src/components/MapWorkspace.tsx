@@ -482,7 +482,7 @@ export function MapWorkspace({
       disabled: !lead,
     },
     {
-      label: "Add owner contact",
+      label: "Add known contact",
       state: hasContactChannel ? "Done" : lead && lead.id !== "pending" ? "Next" : "Locked",
       detail: hasContactChannel
         ? "Contact on file — approved drafts can reach a real person."
@@ -740,6 +740,17 @@ export function MapWorkspace({
         </div>
 
         <div className="lead-body">
+          {lead && lead.id !== "pending" ? (
+            <ContactEditor
+              lead={lead}
+              onSaved={(updated) => {
+                setLead(updated);
+                setToast({ kind: "ok", text: "Contactability passport updated." });
+              }}
+              onError={(text) => setToast({ kind: "err", text })}
+            />
+          ) : null}
+
           <div className="ops-strip">
             <div className="ops-kicker">Next actions</div>
             <div className="ops-title">
@@ -756,7 +767,7 @@ export function MapWorkspace({
             <div className="ops-actions">
               {needsContact && (
                 <button className="minibtn primary" onClick={focusContactEditor}>
-                  Add owner contact
+                  Add known contact
                 </button>
               )}
               <button
@@ -793,17 +804,6 @@ export function MapWorkspace({
               ))}
             </div>
           </div>
-
-          {lead && lead.id !== "pending" ? (
-            <ContactEditor
-              lead={lead}
-              onSaved={(updated) => {
-                setLead(updated);
-                setToast({ kind: "ok", text: "Contact updated." });
-              }}
-              onError={(text) => setToast({ kind: "err", text })}
-            />
-          ) : null}
 
           {grouped.map((group) => (
             <div key={group.key}>

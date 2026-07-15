@@ -76,6 +76,28 @@ describe("Action Loop Engine", () => {
     expect(run.artifact_ids).toHaveLength(0);
   });
 
+  it("treats passport permission opt-outs as loop stop signals", async () => {
+    const repo = await getRepo();
+    const lead = await groundedLead("9 Passport Opt Out Road", -97.52, 35.47);
+    await repo.upsertLead({
+      ...lead,
+      contact: { email: "known@example.test", emailPermission: "opted_out" },
+    });
+    const optedLead = (await repo.getLead(lead.id))!;
+    const def = await repo.getLoopDef("loop-no-contact");
+
+    const run = await runLoop(def!, {
+      lead: optedLead,
+      situation: "no_contact",
+      situationConfidence: 0.9,
+      evidence: await repo.listEvidence(lead.id),
+      triggerSource: "test",
+    });
+
+    expect(run.status).toBe("skipped_condition");
+    expect(run.planner_trace.some((step) => step.outcome === "fail")).toBe(true);
+  });
+
   it("skips honestly when no contact channel exists", async () => {
     const repo = await getRepo();
     const lead = await groundedLead("4 Honest Gap Way", -71.1, 42.3);

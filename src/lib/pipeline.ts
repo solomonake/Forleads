@@ -365,31 +365,55 @@ function requiredChannelGap(
   actionType: ActionType,
   lead: LeadSurface,
 ): ComplianceResult | null {
-  const flag = (issue: string, fix: string) => ({
+  const flag = (category: string, issue: string, fix: string) => ({
     pass: false,
     flags: [
       {
         span: "recipient",
-        category: "contact_channel_missing",
+        category,
         issue,
         fix,
         severity: "block" as const,
       },
     ],
     checkedAt: nowISO(),
-    linterVersion: "channel-required-1.0.0",
+    linterVersion: "contactability-required-2.0.0",
   });
 
   if (actionType === "email" && !isPlausibleEmail(lead.contact?.email)) {
     return flag(
-      "Cannot draft email: this lead has no owner email address.",
-      "Add an owner email on the lead card, then reopen the draft.",
+      "contact_channel_missing",
+      "Cannot draft email: this lead has no known email address.",
+      "Add a known email and its source on the lead card, then reopen the draft.",
+    );
+  }
+  if (
+    actionType === "email"
+    && (lead.contact?.optOutEmail || lead.contact?.emailPermission === "opted_out")
+  ) {
+    return flag(
+      "contact_channel_blocked",
+      "Cannot draft email: this contact is opted out of email.",
+      "Keep the opt-out. Use a different channel only if its permission is independently recorded.",
     );
   }
   if (actionType === "sms" && !isPlausiblePhone(lead.contact?.phone)) {
     return flag(
-      "Cannot draft SMS: this lead has no owner phone number.",
-      "Add an owner phone on the lead card, then reopen the draft.",
+      "contact_channel_missing",
+      "Cannot draft SMS: this lead has no known phone number.",
+      "Add a known phone and its source on the lead card, then verify SMS permission.",
+    );
+  }
+  if (actionType === "sms" && lead.contact?.smsPermission !== "allowed") {
+    const optedOut = lead.contact?.optOutSms || lead.contact?.smsPermission === "opted_out";
+    return flag(
+      optedOut ? "contact_channel_blocked" : "contact_permission_unverified",
+      optedOut
+        ? "Cannot draft SMS: this contact is opted out of text messages."
+        : "Cannot draft SMS: a phone number is saved, but SMS permission is not verified.",
+      optedOut
+        ? "Keep the opt-out. Do not use this number for SMS."
+        : "Record the first-party or CRM permission source before drafting SMS.",
     );
   }
   return null;
@@ -427,7 +451,7 @@ async function persistBlockedArtifact(args: {
     compliance_result: args.compliance,
     model_trace: {
       model: "channel-required-gate",
-      promptVersion: "channel-required-1.0.0",
+      promptVersion: "contactability-required-2.0.0",
       mode: "mock",
     },
     trace_id: traceId,
@@ -453,7 +477,12 @@ async function persistBlockedArtifact(args: {
   await emit(
     args.agent.id,
     "artifact.blocked",
-    { artifactId, type: args.actionType, situation: args.situation, reason: "contact_channel_missing" },
+    {
+      artifactId,
+      type: args.actionType,
+      situation: args.situation,
+      reason: args.compliance.flags[0]?.category ?? "contactability_blocked",
+    },
     "pipeline",
     args.lead.id,
   );
@@ -464,11 +493,9 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
   const repo = await getRepo();
   const { agent, lead } = input;
 
-  // Channel-required gate: an email draft without an actual email address, or
-  // an SMS without an actual phone, would produce a MIME/payload the connector
-  // can't send (Gmail returns 400 on a non-RFC "To"). Fail closed here BEFORE
-  // the composer runs so the artifact is honestly `blocked` with a specific
-  // setup-required flag — no fake payload, no downstream 500.
+  // Contactability gate: require a real channel, honor every opt-out, and
+  // require explicit SMS permission. Fail closed BEFORE the composer runs so
+  // no unsafe recipient reaches a connector payload.
   const channelGap = requiredChannelGap(input.actionType, lead);
   if (channelGap) {
     const blocked = await persistBlockedArtifact({
@@ -500,7 +527,7 @@ export async function draftArtifact(input: DraftInput): Promise<Artifact> {
     situation: input.situation,
     actionType: input.actionType,
     address: lead.address,
-    recipientLabel: lead.contact?.name ?? `Owner · ${lead.address}`,
+    recipientLabel: lead.contact?.name ?? `Known contact · ${lead.address}`,
     recipientEmail: lead.contact?.email,
     recipientPhone: lead.contact?.phone,
     evidence: input.evidence,

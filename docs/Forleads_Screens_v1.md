@@ -89,7 +89,7 @@ Legend: `▣` map · `◉` scout beacon · `▤` evidence card · `⬢` grade ch
 ```
 ┌ ✉ Draft · ready for your review ──────────── Compliance ✓ ┐
 │ From:  Marcus Lee <marcus@…>     (your signature attached) │
-│ To:    [owner contact]                                     │
+│ To:    [known contact]                                     │
 │ Subj:  A quick note about your home on Oak Street          │
 │───────────────────────────────────────────────────────────│
 │ Hi there, I stopped by today and was struck by what a      │

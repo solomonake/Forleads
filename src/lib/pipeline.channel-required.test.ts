@@ -59,7 +59,7 @@ describe("draftArtifact — channel-required gate", () => {
     expect(artifact.compliance_result.flags[0]?.category).toBe(
       "contact_channel_missing",
     );
-    expect(artifact.compliance_result.flags[0]?.fix).toMatch(/owner email/i);
+    expect(artifact.compliance_result.flags[0]?.fix).toMatch(/known email/i);
     // The payload must NOT carry a friendly-label To — either it's empty or a
     // valid address. This is what would have caused Gmail 400 before the fix.
     if ("to" in artifact.payload) {
@@ -84,7 +84,7 @@ describe("draftArtifact — channel-required gate", () => {
     expect(artifact.compliance_result.flags[0]?.category).toBe(
       "contact_channel_missing",
     );
-    expect(artifact.compliance_result.flags[0]?.fix).toMatch(/owner phone/i);
+    expect(artifact.compliance_result.flags[0]?.fix).toMatch(/known phone/i);
   });
 
   it("still produces a real draft when a valid contact email exists", async () => {
@@ -110,6 +110,65 @@ describe("draftArtifact — channel-required gate", () => {
     // Now the composed `To:` is a real address, not a friendly label.
     const to = (artifact.payload as { to: string }).to;
     expect(to).toBe("owner@example.test");
+  });
+
+  it("blocks an email draft when the known contact opted out", async () => {
+    const bare = await groundedLeadWithoutContact("125 Email Opt Out Ave");
+    const repo = await getRepo();
+    await repo.upsertLead({
+      ...bare,
+      contact: {
+        email: "known@example.test",
+        emailPermission: "opted_out",
+        optOutEmail: true,
+      },
+    });
+    const artifact = await draftArtifact({
+      agent: DEMO_AGENT,
+      lead: (await repo.getLead(bare.id))!,
+      situation: "no_contact",
+      situationConfidence: 0.9,
+      actionType: "email",
+      evidence: [],
+      trigger: "test",
+    });
+
+    expect(artifact.status).toBe("blocked");
+    expect(artifact.compliance_result.flags[0]?.category).toBe("contact_channel_blocked");
+  });
+
+  it("blocks SMS until explicit permission is recorded, then allows composition", async () => {
+    const bare = await groundedLeadWithoutContact("126 Sms Permission Ave");
+    const repo = await getRepo();
+    await repo.upsertLead({ ...bare, contact: { phone: "+1 405 555 0100" } });
+    const unknown = (await repo.getLead(bare.id))!;
+    const blocked = await draftArtifact({
+      agent: DEMO_AGENT,
+      lead: unknown,
+      situation: "no_contact",
+      situationConfidence: 0.9,
+      actionType: "sms",
+      evidence: [],
+      trigger: "test-unknown",
+    });
+    expect(blocked.status).toBe("blocked");
+    expect(blocked.compliance_result.flags[0]?.category).toBe("contact_permission_unverified");
+
+    await repo.upsertLead({
+      ...unknown,
+      contact: { ...unknown.contact, smsPermission: "allowed", source: "first_party" },
+    });
+    const drafted = await draftArtifact({
+      agent: DEMO_AGENT,
+      lead: (await repo.getLead(bare.id))!,
+      situation: "no_contact",
+      situationConfidence: 0.9,
+      actionType: "sms",
+      evidence: [],
+      trigger: "test-allowed",
+    });
+    expect(drafted.status).toBe("drafted");
+    expect((drafted.payload as { to: string }).to).toBe("+1 405 555 0100");
   });
 });
 
