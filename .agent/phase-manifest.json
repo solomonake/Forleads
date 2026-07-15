@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "generatedAt": "2026-07-12",
-  "goal": "Make Forleads production credible for real estate agents through grounded data, real imagery, approval-gated actions, and repeatable verification loops.",
+  "goal": "Make Forleads the market-test-ready evidence-to-action layer for geographic real-estate farming across the United States, with Oklahoma as a named launch market and capability claims proven at the exact point of use.",
   "stopRules": [
     "Stop before secrets, spending, production mutation, deployment, destructive actions, or external communication unless explicitly approved.",
     "Do not advance from a phase when required gates are red or inconclusive unless the phase is a gate-diagnosis phase.",
@@ -138,6 +138,165 @@
         "Production health is probed read-only.",
         "A scorecard records gates, blockers, and next action.",
         "Merge/deploy only happen after green gates and required approval."
+      ]
+    },
+    {
+      "id": "market-s0-capability-truth",
+      "title": "Capability Truth And Launch Floor",
+      "status": "done",
+      "risk": "high",
+      "packet": ".agent/plans/market-ready-us.md",
+      "objective": "Make configured, credential-verified, capability-verified, point-covered, and degraded states visibly distinct, and stop asking operators to buy keys for unwired adapters.",
+      "files": [
+        "src/lib/providers/readiness.ts",
+        "src/lib/providers/readiness.test.ts",
+        "src/components/ConnectorHub.tsx",
+        "docs/operator-setup-guide.md",
+        "package.json"
+      ],
+      "acceptance": [
+        "No stub or unused env variable produces a live badge.",
+        "Licensed-source cards explain that an adapter must be implemented before a key is useful.",
+        "Production-build rendered QA has no client error overlay.",
+        "The operator guide separates setup-now from blocked-until-implemented."
+      ]
+    },
+    {
+      "id": "market-s1-oklahoma",
+      "title": "Oklahoma Official Source Pack",
+      "status": "planned",
+      "risk": "high",
+      "packet": ".agent/plans/market-ready-us.md",
+      "objective": "Return official Oklahoma County parcel assessment and sale facts with source, freshness, grade, and no consent inference.",
+      "files": [
+        "src/lib/providers/catalog.ts",
+        "src/lib/providers/catalog.test.ts",
+        "src/lib/providers/catalog.live.test.ts",
+        "docs/operator-setup-guide.md"
+      ],
+      "acceptance": [
+        "A real Oklahoma County address returns live-verified official facts.",
+        "The UI describes Oklahoma as county-partial, never statewide-live.",
+        "ArcGIS failure, empty, null, schema-drift, and boundary scenarios fail closed.",
+        "Public owner fields never populate a consented contact."
+      ]
+    },
+    {
+      "id": "market-s2-contact-overlay",
+      "title": "Contactability And CRM Overlay",
+      "status": "planned",
+      "risk": "high",
+      "packet": ".agent/plans/market-ready-us.md",
+      "objective": "Make each property relationship contact-forward and implement provider-person-bound CRM import and writeback.",
+      "files": [
+        "src/components/MapWorkspace.tsx",
+        "src/components/Pipeline.tsx",
+        "src/components/ContactEditor.tsx",
+        "src/lib/connectors/followupboss.ts",
+        "src/lib/connectors/gohighlevel.ts"
+      ],
+      "acceptance": [
+        "Map and Deals show contact source, allowed channel, and opt-out state beside the property.",
+        "FUB/GHL writes bind the correct provider contact id.",
+        "Contact imports persist instead of returning only a count.",
+        "Cross-tenant, duplicate, missing-address, 401, 429, and timeout paths are covered."
+      ]
+    },
+    {
+      "id": "market-s3-farm-waterfall",
+      "title": "Farm Table And Truth-Gap Waterfall",
+      "status": "planned",
+      "risk": "medium",
+      "packet": ".agent/plans/market-ready-us.md",
+      "objective": "Turn one-address research into an importable, sortable, provenance-first farm workflow with transparent provider cost and misses.",
+      "files": [
+        "src/components/Pipeline.tsx",
+        "src/components/MapWorkspace.tsx",
+        "src/lib/providers",
+        "src/app/api"
+      ],
+      "acceptance": [
+        "A 50-row farm CSV imports with duplicate and malformed-row handling.",
+        "Every evidence cell opens source, date, grade, and attempted-provider state.",
+        "Bulk runs enforce and display a cost budget.",
+        "Export preserves provenance."
+      ]
+    },
+    {
+      "id": "market-s4-approval-porch",
+      "title": "Evidence-Bound Approvals And Porch Mode",
+      "status": "planned",
+      "risk": "medium",
+      "packet": ".agent/plans/market-ready-us.md",
+      "objective": "Make field capture and review fast on a phone while preserving evidence and human approval.",
+      "files": [
+        "src/components/ActionInbox.tsx",
+        "src/components/MapWorkspace.tsx",
+        "src/app/globals.css"
+      ],
+      "acceptance": [
+        "Approve, edit, and skip cadence always shows trigger, evidence, permission, destination, and side effect.",
+        "Porch capture supports fast outcome, note, photo, contact change, and next visit.",
+        "Desktop and 390px happy, empty, failure, and recovery paths are rendered and recorded."
+      ]
+    },
+    {
+      "id": "market-s5-national-depth",
+      "title": "Verified Nationwide Depth",
+      "status": "planned",
+      "risk": "high",
+      "packet": ".agent/plans/market-ready-us.md",
+      "objective": "Preserve the truthful free national baseline and implement one licensed nationwide parcel adapter with visible cost, freshness, quota, and fallback.",
+      "files": [
+        "src/lib/providers",
+        "src/components/ConnectorHub.tsx",
+        "docs/operator-setup-guide.md"
+      ],
+      "acceptance": [
+        "Representative addresses across every Census region and Oklahoma report point-level coverage truth.",
+        "A licensed adapter returns mapped, sourced facts rather than configured-key gaps.",
+        "Provider cost, freshness, quota, and degradation are visible.",
+        "Paid failure falls back to sourced free layers without invented facts."
+      ]
+    },
+    {
+      "id": "market-s6-write-safety",
+      "title": "External Write Reliability And Compliance",
+      "status": "planned",
+      "risk": "critical",
+      "packet": ".agent/plans/market-ready-us.md",
+      "objective": "Make every external write tenant-bound, consent-aware, idempotent across processes, refresh-safe, and reconcilable after uncertain failure.",
+      "files": [
+        "src/lib/pipeline.ts",
+        "src/lib/connectors",
+        "src/lib/auth/microsoft.ts",
+        "src/app/api/connectors/zapier/inbound/route.ts",
+        "supabase/migrations"
+      ],
+      "acceptance": [
+        "Two concurrent approvals produce at most one external side effect.",
+        "Uncertain outcomes reconcile rather than blindly resend.",
+        "Microsoft refresh rotation persists atomically.",
+        "Zapier is tenant-bound and SMS remains disabled until consent, DNC/STOP, quiet-hours, sender-scope, and A2P gates pass."
+      ]
+    },
+    {
+      "id": "market-s7-design-partner",
+      "title": "Paid Design Partner Market Test",
+      "status": "planned",
+      "risk": "high",
+      "packet": ".agent/plans/market-ready-us.md",
+      "objective": "Measure activation, retained use, paid willingness, sourced outcomes, setup blocks, provider misses, and data cost in a four-week cohort.",
+      "files": [
+        "src/lib/observability",
+        "src/lib/reports.ts",
+        ".agent/metrics",
+        "docs"
+      ],
+      "acceptance": [
+        "Ten design partners include at least three Oklahoma agents or teams.",
+        "Activation, source coverage, actions, replies, appointments, listing opportunities, retention, and cost are measured.",
+        "At least three users pay $49-79 without concierge dependence before any PMF claim."
       ]
     }
   ]

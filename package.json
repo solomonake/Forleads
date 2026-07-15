@@ -5,7 +5,7 @@
   "description": "The living-map agentic CRM for real-estate agents. Every address is a lead; a swarm of grounded AI scouts does the homework, the outreach, and the follow-up — grounded, never guessed.",
   "scripts": {
     "predev": "node scripts/sync-maplibre-assets.mjs",
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "prebuild": "node scripts/sync-maplibre-assets.mjs",
     "build": "next build --turbopack",
     "start": "next start",

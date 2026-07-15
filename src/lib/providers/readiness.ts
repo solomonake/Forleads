@@ -58,6 +58,20 @@ function source(input: Omit<DataSourceReadiness, "status"> & { live: boolean; pl
   };
 }
 
+function plannedAdapter(input: Omit<DataSourceReadiness, "status" | "detail"> & {
+  configured: boolean;
+  detail: string;
+}): DataSourceReadiness {
+  const { configured: isConfigured, ...rest } = input;
+  return {
+    ...rest,
+    status: "planned",
+    detail: isConfigured
+      ? `${input.detail} Credentials are present, but Forleads has not implemented and capability-verified this adapter yet. Do not purchase or rely on this source until the card becomes available to connect.`
+      : `${input.detail} This adapter is not implemented yet. A key alone will not unlock it, so do not purchase access for Forleads yet.`,
+  };
+}
+
 export function dataSourceReadiness(): DataSourceReadiness[] {
   const nominatimLive = config.geocoder === "nominatim" || config.geocoder === "photon-nominatim";
   const photonLive = config.geocoder === "photon-nominatim";
@@ -114,7 +128,7 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
     "LOCAL_BUILDINGS_GEOJSON_URL",
     "AFRICA_BUILDINGS_DATA_URL",
   );
-  const automationLive = configured("N8N_WEBHOOK_URL", "ZAPIER_WEBHOOK_URL");
+  const automationLive = configured("ZAPIER_WEBHOOK_URL");
 
   return [
     source({
@@ -147,19 +161,21 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
     source({
       id: "openaddresses",
       label: "OpenAddresses",
-      live: configured("OPEN_ADDRESSES_URL"),
+      live: false,
+      planned: true,
       unlocks: "Structured open address points where country/region coverage exists.",
       configuredBy: ["OpenAddresses extract", "operator-hosted mirror"],
-      detail: "Use as a cached address reference, not as a replacement for local assessor or MLS truth.",
+      detail: "Planned adapter. OPEN_ADDRESSES_URL is not consumed by the current geocoder or property pipeline.",
       env: ["OPEN_ADDRESSES_URL"],
     }),
     source({
       id: "census-tiger",
       label: "US Census TIGER/Line",
-      live: configured("CENSUS_TIGER_LINE_URL"),
+      live: false,
+      planned: true,
       unlocks: "US streets, boundaries, and geographic context for routing and market areas.",
       configuredBy: ["US Census TIGER/Line"],
-      detail: "Useful for US geography context; does not prove property ownership or condition.",
+      detail: "Planned adapter. CENSUS_TIGER_LINE_URL is not consumed by the current geography pipeline.",
       env: ["CENSUS_TIGER_LINE_URL"],
     }),
     source({
@@ -286,58 +302,58 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
         : "No free valuation registry passed our live verification yet (Cape Town's open service was down when checked). OSM buildings work everywhere; field capture and your own imports carry the most weight here.",
       env: ["AFRICA_BUILDINGS_DATA_URL", "AFRICA_OPEN_SALES_DATA_URL", "AFRICA_DISTRESS_DATA_URL", "AFRICA_HAZARD_LAYER_URL", "GOOGLE_OPEN_BUILDINGS_URL"],
     },
-    source({
+    plannedAdapter({
       id: "reso-web-api",
       label: "RESO Web API / MLS",
-      live: configuredAll("RESO_WEB_API_URL", "RESO_ACCESS_TOKEN"),
+      configured: configuredAll("RESO_WEB_API_URL", "RESO_ACCESS_TOKEN"),
       unlocks: "Authorized listing facts, status, media, broker fields, and standardized property resources.",
       configuredBy: ["RESO Web API", "broker/MLS agreement"],
-      detail: "Requires authorization. MLS media cannot be shown unless the agent/broker has rights.",
+      detail: "Requires broker/MLS authorization and licensed media rights.",
       env: ["RESO_WEB_API_URL", "RESO_ACCESS_TOKEN"],
     }),
-    source({
+    plannedAdapter({
       id: "mls-grid",
       label: "MLS Grid",
-      live: configuredAll("MLS_GRID_URL", "MLS_GRID_ACCESS_TOKEN"),
+      configured: configuredAll("MLS_GRID_URL", "MLS_GRID_ACCESS_TOKEN"),
       unlocks: "Authorized MLS listing and media feed in participating markets.",
       configuredBy: ["MLS Grid license", "broker/MLS approval"],
-      detail: "Setup required; never scrape MLS photos or display them without rights.",
+      detail: "Requires an MLS Grid agreement; Forleads will never scrape MLS photos.",
       env: ["MLS_GRID_URL", "MLS_GRID_ACCESS_TOKEN"],
     }),
-    source({
+    plannedAdapter({
       id: "attom",
       label: "ATTOM property data",
-      live: configured("ATTOM_API_KEY"),
+      configured: configured("ATTOM_API_KEY"),
       unlocks: "US parcel, assessor, deed, mortgage, valuation, and property characteristics where licensed.",
       configuredBy: ["ATTOM Property Data API"],
-      detail: "Paid/licensed source. Must show ATTOM provenance and cache within license terms.",
+      detail: "Paid/licensed source that must preserve ATTOM provenance and cache within license terms.",
       env: ["ATTOM_API_KEY"],
     }),
-    source({
+    plannedAdapter({
       id: "rentcast",
       label: "RentCast",
-      live: configured("RENTCAST_API_KEY"),
+      configured: configured("RENTCAST_API_KEY"),
       unlocks: "Rental estimates, sale comps, market rent context, and property data where covered.",
       configuredBy: ["RentCast API"],
-      detail: "Useful for valuation context; estimates must not be presented as recorded sale facts.",
+      detail: "Estimates must remain distinct from recorded sale facts.",
       env: ["RENTCAST_API_KEY"],
     }),
-    source({
+    plannedAdapter({
       id: "regrid",
       label: "Regrid parcels",
-      live: configured("REGRID_API_KEY"),
+      configured: configured("REGRID_API_KEY"),
       unlocks: "Parcel boundaries, property records, zoning, and building data where licensed.",
       configuredBy: ["Regrid API"],
-      detail: "Parcel truth source for US coverage when licensed; show source and freshness.",
+      detail: "Candidate national parcel source after terms, cache, cost, and field mapping are implemented.",
       env: ["REGRID_API_KEY"],
     }),
-    source({
+    plannedAdapter({
       id: "reportall",
       label: "ReportAll parcels",
-      live: configured("REPORTALL_API_KEY"),
+      configured: configured("REPORTALL_API_KEY"),
       unlocks: "Parcel boundaries, owner/assessor fields, and county property attributes where licensed.",
       configuredBy: ["ReportAll API"],
-      detail: "Paid parcel source; owner/contact use must respect law and outreach policy.",
+      detail: "Owner fields must never be treated as outreach consent.",
       env: ["REPORTALL_API_KEY"],
     }),
     source({
@@ -361,37 +377,44 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
     source({
       id: "county-recorder",
       label: "County recorder / deeds",
-      live: configured("COUNTY_RECORDER_DATA_URL", "DEED_RECORDS_DATA_URL"),
+      live: false,
+      planned: true,
       unlocks: "Recorded deeds, transfer dates, document references, and sale events where public.",
       configuredBy: ["county recorder", "deed open data", "operator import"],
-      detail: "Best for transaction proof where available; document-level data needs careful matching.",
+      detail: "Planned adapter. These env keys are not consumed by the current property pipeline.",
       env: ["COUNTY_RECORDER_DATA_URL", "DEED_RECORDS_DATA_URL"],
     }),
     source({
       id: "socrata",
       label: "Socrata open-data portals",
-      live: configured("SOCRATA_OPEN_DATA_URL", "OPEN_DISTRESS_DATA_URLS"),
+      live: configured("OPEN_DISTRESS_DATA_URLS"),
+      planned: !configured("OPEN_DISTRESS_DATA_URLS"),
       unlocks: "Municipal code cases, permits, 311 issues, vacant registries, and local datasets.",
       configuredBy: ["Socrata", "city/county open-data portals"],
-      detail: "Good local public-record lane; each dataset needs its own schema mapping and freshness display.",
+      detail: configured("OPEN_DISTRESS_DATA_URLS")
+        ? "Configured through the generic distress-feed pipeline; every dataset still needs compatible schema and freshness fields."
+        : "Use a built-in catalog mapping or OPEN_DISTRESS_DATA_URLS. SOCRATA_OPEN_DATA_URL alone is not consumed.",
       env: ["SOCRATA_OPEN_DATA_URL", "OPEN_DISTRESS_DATA_URLS"],
     }),
     source({
       id: "fema-nfhl",
       label: "FEMA NFHL flood layers",
-      live: configured("FEMA_NFHL_URL"),
+      live: true,
       unlocks: "US flood-zone evidence cards from official FEMA National Flood Hazard Layer services.",
       configuredBy: ["FEMA NFHL ArcGIS service"],
-      detail: "Risk context only; not insurance, legal, or engineering advice.",
+      detail: configured("FEMA_NFHL_URL")
+        ? "A configured FEMA endpoint runs alongside the built-in national layer. Risk context only; not insurance, legal, or engineering advice."
+        : "Built in through the verified FEMA NFHL catalog layer. Risk context only; not insurance, legal, or engineering advice.",
       env: ["FEMA_NFHL_URL"],
     }),
     source({
       id: "planning-zoning",
       label: "Planning and zoning GIS",
-      live: configured("PLANNING_GIS_URL", "ZONING_GIS_URL", "OPEN_HAZARD_LAYER_URL"),
+      live: false,
+      planned: true,
       unlocks: "Zoning district, planning cases, permits, overlays, and land-use constraints where public.",
       configuredBy: ["local planning GIS", "municipal open data"],
-      detail: "Local schema mapping required before claims become non-D evidence.",
+      detail: "Planned adapter. PLANNING_GIS_URL and ZONING_GIS_URL are not consumed by the current property pipeline.",
       env: ["PLANNING_GIS_URL", "ZONING_GIS_URL", "OPEN_HAZARD_LAYER_URL"],
     }),
     source({
@@ -424,19 +447,21 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
     source({
       id: "microsoft-buildings",
       label: "Microsoft building footprints",
-      live: configured("MICROSOFT_BUILDING_FOOTPRINTS_URL"),
+      live: false,
+      planned: true,
       unlocks: "Open ML building footprints where OSM building coverage is sparse.",
       configuredBy: ["Microsoft Global ML Building Footprints"],
-      detail: "Footprint evidence, not property ownership or sale value.",
+      detail: "Planned adapter. The configured URL is not consumed by the current property pipeline.",
       env: ["MICROSOFT_BUILDING_FOOTPRINTS_URL"],
     }),
     source({
       id: "google-open-buildings",
       label: "Google Open Buildings",
-      live: configured("GOOGLE_OPEN_BUILDINGS_URL", "AFRICA_BUILDINGS_DATA_URL"),
+      live: false,
+      planned: true,
       unlocks: "Open building detections in regions where cadastral data is sparse.",
       configuredBy: ["Google Open Buildings"],
-      detail: "Great for coverage in many global regions; must be labeled as ML-derived footprint evidence.",
+      detail: "Planned adapter. It must be labeled as ML-derived footprint evidence when implemented.",
       env: ["GOOGLE_OPEN_BUILDINGS_URL", "AFRICA_BUILDINGS_DATA_URL"],
     }),
     source({
@@ -454,7 +479,9 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       live: automationLive,
       unlocks: "Push approved tasks or outreach jobs into n8n/Zapier-style workflows.",
       configuredBy: ["n8n", "webhook receiver", "Zapier-compatible endpoint"],
-      detail: automationLive ? "Automation bridge configured." : "Automation only runs after human-approved artifacts.",
+      detail: automationLive
+        ? "Zapier-compatible outbound webhook is configured; automation runs only after human-approved artifacts."
+        : "ZAPIER_WEBHOOK_URL is the implemented outbound bridge. N8N_WEBHOOK_URL alone is not wired yet.",
       env: ["N8N_WEBHOOK_URL", "ZAPIER_WEBHOOK_URL"],
     }),
     {
@@ -469,10 +496,13 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
     source({
       id: "open-buildings",
       label: "Generic open building footprints",
-      live: buildingsLive,
+      live: false,
+      planned: true,
       unlocks: "Fallback footprint and structure-size context when OSM is sparse.",
       configuredBy: ["Microsoft", "Google Open Buildings", "local GeoJSON"],
-      detail: "Building geometry is context, not sale/ownership truth.",
+      detail: buildingsLive
+        ? "A URL is configured, but the generic footprint adapter is not implemented. Building geometry is context, not sale/ownership truth."
+        : "Planned adapter. Building geometry will be context, not sale/ownership truth.",
       env: ["MICROSOFT_BUILDING_FOOTPRINTS_URL", "GOOGLE_OPEN_BUILDINGS_URL", "LOCAL_BUILDINGS_GEOJSON_URL", "AFRICA_BUILDINGS_DATA_URL"],
     }),
   ];

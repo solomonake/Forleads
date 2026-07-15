@@ -33,4 +33,16 @@ describe("connectorSetupCopy", () => {
       }),
     ).toBeNull();
   });
+
+  it("explains blocked adapters instead of asking for credentials", () => {
+    expect(
+      connectorSetupCopy({
+        authKind: "apiKey",
+        availability: "blocked",
+        connected: false,
+        displayName: "Follow Up Boss",
+        blockedReason: "Contact-bound writes are not implemented yet.",
+      }),
+    ).toBe("Contact-bound writes are not implemented yet.");
+  });
 });
