@@ -18,6 +18,8 @@ interface TenantProviderStatus {
   displayName: string;
   summary: string;
   authKind: "oauth" | "apiKey" | "webhook" | "unsupported";
+  availability: "ready" | "blocked";
+  blockedReason?: string;
   connected: boolean;
   connectedLabel?: string;
   capabilities: string[];
@@ -242,7 +244,11 @@ function ConnectorCard({
   onTest: () => void;
 }) {
   const label =
-    status.connected && status.connectedLabel
+    status.availability === "blocked"
+      ? status.connected
+        ? "Credential saved · blocked"
+        : "Blocked · not ready"
+      : status.connected && status.connectedLabel
       ? `Connected · ${status.connectedLabel}`
       : status.connected
         ? "Connected"
@@ -253,14 +259,16 @@ function ConnectorCard({
     <div className="row" data-testid={`connector-${status.provider}`}>
       <div className="rtitle">
         <span>{status.displayName}</span>
-        <span className={`pill-status ${status.connected ? "pill-live" : "pill-mock"}`}>
+        <span
+          className={`pill-status ${status.connected && status.availability === "ready" ? "pill-live" : "pill-mock"}`}
+        >
           {label}
         </span>
       </div>
       <div className="rmeta">
         {status.summary}
         <br />
-        Capabilities: {status.capabilities.join(" · ")}
+        {status.availability === "blocked" ? "Planned capabilities" : "Capabilities"}: {status.capabilities.join(" · ")}
         {status.scopes && status.scopes.length > 0 && (
           <>
             <br />
@@ -270,17 +278,17 @@ function ConnectorCard({
         {setupCopy && <div className="setup-note">{setupCopy}</div>}
       </div>
       <div className="ractions">
-        {!status.connected && status.authKind === "oauth" && status.connectUrl && (
+        {status.availability === "ready" && !status.connected && status.authKind === "oauth" && status.connectUrl && (
           <a className="minibtn primary" href={status.connectUrl}>
             Connect
           </a>
         )}
-        {!status.connected && status.authKind === "apiKey" && (
+        {status.availability === "ready" && !status.connected && status.authKind === "apiKey" && (
           <button className="minibtn primary" onClick={onOpenModal} disabled={busy}>
             Add credentials
           </button>
         )}
-        {status.connected && status.authKind === "apiKey" && (
+        {status.availability === "ready" && status.connected && status.authKind === "apiKey" && (
           <>
             <button className="minibtn" onClick={onTest} disabled={busy}>
               {testOutcome === "pending" ? "Testing…" : "Test"}
@@ -293,14 +301,24 @@ function ConnectorCard({
             </button>
           </>
         )}
-        {status.connected && status.authKind === "oauth" && (
+        {status.availability === "ready" && status.connected && status.authKind === "oauth" && (
           <span className="minibtn" style={{ cursor: "default" }}>
             {status.scopes?.join(" · ") ?? "Connected"}
           </span>
         )}
-        {status.authKind === "webhook" && (
+        {status.availability === "ready" && status.authKind === "webhook" && (
           <span className="minibtn" style={{ cursor: "default" }}>
             {status.connected ? "Webhook URL set" : "Set ZAPIER_WEBHOOK_URL"}
+          </span>
+        )}
+        {status.availability === "blocked" && status.connected && status.authKind === "apiKey" && (
+          <button className="minibtn danger" onClick={onDisconnect} disabled={busy}>
+            Remove saved credential
+          </button>
+        )}
+        {status.availability === "blocked" && !status.connected && (
+          <span className="minibtn" style={{ cursor: "default" }}>
+            No setup action yet
           </span>
         )}
       </div>

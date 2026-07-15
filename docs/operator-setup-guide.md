@@ -1,59 +1,132 @@
-# Operator setup guide — what loads by itself, and what only you can unlock
+# Operator setup guide — what works now, what is blocked, and who acts
 
-Forleads is fail-closed: a card says `setup required` when the source needs a
-credential or feed URL that only the operator can provide. Nothing is broken —
-the app refuses to fake data it doesn't have. This guide is the complete list,
-grouped by who can act.
+Forleads is fail-closed. A credential is not proof that a capability works, and
+a public owner record is not proof that outreach is allowed. The Connect screen
+uses these states:
 
-## Loads with ZERO setup (built-in, live-verified)
+- **live** — this exact adapter path is implemented; built-in sources have a
+  recorded live probe, while credentialed connectors still need a per-account
+  test.
+- **setup required** — the adapter exists and an operator/user action can unlock
+  it now.
+- **manual capture** — an agent can supply first-party evidence or a consented
+  contact.
+- **planned** — no working adapter exists yet. Do not buy a key for Forleads.
 
-| Market | What you get |
+## Zero setup — built in and live-verified
+
+| Market | Available evidence |
 |---|---|
-| Maryland (statewide) | SDAT sale records + assessments (sale price, transfer date, assessed value, year built) |
-| Montgomery County, MD | Housing code violations |
-| New York City | Rolling sales + HPD housing violations |
-| Philadelphia | OPA sales + L&I code violations |
-| Chicago | Building violations |
-| United States | FEMA flood zones |
-| Calgary, Edmonton, Winnipeg, Vancouver | Property assessments |
-| England & Wales | HM Land Registry price paid, EA flood zones |
+| Maryland | statewide sale records and assessments |
+| Montgomery County, MD | housing code violations |
+| Connecticut | statewide recorded sales |
+| New York State | statewide assessments |
+| New York City | rolling sales and HPD violations |
+| Philadelphia | OPA property/sale records and L&I violations |
+| Chicago | building violations |
+| New Orleans | code violations |
+| Cincinnati | code enforcement cases |
+| United States | FEMA flood-zone context; OSM building/address context where present |
+| Selected Canadian cities | official assessment records |
+| England and Wales | HM Land Registry price-paid and EA flood layers |
 | France | DVF sale records |
-| Everywhere | OpenStreetMap buildings, Nominatim address search, Mapillary street imagery |
+| Global floor | OSM buildings, address search, and Mapillary where coverage exists |
 
-## You must do these (Forleads can't) — ordered by payoff
+This is not uniform national parcel, sale, deed, owner, contact, or MLS depth.
+Oklahoma currently has the national FEMA/OSM floor; the Oklahoma County
+official parcel pack is the next built-in source sprint.
 
-Each is a Vercel env var: **Vercel → forleads → Settings → Environment
-Variables → add for Production → redeploy.**
+## Setup now — implemented paths
 
-1. **Google Workspace / Microsoft 365 (outreach hero path)** — no env var:
-   click **Connect** in the Connector Hub and finish OAuth. Drafts then land in
-   your real Gmail/Outlook.
-2. **CRM** — Follow Up Boss: Admin → API → New API key → paste in Connector
-   Hub. GoHighLevel: Location → Settings → API key + Location ID.
-3. **Twilio SMS** — Account SID, Auth Token, From number from the Twilio
-   console → Connector Hub.
-4. **ATTOM** (`ATTOM_API_KEY`) — paid; apply at api.developer.attom.com.
-   Unlocks US parcel/assessor/deed/valuation nationally.
-5. **Regrid** (`REGRID_API_KEY`) — paid; parcels + zoning.
-   **ReportAll** (`REPORTALL_API_KEY`) — paid parcel alternative.
-6. **RentCast** (`RENTCAST_API_KEY`) — free tier exists; rental estimates +
-   comps context.
-7. **MLS** (`RESO_WEB_API_URL` + `RESO_ACCESS_TOKEN`, or `MLS_GRID_URL` +
-   `MLS_GRID_ACCESS_TOKEN`) — requires your broker/MLS data agreement; no
-   shortcut exists, and Forleads will not scrape MLS data.
-8. **Google Street View** (`GOOGLE_MAPS_API_KEY`) — needs a Google Cloud
-   project with billing; Mapillary already covers imagery for free where
-   coverage exists.
-9. **Automation bridge** (`N8N_WEBHOOK_URL` or `ZAPIER_WEBHOOK_URL`) — any
-   webhook receiver you run.
+### Google Workspace: Gmail drafts and Calendar events
 
-## Free public feeds — an agent can wire these for you
+Owner/admin:
 
-Any URL-shaped source (`TAX_DELINQUENCY_DATA_URL`, `CODE_VIOLATION_DATA_URL`,
-`VACANT_REGISTRY_DATA_URL`, `PLANNING_GIS_URL`, county assessor/recorder URLs)
-accepts a public open-data endpoint. Better: ask the agent to add your market
-to the **built-in catalog** (`src/lib/providers/catalog.ts`) — catalog sources
-query per-address at request time (static env dumps only match whatever slice
-the URL captured) and must be live-verified with a real address before they
-ship. That's how Maryland was added; any Socrata/CARTO/ArcGIS market works the
-same way.
+1. Create or select a Google Cloud project.
+2. Enable Gmail API and Google Calendar API.
+3. Configure the OAuth consent screen.
+4. Add the minimum scopes `gmail.compose` and `calendar.events`.
+5. Create a Web OAuth client.
+6. Register both callback URLs exactly:
+   `http://localhost:3000/api/auth/google/callback` and
+   `https://forleads.vercel.app/api/auth/google/callback`.
+7. Add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+   `GOOGLE_REDIRECT_URI`, and a strong `SESSION_SECRET` to the correct Vercel
+   environment, then redeploy with approval.
+
+Each agent:
+
+1. Open **Connect**.
+2. Choose Google and complete OAuth.
+3. Run the connector test.
+4. Approve one test draft and calendar event; confirm both in the real account.
+
+### Google Street View imagery
+
+1. Create/select a Google Cloud project with billing.
+2. Enable Street View Static API.
+3. Restrict the server key to the API and deployment egress policy.
+4. Add `GOOGLE_MAPS_API_KEY` and set
+   `FORLEADS_IMAGERY_PROVIDER=google-street-view`.
+5. Redeploy with approval and verify one real address. Keep Mapillary as the
+   free fallback where coverage exists.
+
+### Generic open sale, distress, and hazard feeds
+
+Implemented generic inputs include `OPEN_SALES_DATA_URL(S)`,
+`COUNTY_OPEN_DATA_URL`, `TAX_DELINQUENCY_DATA_URL`,
+`CODE_VIOLATION_DATA_URL`, `VACANT_REGISTRY_DATA_URL`, and
+`OPEN_HAZARD_LAYER_URL`. A feed must match the implemented schema or receive a
+built-in catalog mapping. Prefer adding a tested entry in
+`src/lib/providers/catalog.ts`: query a real address first, record license,
+coverage, and verification date, then add unit and live tests.
+
+### Zapier-compatible outbound webhook
+
+`ZAPIER_WEBHOOK_URL` is the implemented approval-gated outbound bridge. Treat
+it as single-environment until tenant-bound credentials and routing ship.
+`N8N_WEBHOOK_URL` alone is not wired. Do not enable multi-tenant inbound Zapier
+until its global demo-tenant routing is replaced.
+
+## Blocked — do not collect credentials yet
+
+### Microsoft 365
+
+The draft/calendar adapter exists, but refreshed Microsoft tokens are not yet
+persisted. Do not onboard users until that defect and reconnect tests are
+closed. When unblocked, the callback is
+`/api/auth/microsoft/callback` (not `/api/connectors/microsoft/callback`).
+
+### Follow Up Boss and GoHighLevel
+
+Do not request customer keys yet. Current contact sync does not persist people,
+and note/task calls do not bind the required provider contact id. The unlock is
+implementation first: import/upsert contacts, store provider ids, bind every
+write to the right person, and pass identity/pagination/duplicate/401/429 tests.
+
+### Twilio SMS
+
+Do not enable production SMS. A phone number is not consent. The product first
+needs durable consent proof, DNC/STOP and revocation handling, quiet hours,
+sender/campaign scope, A2P readiness, and delivery callbacks. After those ship,
+the owner completes Twilio business/A2P registration and legal review before
+adding tenant credentials.
+
+### ATTOM, Regrid, RentCast, ReportAll, RESO, and MLS Grid
+
+These cards are planned adapters. Today, keys only produce grade-D mapping gaps;
+they do not return provider facts. Do not purchase access for Forleads yet.
+Implementation order is Regrid parcel facts, then RentCast clearly labeled
+estimates/comps, then an authorized MLS lane. Before any purchase: review terms
+for caching, storage, display, redistribution, derived data, quota, and cost;
+implement the adapter and contract tests; then add the key and verify Oklahoma
+plus representative addresses from every U.S. Census region.
+
+## Production foundations already configured
+
+The 2026-07-15 read-only health probe reported Supabase persistence, live agent
+reasoning, Nominatim geocoding, open-data property mode, Mapillary configuration,
+production mock connector writes disabled, and no live-mode policy violation.
+That proves configuration posture, not address coverage or third-party writes.
+Re-run `/api/health` after every deployment and keep exact external write proof
+separate from health mode.

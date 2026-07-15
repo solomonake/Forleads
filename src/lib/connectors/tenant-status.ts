@@ -14,6 +14,8 @@ export interface TenantConnectorStatus {
   displayName: string;
   summary: string;
   authKind: "oauth" | "apiKey" | "webhook" | "unsupported";
+  availability: "ready" | "blocked";
+  blockedReason?: string;
   /** Whether THIS agent has connected the provider. */
   connected: boolean;
   /** Best available label (e.g. connected email address, saved location id). */
@@ -68,6 +70,17 @@ const DISPLAY: Record<
   },
 };
 
+const BLOCKED: Partial<Record<ConnectorProvider, string>> = {
+  microsoft:
+    "Microsoft onboarding is paused until refreshed OAuth tokens are persisted and reconnect behavior is verified.",
+  followupboss:
+    "Follow Up Boss onboarding is paused until contact import persists provider person IDs and every note, task, and appointment binds the correct person.",
+  gohighlevel:
+    "GoHighLevel onboarding is paused until contact import persists provider IDs and note/task calls use contact-bound endpoints.",
+  twilio:
+    "SMS onboarding is paused until durable consent, STOP/DNC, quiet-hours, sender-scope, A2P, and delivery-status gates are implemented.",
+};
+
 async function statusFor(
   provider: ConnectorProvider,
   agentId: string,
@@ -82,6 +95,7 @@ async function statusFor(
       displayName: meta.displayName,
       summary: meta.summary,
       authKind: "oauth",
+      availability: "ready",
       connected: googleConnected,
       capabilities: meta.capabilities,
       scopes: meta.scopes,
@@ -100,6 +114,8 @@ async function statusFor(
       displayName: meta.displayName,
       summary: meta.summary,
       authKind: "oauth",
+      availability: "blocked",
+      blockedReason: BLOCKED.microsoft,
       connected,
       connectedLabel: connected && label ? label : undefined,
       capabilities: meta.capabilities,
@@ -113,6 +129,7 @@ async function statusFor(
       displayName: meta.displayName,
       summary: meta.summary,
       authKind: "webhook",
+      availability: "ready",
       connected: Boolean(process.env.ZAPIER_WEBHOOK_URL),
       capabilities: meta.capabilities,
     };
@@ -138,6 +155,8 @@ async function statusFor(
       displayName: schema.displayName ?? meta.displayName,
       summary: schema.summary ?? meta.summary,
       authKind: "apiKey",
+      availability: BLOCKED[provider] ? "blocked" : "ready",
+      blockedReason: BLOCKED[provider],
       connected,
       connectedLabel,
       capabilities: meta.capabilities,
@@ -150,6 +169,8 @@ async function statusFor(
     displayName: meta.displayName,
     summary: meta.summary,
     authKind: "unsupported",
+    availability: "blocked",
+    blockedReason: "This connector has no implemented setup path.",
     connected: false,
     capabilities: meta.capabilities,
   };
