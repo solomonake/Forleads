@@ -1,33 +1,32 @@
 # Current agent checkpoint
 
-Generated: 2026-07-15T05:41:40.868Z
+Generated: 2026-07-15T06:51:39.885Z
 
 ## State
-- Branch: `codex/contactability-passport`
-- Commit: `3cfa3fabdde6`
+- Branch: `codex/fub-person-overlay`
+- Commit: `80fff225fb99`
 - Worktree: dirty
 - Changed files:
-  - M .agent/handoffs/current.md
-  -  M .agent/metrics/phase-runs.jsonl
+  - M .agent/metrics/phase-runs.jsonl
   -  M .agent/metrics/runs.jsonl
 
 ## Goal
-Ship Sprint 2 Contactability and CRM Overlay without claiming unverified connectors.
+Deliver a verified, differentiated U.S. real-estate evidence-to-action product with Oklahoma and truthful setup boundaries
 
 ## Completed
-Implemented and committed Contactability Passport: relationship provenance, server verification, independent channel permission, immutable CRM source, source-basis requirement, Deals visibility, and fail-closed SMS. Full high-risk gate green.
+Implemented and locally verified FUB exact-match person overlay, contactability permission separation, tenant credential binding, approval recovery, connector-write ledger, migrations 0011-0013, UI and setup guide. All 7 high-risk gates green; final specialist review has no P0/P1.
 
 ## Next exact action
-Commit phase records, push codex/contactability-passport, open ready PR, wait for every CI/demo check, merge if green, verify production health read-only, then branch from main for the Follow Up Boss person overlay.
+Commit evidence records, push codex/fub-person-overlay, open ready PR, require all CI and browser demo checks, merge only if green, then continue market-s3 farm-waterfall.
 
 ## Blockers
-FUB remains blocked until paginated person import, trusted tenant-bound lead-person association, contract tests, and person-bound note/task/appointment writes are implemented. No credential should be requested yet.
+External FUB system registration and sandbox account/key; operator must apply Supabase migrations 0011-0013. Accounts above 500 FUB contacts are setup-blocked pending staged-sync product work.
 
 ## Authority
-User explicitly authorized autonomous implementation, tests, specialist parallel work, push, and merge. Secrets, spend, destructive actions, external communications, and manual production mutation remain human-gated.
+User granted in-scope autonomy including tools, tests, push, and merge. Secrets, vendor registration, credential entry, spending, destructive actions, and production writes remain human-only.
 
 ## Verification proof
-Commit 3cfa3fabdde6; focused tests 29/29; doctor 78/78; full tests 311 passed/17 skipped; eval 16/16; coverage 90.16% statements/83.87% branches; production build passed.
+agent doctor 80/80; typecheck, lint, production build; 348 passed, 17 skipped across 71 files; eval 16/16 score 100; coverage 90.25 statements, 83.59 branches, 93.5 functions, 92.22 lines; final staff review no P0/P1.
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.
