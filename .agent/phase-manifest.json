@@ -164,7 +164,7 @@
     {
       "id": "market-s1-oklahoma",
       "title": "Oklahoma Official Source Pack",
-      "status": "planned",
+      "status": "done",
       "risk": "high",
       "packet": ".agent/plans/market-ready-us.md",
       "objective": "Return official Oklahoma County parcel assessment and sale facts with source, freshness, grade, and no consent inference.",

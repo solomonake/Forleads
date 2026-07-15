@@ -26,6 +26,7 @@ uses these states:
 | Chicago | building violations |
 | New Orleans | code violations |
 | Cincinnati | code enforcement cases |
+| Oklahoma County, OK | parcel-point current market assessment and valid recorded sale facts |
 | United States | FEMA flood-zone context; OSM building/address context where present |
 | Selected Canadian cities | official assessment records |
 | England and Wales | HM Land Registry price-paid and EA flood layers |
@@ -33,8 +34,14 @@ uses these states:
 | Global floor | OSM buildings, address search, and Mapillary where coverage exists |
 
 This is not uniform national parcel, sale, deed, owner, contact, or MLS depth.
-Oklahoma currently has the national FEMA/OSM floor; the Oklahoma County
-official parcel pack is the next built-in source sprint.
+Oklahoma County is live only inside the published county parcel-layer extent;
+the rest of Oklahoma retains the national FEMA/OSM floor. The county adapter
+queries the requested point and retrieves situs address, current market
+assessment, valid sale price, and recorded date only. It deliberately does not
+retrieve public owner or mailing fields, and the parcel service never proves
+contact consent. The ArcGIS item reported a July 8, 2026 data refresh and no
+special usage restrictions when re-verified July 15, 2026; bulk use still needs
+an operator terms review.
 
 ## Setup now — implemented paths
 

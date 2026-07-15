@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 import type { PropertyQuery } from "./types";
 import { queryCatalogDistress, queryCatalogSales } from "./catalog";
-import { OpenRiskDataProvider } from "./real";
+import { OpenDataPropertyProvider, OpenRiskDataProvider, OSMPropertyProvider } from "./real";
 
 const live = process.env.LIVE_CATALOG === "1";
 
@@ -39,6 +39,27 @@ describe.runIf(live)("catalog live verification", () => {
     const matches = await queryCatalogSales(q("22125 Clarksburg Road, Clarksburg, MD", -77.28, 39.24));
     expect(matches.some((m) => m.source.id === "maryland-sdat-sales" && m.amount)).toBe(true);
     expect(matches.some((m) => m.source.id === "maryland-sdat-assessments" && m.amount)).toBe(true);
+  }, 30000);
+
+  it("Oklahoma County grounds a valid recorded sale and current assessment at the parcel point", async () => {
+    const input = q("2209 Colchester Ter, Edmond, OK", -97.4503494061, 35.6421376231);
+    const matches = await queryCatalogSales(input);
+    const sale = matches.find((m) => m.source.id === "oklahoma-county-sales");
+    const assessment = matches.find((m) => m.source.id === "oklahoma-county-assessments");
+    expect(sale?.amount).toBe("389000");
+    expect(sale?.date).toBe("2026-07-08");
+    expect(assessment?.amount).toBe("364500");
+    expect(assessment?.date).toBe("2026-07-08");
+
+    const cards = await new OpenDataPropertyProvider(new OSMPropertyProvider(), []).comps(input);
+    expect(cards.find((card) => card.claim === "Open sale record")).toMatchObject({
+      confidence: "C",
+      sources: [{ as_of: "2026-07-08" }],
+    });
+    expect(cards.find((card) => card.claim === "Assessed value")).toMatchObject({
+      confidence: "B",
+      sources: [{ as_of: "2026-07-08" }],
+    });
   }, 30000);
 
   it("Montgomery County code violations ground a real distress signal", async () => {
