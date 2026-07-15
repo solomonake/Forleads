@@ -41,7 +41,11 @@ function evalCondition(c: LoopCondition, ctx: LoopContext): { pass: boolean; det
       return { pass: ok, detail: ok ? "Lead has an email/phone channel." : "No contact channel — skipping." };
     }
     case "not_opted_out": {
-      const opted = ctx.lead.contact?.optOutEmail || ctx.lead.contact?.optOutSms;
+      const opted = ctx.lead.contact?.optOutEmail
+        || ctx.lead.contact?.optOutSms
+        || ctx.lead.contact?.emailPermission === "opted_out"
+        || ctx.lead.contact?.smsPermission === "opted_out"
+        || ctx.lead.contact?.callPermission === "opted_out";
       return { pass: !opted, detail: opted ? "Lead opted out — skipping." : "Lead has not opted out." };
     }
     case "status_not_in": {

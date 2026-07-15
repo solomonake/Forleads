@@ -184,7 +184,7 @@
     {
       "id": "market-s2-contact-overlay",
       "title": "Contactability And CRM Overlay",
-      "status": "planned",
+      "status": "in_progress",
       "risk": "high",
       "packet": ".agent/plans/market-ready-us.md",
       "objective": "Make each property relationship contact-forward and implement provider-person-bound CRM import and writeback.",

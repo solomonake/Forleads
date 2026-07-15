@@ -103,11 +103,13 @@ describe("PATCH /api/lead/[id]/contact", () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { lead: LeadSurface };
-    expect(body.lead.contact).toEqual({
+    expect(body.lead.contact).toMatchObject({
       name: "Pat Owner",
       email: "pat@example.test",
       phone: "+1 415 555 0100",
+      source: "agent_entered",
     });
+    expect(body.lead.contact?.verifiedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     const stored = await repo().getLead("lead-1");
     expect(stored?.contact?.email).toBe("pat@example.test");
   });
@@ -122,5 +124,76 @@ describe("PATCH /api/lead/[id]/contact", () => {
     expect(stored?.contact?.name).toBe("Old Name");
     expect(stored?.contact?.email).toBe("old@example.test");
     expect(stored?.contact?.phone).toBe("555-1234");
+  });
+
+  it("persists source and channel permission while keeping provider refs internal", async () => {
+    await seedLead({
+      contact: { providerRefs: { followupboss: "existing-person-123" } },
+    });
+    const res = await PATCH(patch("lead-1", {
+      name: "Known Person",
+      email: "known@example.test",
+      phone: "+1 405 555 0100",
+      source: "first_party",
+      sourceLabel: "Open-house sign-in",
+      emailPermission: "allowed",
+      smsPermission: "opted_out",
+      callPermission: "unknown",
+      providerRefs: { followupboss: "attacker-controlled" },
+    }), { params: Promise.resolve({ id: "lead-1" }) });
+
+    expect(res.status).toBe(200);
+    const stored = await repo().getLead("lead-1");
+    expect(stored?.contact).toMatchObject({
+      source: "first_party",
+      sourceLabel: "Open-house sign-in",
+      emailPermission: "allowed",
+      optOutEmail: false,
+      smsPermission: "opted_out",
+      optOutSms: true,
+      callPermission: "unknown",
+      providerRefs: { followupboss: "existing-person-123" },
+    });
+  });
+
+  it("rejects attempts to mark a manual contact as CRM-imported", async () => {
+    await seedLead();
+    const res = await PATCH(patch("lead-1", { source: "crm" }), {
+      params: Promise.resolve({ id: "lead-1" }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("keeps connector provenance immutable through the manual endpoint", async () => {
+    await seedLead({
+      contact: {
+        source: "crm",
+        sourceLabel: "Follow Up Boss",
+        providerRefs: { followupboss: "person-123" },
+      },
+    });
+    const res = await PATCH(patch("lead-1", {
+      source: "first_party",
+      sourceLabel: "fabricated",
+    }), { params: Promise.resolve({ id: "lead-1" }) });
+
+    expect(res.status).toBe(400);
+    expect((await repo().getLead("lead-1"))?.contact).toMatchObject({
+      source: "crm",
+      sourceLabel: "Follow Up Boss",
+      providerRefs: { followupboss: "person-123" },
+    });
+  });
+
+  it("requires a documented basis before a channel is marked allowed", async () => {
+    await seedLead();
+    const res = await PATCH(patch("lead-1", {
+      email: "known@example.test",
+      emailPermission: "allowed",
+    }), { params: Promise.resolve({ id: "lead-1" }) });
+
+    expect(res.status).toBe(400);
+    expect((await repo().getLead("lead-1"))?.contact).toBeUndefined();
   });
 });

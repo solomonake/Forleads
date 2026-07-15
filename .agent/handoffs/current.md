@@ -1,32 +1,33 @@
 # Current agent checkpoint
 
-Generated: 2026-07-15T05:22:44.858Z
+Generated: 2026-07-15T05:41:40.868Z
 
 ## State
-- Branch: `codex/oklahoma-official-source`
-- Commit: `e9d3c0e31d65`
+- Branch: `codex/contactability-passport`
+- Commit: `3cfa3fabdde6`
 - Worktree: dirty
 - Changed files:
-  - M .agent/metrics/phase-runs.jsonl
+  - M .agent/handoffs/current.md
+  -  M .agent/metrics/phase-runs.jsonl
   -  M .agent/metrics/runs.jsonl
 
 ## Goal
-Deliver a market-test-ready U.S. evidence-to-action product for geographic real-estate farming, with Oklahoma as a named launch market and exact capability truth.
+Ship Sprint 2 Contactability and CRM Overlay without claiming unverified connectors.
 
 ## Completed
-Sprint 0 merged in PR 53 and production health verified. Sprint 1 committed at e9d3c0e: generalized ArcGIS parcel-point adapter; Oklahoma County current market assessment and valid recorded sale facts; official source, freshness, grades, exact county extent; owner and mailing fields excluded; boundary, null, HTTP 429/503, ArcGIS 498, HTML/WAF, schema drift, truncation, timeout, focused, live, and full high-risk proofs passed.
+Implemented and committed Contactability Passport: relationship provenance, server verification, independent channel permission, immutable CRM source, source-basis requirement, Deals visibility, and fail-closed SMS. Full high-risk gate green.
 
 ## Next exact action
-Push codex/oklahoma-official-source, open a ready PR, wait for all CI and demo checks, merge under explicit authority, verify production read-only, then branch market-s2-contact-overlay from merged main.
+Commit phase records, push codex/contactability-passport, open ready PR, wait for every CI/demo check, merge if green, verify production health read-only, then branch from main for the Follow Up Boss person overlay.
 
 ## Blockers
-No code blocker. Oklahoma is county-partial, not statewide parcel-live. Bulk extraction requires terms review. Human-only OAuth, vendor agreements and spend, SMS registration/legal review, and design-partner recruitment remain gated.
+FUB remains blocked until paginated person import, trusted tenant-bound lead-person association, contract tests, and person-bound note/task/appointment writes are implemented. No credential should be requested yet.
 
 ## Authority
-User explicitly authorized autonomous implementation, tests, parallel specialist work, push, and merge. Secrets, spend, destructive actions, external communications, and manual production mutation remain human-gated.
+User explicitly authorized autonomous implementation, tests, specialist parallel work, push, and merge. Secrets, spend, destructive actions, external communications, and manual production mutation remain human-gated.
 
 ## Verification proof
-Commit e9d3c0e. Live test: 2209 Colchester Ter, Edmond returned sale 389000 on 2026-07-08 and assessment 364500 with official source freshness and grades. High-risk gate: doctor 78/78, typecheck, lint, 300 tests passed and 17 skipped, eval 16/16, coverage 90.16 percent statements and 83.87 percent branches, production build.
+Commit 3cfa3fabdde6; focused tests 29/29; doctor 78/78; full tests 311 passed/17 skipped; eval 16/16; coverage 90.16% statements/83.87% branches; production build passed.
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.

@@ -61,7 +61,7 @@ const LIVE_PROMPT_VERSION = "composer-live-1.0.0";
 
 /** Defense in depth: pipeline.ts's channel-required gate is the primary check.
  *  The composer must ALSO refuse to build an outbound payload with a friendly
- *  label as the recipient — a "Gmail draft to 'Owner · 22125 Clarksburg Rd'"
+ *  label as the recipient — a "Gmail draft to 'Known contact · 22125 Clarksburg Rd'"
  *  is a 400 from Google's servers. Callers who bypass the pipeline see a clear
  *  throw rather than a silently-broken draft. */
 function requireEmail(input: ComposeInput): string {

@@ -668,7 +668,17 @@ button {
   display: flex;
   gap: 8px;
 }
-.contact-editor-row > input {
+.contact-editor-row > label {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  color: var(--text-dim, #9aa4b2);
+  font-size: 11px;
+}
+.contact-editor-row input,
+.contact-editor-row select {
+  width: 100%;
   flex: 1 1 0;
   min-width: 0;
   padding: 8px 10px;
@@ -678,16 +688,77 @@ button {
   color: var(--text);
   font-size: 13px;
 }
-.contact-editor-row > input::placeholder {
+.contact-editor-row input::placeholder {
   color: var(--text-dim, #6f7684);
 }
-.contact-editor-row > input:focus {
+.contact-editor-row input:focus,
+.contact-editor-row select:focus {
   outline: none;
   border-color: var(--accent, #7c9cff);
 }
+.contact-source-row > label:first-child {
+  flex: 0 1 42%;
+}
+.contact-channel-row > label:first-child {
+  flex: 1.4 1 0;
+}
+.contact-passport-meta,
+.contact-passport-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.contact-passport-meta span,
+.contact-channel {
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--text-dim, #9aa4b2);
+  font-size: 11px;
+}
+.contact-channel.allowed {
+  border-color: rgba(80, 200, 140, 0.55);
+  color: #8be1b5;
+}
+.contact-channel.unknown {
+  border-color: rgba(245, 183, 70, 0.55);
+  color: #ffd183;
+}
+.contact-channel.blocked {
+  border-color: rgba(255, 107, 107, 0.55);
+  color: #ff9f9f;
+}
 .contact-editor-actions {
   display: flex;
+  align-items: center;
+  gap: 10px;
   justify-content: flex-end;
+}
+.contact-editor-actions > span {
+  color: var(--text-dim, #9aa4b2);
+  font-size: 11px;
+}
+.pipeline-contact {
+  display: grid;
+  gap: 4px;
+  margin: 9px 0;
+  padding: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: rgba(10, 14, 20, 0.32);
+}
+.pipeline-contact > strong {
+  color: var(--text);
+  font-size: 12px;
+}
+.pipeline-contact > span {
+  color: var(--text-dim, #9aa4b2);
+  font-size: 11px;
+}
+.pipeline-contact-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
 }
 .modal-scrim {
   position: fixed;

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { LeadStatus, LeadSurface } from "@/lib/core/types";
+import { contactabilityPassport } from "@/lib/contacts/contactability";
 import { statusColor } from "@/lib/design/tokens";
 import { apiGet, apiPatch } from "./ui";
 
@@ -233,6 +234,7 @@ export function Pipeline({
                 </div>
                 {colLeads.map((lead) => {
                   const next = NEXT_MOVE[lead.status];
+                  const contactability = contactabilityPassport(lead.contact);
                   const openOnMap = () => {
                     window.dispatchEvent(
                       new CustomEvent("forleads:open-lead", {
@@ -264,6 +266,22 @@ export function Pipeline({
                         {lead.address}
                       </button>
                       <div className="km">{lead.locality ?? "Neighborhood pending"}</div>
+                      <div className="pipeline-contact">
+                        <strong>{lead.contact?.name ?? "No known contact"}</strong>
+                        <span>{contactability.source}</span>
+                        <div className="pipeline-contact-channels">
+                          {contactability.channels
+                            .filter((entry) => entry.state !== "missing")
+                            .map((entry) => (
+                              <span className={`contact-channel ${entry.state}`} key={entry.channel}>
+                                {entry.label}: {entry.state === "allowed" ? "allowed" : entry.state === "blocked" ? "blocked" : "verify"}
+                              </span>
+                            ))}
+                          {contactability.summary === "missing" ? (
+                            <span className="contact-channel missing">No channel</span>
+                          ) : null}
+                        </div>
+                      </div>
                       <div className="kvalue">{next.value}</div>
                       <div className="kmeta">{next.detail}</div>
                       <div className="kactions">
