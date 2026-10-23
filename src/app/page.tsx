@@ -23,15 +23,15 @@ type View = "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline";
 
 // `label` renders under the icon; `title` keeps the full name for tooltips
 // and for stable test selectors.
-// Labels walk the agent's day in order: scout a property, approve the
-// prepared work, let follow-up run, track deals, wire tools, see the recap.
+// Labels match the v2 IA: Map / Farm / Approvals / Automations / Settings / Reports.
+// `title` stays the stable test selector (Playwright uses title="Loop Studio" etc).
 const NAV: { key: View; icon: React.ReactNode; label: string; title: string }[] = [
-  { key: "map", icon: <MapIcon />, label: "Prospect", title: "Map (home)" },
+  { key: "map", icon: <MapIcon />, label: "Map", title: "Map (home)" },
   { key: "inbox", icon: <InboxIcon />, label: "Approvals", title: "Action Inbox" },
-  { key: "loops", icon: <LoopIcon />, label: "Autopilot", title: "Loop Studio" },
-  { key: "pipeline", icon: <ColumnsIcon />, label: "Deals", title: "Pipeline" },
-  { key: "connectors", icon: <PlugIcon />, label: "Connect", title: "Connector Hub" },
-  { key: "report", icon: <ChartIcon />, label: "Recap", title: "Weekly Report" },
+  { key: "loops", icon: <LoopIcon />, label: "Automations", title: "Loop Studio" },
+  { key: "pipeline", icon: <ColumnsIcon />, label: "Farm", title: "Pipeline" },
+  { key: "connectors", icon: <PlugIcon />, label: "Settings", title: "Connector Hub" },
+  { key: "report", icon: <ChartIcon />, label: "Reports", title: "Weekly Report" },
 ];
 
 export default function Page() {
