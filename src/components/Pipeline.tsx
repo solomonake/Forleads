@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { LeadStatus, LeadSurface } from "@/lib/core/types";
 import { contactabilityPassport } from "@/lib/contacts/contactability";
 import { statusColor } from "@/lib/design/tokens";
+import { FarmTable } from "./FarmTable";
 import { apiGet, apiPatch } from "./ui";
 
 const COLUMNS: { status: LeadStatus; label: string }[] = [
@@ -71,11 +72,15 @@ export function Pipeline({
   const [leads, setLeads] = useState<LeadSurface[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ lead: LeadSurface; prior: LeadSurface["status"] } | null>(null);
+  const [surface, setSurface] = useState<"table" | "board">("table");
 
-  useEffect(() => {
+  const loadLeads = () =>
     apiGet<{ leads: LeadSurface[] }>("/api/leads")
       .then((d) => setLeads(d.leads))
       .catch(() => setNotice("Couldn't load leads right now — reload to try again."));
+
+  useEffect(() => {
+    void loadLeads();
   }, []);
 
   const setStatus = async (lead: LeadSurface, status: LeadSurface["status"]) => {
@@ -114,10 +119,32 @@ export function Pipeline({
 
   return (
     <div className="panel">
-      <h1>Deals</h1>
+      <h1>Farm</h1>
       <div className="sub">
-        Every property you&apos;re working, in the stage it&apos;s actually in — and what&apos;s
-        blocking it from moving. Start your day where the money is stuck.
+        Which properties deserve time today. Board view for stage; the table is the work
+        surface. Forleads does not replace your CRM — it ranks the farm and writes back after
+        you approve.
+      </div>
+
+      <div className="farm-tabs" role="tablist" aria-label="Farm views">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={surface === "table"}
+          className={surface === "table" ? "on" : ""}
+          onClick={() => setSurface("table")}
+        >
+          Table
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={surface === "board"}
+          className={surface === "board" ? "on" : ""}
+          onClick={() => setSurface("board")}
+        >
+          Board
+        </button>
       </div>
 
       <div className="pipeline-hero">
@@ -190,7 +217,25 @@ export function Pipeline({
         </div>
       </div>
 
-      {leads.length === 0 ? (
+      {surface === "table" ? (
+        <FarmTable
+          leads={leads}
+          onImported={loadLeads}
+          onOpenLead={(lead) => {
+            window.dispatchEvent(
+              new CustomEvent("forleads:open-lead", {
+                detail: {
+                  address: lead.address,
+                  locality: lead.locality,
+                  lng: lead.lng,
+                  lat: lead.lat,
+                },
+              }),
+            );
+            onNavigate("map");
+          }}
+        />
+      ) : leads.length === 0 ? (
         <div className="empty-guide">
           <div className="empty-step">
             <div className="empty-step-num">1</div>

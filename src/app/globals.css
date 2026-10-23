@@ -1860,6 +1860,68 @@ button {
   border-radius: var(--r-md);
   padding: 16px 18px;
 }
+.farm-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 12px 0 16px;
+}
+.farm-tabs button {
+  padding: 8px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--hairline);
+  color: var(--text-2);
+  font-size: 13px;
+}
+.farm-tabs button.on {
+  background: var(--elevated);
+  color: var(--text);
+  border-color: var(--hairline-strong);
+}
+.farm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.farm-search,
+.farm-status {
+  background: var(--elevated);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.farm-search { min-width: 220px; flex: 1; }
+.farm-empty { color: var(--text-2); font-size: 13px; }
+.farm-scroll { overflow: auto; }
+.farm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.farm-table th,
+.farm-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.farm-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.farm-addr {
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+}
+.farm-addr:hover { color: var(--signal); }
+
 .kanban {
   display: grid;
   grid-auto-flow: column;

@@ -114,6 +114,7 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
 
   // Pipeline: the card's address clicks through to the lead on the map.
   await page.locator('nav button[title="Pipeline"]').click();
+  await page.getByRole("tab", { name: "Board" }).click();
   const cardLink = page.locator(".kcard .ka-link").first();
   await expect(cardLink).toBeVisible({ timeout: 30_000 });
   await cardLink.click();
@@ -149,7 +150,7 @@ test("weekly report renders with actionable next moves", async ({ page }) => {
   await sessionReady;
   await page.locator('nav button[title="Weekly Report"]').click();
   await expect(
-    page.getByRole("heading", { name: "Weekly Recap" })
+    page.getByRole("heading", { name: "Reports" })
   ).toBeVisible({ timeout: COLD_API_TIMEOUT });
 });
 
