@@ -31,9 +31,16 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("signed-out visitor who picks an address gets a persistent sign-in panel", async ({ page }) => {
+  const geocodeCalls: string[] = [];
+  page.on("request", (r) => {
+    if (new URL(r.url()).pathname === "/api/geocode") geocodeCalls.push(r.url());
+  });
   await hydrated(page);
   const lead = await pickAddress(page);
   expect((await lead).status()).toBe(401);
+  // One debounced lookup for the typed text; picking it costs nothing more (G3).
+  await page.waitForTimeout(1_000);
+  expect(geocodeCalls).toHaveLength(1);
 
   const rail = page.locator("#lead.open");
   const gate = rail.getByRole("region", { name: "Research needs a Forleads workspace" });

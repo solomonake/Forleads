@@ -21,7 +21,7 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
     (response) => response.url().includes("/api/geocode?q=12"),
     { timeout: COLD_API_TIMEOUT },
   );
-  await search.fill("12");
+  await search.fill("12 Oak Street");
   expect((await geocodeReady).ok()).toBe(true);
   const firstSuggestion = page.locator("#suggest .sug").first();
   await expect(firstSuggestion).toBeVisible();

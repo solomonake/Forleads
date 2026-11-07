@@ -18,7 +18,10 @@ export interface GeoResult {
 export interface GeocodeProvider {
   readonly name: string;
   readonly mode: "mock" | "live";
+  /** As-you-type suggestions. Must be a provider that allows typeahead. */
   autocomplete(query: string, limit?: number): Promise<GeoResult[]>;
+  /** One explicit lookup (the user pressed Enter with nothing suggested). */
+  resolve(query: string): Promise<GeoResult | null>;
   reverse(lng: number, lat: number): Promise<GeoResult | null>;
 }
 

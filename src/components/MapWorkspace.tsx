@@ -29,6 +29,8 @@ import {
   readPendingAddress,
   savePendingAddress,
 } from "@/lib/map/pendingAddress";
+import { Typeahead } from "@/lib/geocode/typeahead";
+import { normalizeGeocodeQuery, MIN_GEOCODE_QUERY } from "@/lib/geocode/query";
 
 // Toast model: success path is a green pill; failure path is a red, actionable
 // pill that exposes the server's request id (so the user can paste it in a
@@ -110,7 +112,7 @@ export function MapWorkspace({
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [activeSuggest, setActiveSuggest] = useState(0);
   const [searchState, setSearchState] = useState<
-    "idle" | "loading" | "empty" | "error"
+    "idle" | "loading" | "empty" | "error" | "limited" | "resolving"
   >("idle");
   const [lead, setLead] = useState<LeadSurface | null>(null);
   const [summary, setSummary] = useState<ReduceSummary | null>(null);
@@ -193,38 +195,26 @@ export function MapWorkspace({
   }, []);
 
   // ---- Geocode autocomplete ----------------------------------------------
+  // Typeahead decides when /api/geocode is called: after a 350 ms pause, from
+  // 3 characters, capped per minute, never again for a picked suggestion.
+  const typeaheadRef = useRef<Typeahead | null>(null);
+  if (typeaheadRef.current === null && typeof window !== "undefined") {
+    typeaheadRef.current = new Typeahead({
+      fetchSuggestions: async (q, signal) => {
+        const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`, { signal });
+        if (!res.ok) throw new Error(`geocode ${res.status}`);
+        return ((await res.json()) as { results: GeoResult[] }).results;
+      },
+      onState: (state) => {
+        setSuggest(state.results);
+        setActiveSuggest(0);
+        setSearchState(state.status === "ready" ? "idle" : state.status);
+      },
+    });
+  }
+  useEffect(() => () => typeaheadRef.current?.dispose(), []);
   useEffect(() => {
-    let active = true;
-    const normalized = query.trim();
-    if (normalized.length < 2) {
-      setSuggest([]);
-      setSearchState("idle");
-      return () => {
-        active = false;
-      };
-    }
-    setSearchState("loading");
-    const t = setTimeout(async () => {
-      try {
-        const d = await apiGet<{ results: GeoResult[] }>(
-          `/api/geocode?q=${encodeURIComponent(query)}`
-        );
-        if (active) {
-          setSuggest(d.results);
-          setActiveSuggest(0);
-          setSearchState(d.results.length > 0 ? "idle" : "empty");
-        }
-      } catch {
-        if (active) {
-          setSuggest([]);
-          setSearchState("error");
-        }
-      }
-    }, 120);
-    return () => {
-      active = false;
-      clearTimeout(t);
-    };
+    typeaheadRef.current?.input(query);
   }, [query]);
 
   // ⌘K focus
@@ -269,6 +259,7 @@ export function MapWorkspace({
   // ---- The magic loop -----------------------------------------------------
   const goTo = useCallback(
     async (target: GeoResult) => {
+      typeaheadRef.current?.select(target.address);
       setQuery(target.address);
       setSuggestOpen(false);
       setAuthNeeded(null);
@@ -368,6 +359,22 @@ export function MapWorkspace({
     [makeBeacon, pulseToast, reduceMotion]
   );
 
+  // Enter with nothing suggested: one explicit lookup (Nominatim in production).
+  const resolveTyped = useCallback(async () => {
+    const q = normalizeGeocodeQuery(query);
+    if (q.length < MIN_GEOCODE_QUERY) return;
+    setSearchState("resolving");
+    try {
+      const d = await apiGet<{ result: GeoResult | null }>(
+        `/api/geocode?q=${encodeURIComponent(q)}&resolve=1`
+      );
+      if (d.result) void goTo(d.result);
+      else setSearchState("empty");
+    } catch (error) {
+      setSearchState(error instanceof ApiError && error.status === 429 ? "limited" : "error");
+    }
+  }, [goTo, query]);
+
   // Resume an address picked before the Google sign-in round trip. Signed in:
   // run the scout pass. Still signed out (cancelled or failed sign-in): show
   // the same sign-in panel on that address instead of dropping it.
@@ -387,6 +394,7 @@ export function MapWorkspace({
           void goTo(pending);
           return;
         }
+        typeaheadRef.current?.select(pending.address);
         setQuery(pending.address);
         setLead({
           id: "pending",
@@ -675,6 +683,7 @@ export function MapWorkspace({
                 setActiveSuggest((i) => (i - 1 + suggest.length) % suggest.length);
               }
               if (e.key === "Enter" && suggest[activeSuggest]) void goTo(suggest[activeSuggest]);
+              else if (e.key === "Enter" && searchState === "empty") void resolveTyped();
               if (e.key === "Escape") setSuggestOpen(false);
             }}
           />
@@ -693,13 +702,22 @@ export function MapWorkspace({
           )}
           {searchState === "empty" && (
             <div className="suggest-state">
-              No address matches. Try a street, city, and country.
+              No suggestions. Add the city and country, or press Enter to look up this exact
+              address.
             </div>
           )}
           {searchState === "error" && (
             <div className="suggest-state error">
               Address search is unavailable. Check your connection and retry.
             </div>
+          )}
+          {searchState === "limited" && (
+            <div className="suggest-state">
+              That&apos;s a lot of searches in a minute. Pause a moment, then keep typing.
+            </div>
+          )}
+          {searchState === "resolving" && (
+            <div className="suggest-state">Looking up that exact address…</div>
           )}
           {suggest.map((p, i) => (
             <div

@@ -198,7 +198,7 @@ Send me: the address you tried, a screenshot of the Lead Rail + a draft, and you
 |---|---|
 | Run locally, $0 | nothing (mock) |
 | Live Claude reasoning | `FORLEADS_AGENT_MODE=live`, `ANTHROPIC_API_KEY` |
-| Real geocoding | `FORLEADS_GEOCODER=photon-nominatim`, `PHOTON_URL`, `NOMINATIM_URL` |
+| Real geocoding | Production default `FORLEADS_GEOCODER=photon` (public Photon for suggestions, public Nominatim for single lookups; `nominatim` is an alias). Self-hosted: `FORLEADS_GEOCODER=photon-nominatim`, `PHOTON_URL`, `NOMINATIM_URL` |
 | Real OSM facts | `FORLEADS_PROPERTY_PROVIDER=osm` |
 | Real street imagery | `FORLEADS_IMAGERY_PROVIDER=mapillary`, `MAPILLARY_TOKEN` |
 | Agent-owned property photos | `OPERATOR_PROPERTY_MEDIA_URL` or `FIELD_PHOTO_MANIFEST_URL` pointing to a JSON/CSV manifest with image URL, address or coordinates, captured date, and rights/license |

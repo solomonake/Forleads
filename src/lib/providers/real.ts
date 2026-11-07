@@ -441,71 +441,115 @@ function firstString(record: Record<string, unknown>, keys: string[]): string | 
   return undefined;
 }
 
-// ---- Public Nominatim (zero self-hosting; ~1 req/sec fair-use) --------------
-// For solo testing and small workloads. For scale, switch to PhotonNominatim
-// pointed at self-hosted endpoints (FORLEADS_GEOCODER=photon-nominatim).
+// ---- Geocoding ----------------------------------------------------------------
+// Usage policies, checked 2026-11-07:
+// - Public Nominatim (operations.osmfoundation.org/policies/nominatim): no
+//   search-as-you-type ("you must not implement such a service on the client
+//   side"), an absolute maximum of 1 request/second, results must be cached,
+//   and requests must carry a User-Agent or Referer identifying the app.
+// - Public Photon (photon.komoot.io): a search-as-you-type service; "You can
+//   use the API for your project, but please be fair - extensive usage will be
+//   throttled." No published rate limit or availability guarantee.
+// So as-you-type suggestions go to Photon, and Nominatim only ever sees a
+// single explicit lookup (Enter with no suggestion), serialized to ≤1 req/s.
+// /api/geocode adds the server cache and per-IP limits on top.
 
-export class PublicNominatimGeocodeProvider implements GeocodeProvider {
-  readonly name = "nominatim";
-  readonly mode = "live" as const;
-  // Default to the OSM-hosted Nominatim. Fair-use requires a real User-Agent +
-  // capping QPS — fine for one human typing in a search box.
-  constructor(private baseUrl = "https://nominatim.openstreetmap.org") {}
+/** Identifies the app to OSM services. App name and URL only, no personal contact. */
+export const GEOCODER_HEADERS = {
+  "User-Agent": "Forleads/1.0 (real-estate CRM; +https://forleads.vercel.app)",
+  Referer: "https://forleads.vercel.app/",
+  "Accept-Language": "en",
+} as const;
 
-  async autocomplete(query: string, limit = 6): Promise<GeoResult[]> {
-    const url = `${this.baseUrl}/search?q=${encodeURIComponent(query)}&format=jsonv2&addressdetails=1&limit=${limit}`;
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Forleads/1.0 (real-estate CRM; +https://forleads.vercel.app)",
-        "Accept-Language": "en",
-      },
+export class GeocoderUnavailableError extends Error {
+  constructor(provider: string, status: number) {
+    super(`${provider} returned HTTP ${status}`);
+    this.name = "GeocoderUnavailableError";
+  }
+}
+
+function dedupeGeoResults(results: GeoResult[]): GeoResult[] {
+  return Array.from(
+    new Map(
+      results.map((result) => [
+        [
+          result.address.toLowerCase(),
+          result.locality?.toLowerCase() ?? "",
+          result.lng.toFixed(6),
+          result.lat.toFixed(6),
+        ].join("|"),
+        result,
+      ]),
+    ).values(),
+  );
+}
+
+/** Serializes calls so they start at least `intervalMs` apart (per instance). */
+export class MinIntervalGate {
+  private last = 0;
+  private chain: Promise<unknown> = Promise.resolve();
+  constructor(
+    private intervalMs: number,
+    private now: () => number = Date.now,
+    private sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  ) {}
+
+  run<T>(task: () => Promise<T>): Promise<T> {
+    const next = this.chain.then(async () => {
+      const wait = this.last + this.intervalMs - this.now();
+      if (wait > 0) await this.sleep(wait);
+      this.last = this.now();
+      return task();
     });
-    if (!res.ok) return [];
+    this.chain = next.catch(() => undefined);
+    return next;
+  }
+}
+
+// One gate per server instance for every public-Nominatim call.
+const nominatimGate = new MinIntervalGate(1100);
+
+/** Public OSM Nominatim. Single lookups only; never wire it to keystrokes. */
+export class PublicNominatimGeocodeProvider {
+  readonly name = "nominatim";
+  constructor(
+    private baseUrl = "https://nominatim.openstreetmap.org",
+    private gate: MinIntervalGate = nominatimGate,
+  ) {}
+
+  async search(query: string, limit = 1): Promise<GeoResult[]> {
+    const url = `${this.baseUrl}/search?q=${encodeURIComponent(query)}&format=jsonv2&addressdetails=1&limit=${limit}`;
+    const res = await this.gate.run(() => fetch(url, { headers: GEOCODER_HEADERS }));
+    if (!res.ok) throw new GeocoderUnavailableError(this.name, res.status);
     const data = (await res.json()) as Array<{
       lon: string;
       lat: string;
       display_name: string;
       address?: Record<string, string>;
     }>;
-    const results = data.map((r) => {
-      const a = r.address ?? {};
-      const headline =
-        [a.house_number, a.road].filter(Boolean).join(" ") ||
-        r.display_name.split(",")[0] ||
-        r.display_name;
-      const locality = [a.city ?? a.town ?? a.village, a.state, a.country]
-        .filter(Boolean)
-        .join(", ");
-      return {
-        address: headline,
-        locality,
-        lng: parseFloat(r.lon),
-        lat: parseFloat(r.lat),
-      };
-    });
-    return Array.from(
-      new Map(
-        results.map((result) => [
-          [
-            result.address.toLowerCase(),
-            result.locality?.toLowerCase() ?? "",
-            result.lng.toFixed(6),
-            result.lat.toFixed(6),
-          ].join("|"),
-          result,
-        ]),
-      ).values(),
+    return dedupeGeoResults(
+      data.map((r) => {
+        const a = r.address ?? {};
+        const headline =
+          [a.house_number, a.road].filter(Boolean).join(" ") ||
+          r.display_name.split(",")[0] ||
+          r.display_name;
+        const locality = [a.city ?? a.town ?? a.village, a.state, a.country]
+          .filter(Boolean)
+          .join(", ");
+        return {
+          address: headline,
+          locality,
+          lng: parseFloat(r.lon),
+          lat: parseFloat(r.lat),
+        };
+      }),
     );
   }
 
   async reverse(lng: number, lat: number): Promise<GeoResult | null> {
     const url = `${this.baseUrl}/reverse?lon=${lng}&lat=${lat}&format=jsonv2`;
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Forleads/1.0 (real-estate CRM; +https://forleads.vercel.app)",
-        "Accept-Language": "en",
-      },
-    });
+    const res = await this.gate.run(() => fetch(url, { headers: GEOCODER_HEADERS }));
     if (!res.ok) return null;
     const data = (await res.json()) as { display_name?: string; address?: Record<string, string> };
     if (!data.display_name) return null;
@@ -518,47 +562,89 @@ export class PublicNominatimGeocodeProvider implements GeocodeProvider {
   }
 }
 
+interface PhotonFeature {
+  geometry: { coordinates: [number, number] };
+  properties: Record<string, string | undefined>;
+}
+
+/** Photon /api client: typeahead suggestions from an OSM-backed index. */
+export async function photonSuggest(baseUrl: string, query: string, limit: number): Promise<GeoResult[]> {
+  const url = `${baseUrl.replace(/\/$/, "")}/api?q=${encodeURIComponent(query)}&limit=${limit}&lang=en`;
+  const res = await fetch(url, { headers: GEOCODER_HEADERS });
+  if (!res.ok) throw new GeocoderUnavailableError("photon", res.status);
+  const data = (await res.json()) as { features?: PhotonFeature[] };
+  return dedupeGeoResults(
+    (data.features ?? [])
+      .filter((f) => Array.isArray(f.geometry?.coordinates))
+      .map((f) => {
+        const p = f.properties ?? {};
+        const street = [p.housenumber, p.street].filter(Boolean).join(" ");
+        const address = (p.housenumber && p.street ? street : p.name ?? street) || "Unnamed place";
+        const place = p.city ?? p.town ?? p.village ?? p.district ?? p.county;
+        return {
+          address,
+          locality: [place, p.state, p.country].filter((part) => part && part !== address).join(", "),
+          lng: f.geometry.coordinates[0],
+          lat: f.geometry.coordinates[1],
+        };
+      }),
+  );
+}
+
+/**
+ * Production default: public Photon for suggestions, public Nominatim for a
+ * single explicit resolve. Both are OSM data, credited on the map.
+ */
+export class PublicGeocodeProvider implements GeocodeProvider {
+  readonly name = "photon";
+  readonly mode = "live" as const;
+  private nominatim: PublicNominatimGeocodeProvider;
+  constructor(
+    private photonUrl = "https://photon.komoot.io",
+    nominatimUrl = "https://nominatim.openstreetmap.org",
+  ) {
+    this.nominatim = new PublicNominatimGeocodeProvider(nominatimUrl);
+  }
+
+  autocomplete(query: string, limit = 6): Promise<GeoResult[]> {
+    return photonSuggest(this.photonUrl, query, limit);
+  }
+
+  async resolve(query: string): Promise<GeoResult | null> {
+    return (await this.nominatim.search(query, 1))[0] ?? null;
+  }
+
+  reverse(lng: number, lat: number): Promise<GeoResult | null> {
+    return this.nominatim.reverse(lng, lat);
+  }
+}
+
 // ---- Photon + Nominatim geocoding (self-hosted) -----------------------------
+// Operator-run instances: no public fair-use limits apply, but the same
+// identifying headers are sent.
 
 export class PhotonNominatimGeocodeProvider implements GeocodeProvider {
   readonly name = "photon-nominatim";
   readonly mode = "live" as const;
+  private nominatim: PublicNominatimGeocodeProvider;
   constructor(
     private photonUrl: string,
-    private nominatimUrl: string
-  ) {}
-
-  async autocomplete(query: string, limit = 6): Promise<GeoResult[]> {
-    const url = `${this.photonUrl}/api?q=${encodeURIComponent(query)}&limit=${limit}`;
-    const res = await fetch(url, { headers: { "User-Agent": "Forleads/1.0" } });
-    if (!res.ok) return [];
-    const data = (await res.json()) as {
-      features?: { geometry: { coordinates: [number, number] }; properties: Record<string, string> }[];
-    };
-    return (data.features ?? []).map((f) => {
-      const p = f.properties;
-      const parts = [p.name, p.street, p.city, p.country].filter(Boolean);
-      return {
-        address: p.name ?? parts[0] ?? "Unknown",
-        locality: [p.city, p.country].filter(Boolean).join(", "),
-        lng: f.geometry.coordinates[0],
-        lat: f.geometry.coordinates[1],
-      };
-    });
+    nominatimUrl: string
+  ) {
+    // Self-hosted: no shared 1 req/s gate.
+    this.nominatim = new PublicNominatimGeocodeProvider(nominatimUrl, new MinIntervalGate(0));
   }
 
-  async reverse(lng: number, lat: number): Promise<GeoResult | null> {
-    const url = `${this.nominatimUrl}/reverse?lon=${lng}&lat=${lat}&format=jsonv2`;
-    const res = await fetch(url, { headers: { "User-Agent": "Forleads/1.0" } });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { display_name?: string; address?: Record<string, string> };
-    if (!data.display_name) return null;
-    return {
-      address: data.display_name.split(",").slice(0, 2).join(",").trim(),
-      locality: data.address?.city ?? data.address?.town,
-      lng,
-      lat,
-    };
+  autocomplete(query: string, limit = 6): Promise<GeoResult[]> {
+    return photonSuggest(this.photonUrl, query, limit);
+  }
+
+  async resolve(query: string): Promise<GeoResult | null> {
+    return (await this.nominatim.search(query, 1))[0] ?? null;
+  }
+
+  reverse(lng: number, lat: number): Promise<GeoResult | null> {
+    return this.nominatim.reverse(lng, lat);
   }
 }
 
