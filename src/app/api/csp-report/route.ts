@@ -6,6 +6,9 @@
 // Unauthenticated by nature (browsers send these without cookies), so the
 // body is capped, the route is rate limited per IP, and only the directive
 // and origin/path of the blocked resource are logged, never query strings.
+//
+// agent-doctor: public-endpoint (browsers send CSP reports without credentials;
+// it writes no tenant data, only a rate-limited log line)
 import { NextRequest, NextResponse } from "next/server";
 import { log, withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
