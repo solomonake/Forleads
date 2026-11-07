@@ -23,6 +23,7 @@ import {
   SATELLITE_LAYER_ID,
   withSatelliteLayer,
 } from "@/lib/map/basemap";
+import { attachBasemapErrorHandling } from "@/lib/map/basemapErrors";
 
 // Toast model: success path is a green pill; failure path is a red, actionable
 // pill that exposes the server's request id (so the user can paste it in a
@@ -137,6 +138,26 @@ export function MapWorkspace({
         transformStyle: withSatelliteLayer,
       });
       mapRef.current = map;
+      const container = mapDiv.current;
+      container.dataset.basemap = "loading";
+      attachBasemapErrorHandling(map, {
+        onStatus: (status) => {
+          container.dataset.basemap = status;
+        },
+        onAerialForced: () => setSat(true),
+        onNotice: (notice) => {
+          if (cancelled) return;
+          if (notice.sticky) {
+            setToast({ kind: "err", text: notice.text, retry: notice.retry });
+            return;
+          }
+          // Brief tile notices never displace a toast already on screen.
+          setToast((current) => current ?? { kind: "err", text: notice.text });
+          setTimeout(() => {
+            setToast((current) => (current?.text === notice.text ? null : current));
+          }, 5000);
+        },
+      });
     })().catch((error) => {
       if (!cancelled) {
         setToast({

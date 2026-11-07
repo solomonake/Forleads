@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  AERIAL_BENEATH_LABELS,
   BASEMAP_STYLE_URL,
   MAP_CUSTOM_ATTRIBUTION,
   SATELLITE_LAYER_ID,
   SATELLITE_SOURCE,
+  fallbackBasemapStyle,
   withSatelliteLayer,
 } from "./basemap";
 
@@ -59,5 +61,49 @@ describe("basemap", () => {
 
   it("credits the street imagery the style does not carry", () => {
     expect(MAP_CUSTOM_ATTRIBUTION).toContain("Mapillary");
+  });
+
+  it("keeps the aerial layer on top by default and can slot it beneath the labels", () => {
+    expect(AERIAL_BENEATH_LABELS).toBe(false);
+    const labelled: Style = {
+      ...fetchedStyle(),
+      layers: [
+        ...fetchedStyle().layers,
+        { id: "place", type: "symbol", source: "openmaptiles", "source-layer": "place" },
+        { id: "poi", type: "symbol", source: "openmaptiles", "source-layer": "poi" },
+      ],
+    };
+    const onTop = withSatelliteLayer(undefined, labelled);
+    expect(onTop.layers.map((layer) => layer.id)).toEqual([
+      "background",
+      "water",
+      "place",
+      "poi",
+      SATELLITE_LAYER_ID,
+    ]);
+    const hybrid = withSatelliteLayer(undefined, labelled, true);
+    expect(hybrid.layers.map((layer) => layer.id)).toEqual([
+      "background",
+      "water",
+      SATELLITE_LAYER_ID,
+      "place",
+      "poi",
+    ]);
+    // A style with no labels puts it on top either way.
+    expect(withSatelliteLayer(undefined, fetchedStyle(), true).layers.at(-1)?.id).toBe(SATELLITE_LAYER_ID);
+  });
+
+  it("falls back to an inline, network-free style that shows aerial imagery", () => {
+    const style = fallbackBasemapStyle();
+    expect(style.version).toBe(8);
+    expect(Object.keys(style.sources)).toEqual([SATELLITE_LAYER_ID]);
+    expect(style.layers.map((layer) => layer.id)).toEqual(["background", SATELLITE_LAYER_ID]);
+    expect(style.layers.at(-1)).toMatchObject({ layout: { visibility: "visible" } });
+    // No labels, so no glyph or sprite requests that could also fail.
+    expect(style.glyphs).toBeUndefined();
+    expect(style.sprite).toBeUndefined();
+    expect(style.layers.some((layer) => layer.type === "symbol")).toBe(false);
+    // Each call is a fresh object MapLibre may keep.
+    expect(fallbackBasemapStyle()).not.toBe(style);
   });
 });
