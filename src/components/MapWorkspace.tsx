@@ -17,6 +17,12 @@ import type { GeoResult } from "@/lib/providers/types";
 import { cardFreshness } from "@/lib/evidence/freshness";
 import { apiGet, apiPost, ApiError, ConfidenceLegend, GradeChip } from "./ui";
 import { CrosshairIcon, SatelliteIcon, SendIcon } from "./icons";
+import {
+  BASEMAP_STYLE_URL,
+  MAP_CUSTOM_ATTRIBUTION,
+  SATELLITE_LAYER_ID,
+  withSatelliteLayer,
+} from "@/lib/map/basemap";
 
 // Toast model: success path is a green pill; failure path is a red, actionable
 // pill that exposes the server's request id (so the user can paste it in a
@@ -122,41 +128,13 @@ export function MapWorkspace({
         container: mapDiv.current,
         center: [10, 30],
         zoom: 2.2,
-        // Tiles top out at z19; without a cap the map renders blank "data not
-        // yet available" squares when the operator zooms past the imagery.
+        // Esri imagery tops out at z19; without a cap the aerial layer renders
+        // blank "data not yet available" squares past it.
         maxZoom: 19.4,
         pitch: 0,
-        attributionControl: { compact: true },
-        style: {
-          version: 8,
-          sources: {
-            carto: {
-              type: "raster",
-              tileSize: 256,
-              maxzoom: 19,
-              tiles: [
-                "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-                "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-                "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-              ],
-              attribution:
-                "© OpenStreetMap · © CARTO · Imagery © Esri · Street © Mapillary (CC-BY-SA)",
-            },
-            sat: {
-              type: "raster",
-              tileSize: 256,
-              maxzoom: 19,
-              tiles: [
-                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-              ],
-              attribution: "Imagery © Esri",
-            },
-          },
-          layers: [
-            { id: "carto", type: "raster", source: "carto" },
-            { id: "sat", type: "raster", source: "sat", layout: { visibility: "none" } },
-          ],
-        },
+        attributionControl: { compact: true, customAttribution: MAP_CUSTOM_ATTRIBUTION },
+        style: BASEMAP_STYLE_URL,
+        transformStyle: withSatelliteLayer,
       });
       mapRef.current = map;
     })().catch((error) => {
@@ -661,9 +639,12 @@ export function MapWorkspace({
           onClick={() => {
             const map = mapRef.current;
             if (!map) return;
+            // The basemap style loads over the network; until it has, there is
+            // no aerial layer to flip, so leave the toggle state unchanged.
+            if (!map.getLayer(SATELLITE_LAYER_ID)) return;
             const next = !sat;
             setSat(next);
-            map.setLayoutProperty("sat", "visibility", next ? "visible" : "none");
+            map.setLayoutProperty(SATELLITE_LAYER_ID, "visibility", next ? "visible" : "none");
           }}
         >
           <SatelliteIcon />
