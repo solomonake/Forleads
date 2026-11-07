@@ -30,6 +30,7 @@
     "agent:check": "node scripts/agent-check.mjs",
     "demo:record": "node scripts/record-pr-demo.mjs",
     "demo:e2e": "playwright test",
+    "smoke:map": "playwright test -c playwright.smoke.config.ts",
     "setup:env": "node scripts/setup-env.mjs",
     "env:link": "node scripts/env-link.mjs",
     "env:pull": "node scripts/env-pull.mjs",
