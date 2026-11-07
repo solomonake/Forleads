@@ -2664,3 +2664,22 @@ button {
     display: none;
   }
 }
+
+/* The checklist and its chip sit right of the map tools column (aerial,
+   recenter) so they never cover it; on phones the tools are hidden. */
+.getstart,
+.getstart-chip {
+  left: 76px;
+}
+.getstart {
+  width: min(360px, calc(100% - 94px));
+}
+@media (max-width: 720px) {
+  .getstart,
+  .getstart-chip {
+    left: 18px;
+  }
+  .getstart {
+    width: min(360px, calc(100% - 36px));
+  }
+}
