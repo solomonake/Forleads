@@ -24,6 +24,11 @@ import {
   withSatelliteLayer,
 } from "@/lib/map/basemap";
 import { attachBasemapErrorHandling } from "@/lib/map/basemapErrors";
+import {
+  clearPendingAddress,
+  readPendingAddress,
+  savePendingAddress,
+} from "@/lib/map/pendingAddress";
 
 // Toast model: success path is a green pill; failure path is a red, actionable
 // pill that exposes the server's request id (so the user can paste it in a
@@ -86,9 +91,14 @@ const SAMPLE_SEARCHES = [
 export function MapWorkspace({
   onOpenTrace,
   onNavigate,
+  showLaunchpad = true,
+  onLeadOpenChange,
 }: {
   onOpenTrace: (ref: string) => void;
   onNavigate: (view: "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline") => void;
+  /** False while another onboarding surface (the setup checklist) is open. */
+  showLaunchpad?: boolean;
+  onLeadOpenChange?: (open: boolean) => void;
 }) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const beaconRef = useRef<MapLibreMarker | null>(null);
@@ -117,6 +127,14 @@ export function MapWorkspace({
   const [draft, setDraft] = useState<Artifact | null>(null);
   const [sat, setSat] = useState(false);
   const [toast, setToast] = useState<ToastValue | null>(null);
+  // Set when the scout pass needs a session (POST /api/lead → 401). The rail
+  // stays open on the chosen address and explains how to continue.
+  const [authNeeded, setAuthNeeded] = useState<GeoResult | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  useEffect(() => {
+    onLeadOpenChange?.(leadOpen);
+  }, [leadOpen, onLeadOpenChange]);
 
   // ---- Map init -----------------------------------------------------------
   useEffect(() => {
@@ -138,6 +156,7 @@ export function MapWorkspace({
         transformStyle: withSatelliteLayer,
       });
       mapRef.current = map;
+      setMapReady(true);
       const container = mapDiv.current;
       container.dataset.basemap = "loading";
       attachBasemapErrorHandling(map, {
@@ -252,6 +271,7 @@ export function MapWorkspace({
     async (target: GeoResult) => {
       setQuery(target.address);
       setSuggestOpen(false);
+      setAuthNeeded(null);
       setLeadOpen(true);
       setWorking(true);
       setCards([]);
@@ -323,28 +343,81 @@ export function MapWorkspace({
         const message = error instanceof Error ? error.message : "The scout pass paused.";
         setWorking(false);
         makeBeacon(target.lng, target.lat, false);
-        setLead(null); // clear the optimistic placeholder so the UI isn't stuck
-        setLeadOpen(false);
         const requestId = error instanceof ApiError ? error.requestId : undefined;
         const status = error instanceof ApiError ? error.status : 0;
         const auth = status === 401 || /authentication required|unauthor/i.test(message);
         if (auth) {
-          setToast({ kind: "err", text: "Sign in to research this address" });
-          setTimeout(() => setToast(null), 3500);
-        } else {
-          setToast({
-            kind: "err",
-            text: `Couldn't load this address — ${message}`,
-            requestId,
-            retry: () => goTo(target),
-          });
-          // Failure toast sticks until the user clicks Retry or dismisses
-          // (auto-hide hides the retry CTA before they can use it).
+          // Keep the rail open on this address and say what to do next. The
+          // choice is remembered for this tab so it resumes after sign-in.
+          savePendingAddress(target);
+          setAuthNeeded(target);
+          return;
         }
+        setLead(null); // clear the optimistic placeholder so the UI isn't stuck
+        setLeadOpen(false);
+        // Failure toast sticks until the user clicks Retry or dismisses
+        // (auto-hide hides the retry CTA before they can use it).
+        setToast({
+          kind: "err",
+          text: `Couldn't load this address — ${message}`,
+          requestId,
+          retry: () => goTo(target),
+        });
       }
     },
     [makeBeacon, pulseToast, reduceMotion]
   );
+
+  // Resume an address picked before the Google sign-in round trip. Signed in:
+  // run the scout pass. Still signed out (cancelled or failed sign-in): show
+  // the same sign-in panel on that address instead of dropping it.
+  const resumeChecked = useRef(false);
+  useEffect(() => {
+    if (!mapReady || resumeChecked.current) return;
+    resumeChecked.current = true;
+    const pending = readPendingAddress();
+    if (!pending) return;
+    let cancelled = false;
+    apiGet<{ user: unknown | null }>("/api/auth/session")
+      .catch(() => ({ user: null }))
+      .then((session) => {
+        if (cancelled) return;
+        if (session.user) {
+          clearPendingAddress();
+          void goTo(pending);
+          return;
+        }
+        setQuery(pending.address);
+        setLead({
+          id: "pending",
+          agent_id: "",
+          address: pending.address,
+          locality: pending.locality,
+          lng: pending.lng,
+          lat: pending.lat,
+          h3_index: "",
+          status: "researching",
+          first_seen_at: "",
+          last_worked_at: "",
+        });
+        setLeadOpen(true);
+        setAuthNeeded(pending);
+        makeBeacon(pending.lng, pending.lat, false);
+        mapRef.current?.jumpTo({ center: [pending.lng, pending.lat], zoom: 16.4 });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [goTo, makeBeacon, mapReady]);
+
+  const dismissAuthPanel = useCallback(() => {
+    clearPendingAddress();
+    setAuthNeeded(null);
+    setLead(null);
+    setLeadOpen(false);
+    beaconRef.current?.remove();
+    beaconRef.current = null;
+  }, []);
 
   // Other surfaces (Pipeline cards, the getting-started checklist) can ask
   // the always-mounted map to open a lead via a window event.
@@ -500,13 +573,13 @@ export function MapWorkspace({
     <>
       <div id="map" ref={mapDiv} />
 
-      {!leadOpen && (
+      {!leadOpen && showLaunchpad && (
         <div className="launchpad">
           <div className="launch-kicker">Operator launchpad</div>
-          <div className="launch-title">Type any address and Forleads should open the pipeline immediately.</div>
+          <div className="launch-title">Type an address to open its lead brief.</div>
           <div className="launch-copy">
-            This isn&apos;t a passive map. It should ground the lead, show the scout pass, ask for
-            the field signal, and tee up the next outreach without losing operator control.
+            After you sign in with Google, Forleads grounds the lead, runs the scout pass, asks
+            for the field signal, and drafts the next outreach for your approval.
           </div>
           <div className="launch-actions">
             {SAMPLE_SEARCHES.map((sample) => (
@@ -690,7 +763,9 @@ export function MapWorkspace({
           <div className="lead-addr">{lead?.address ?? "—"}</div>
           <div className="lead-sub">
             <span className="status-dot" />
-            <span>{working ? "Launching pipeline…" : "Grounded"}</span>
+            <span>
+              {authNeeded ? "Sign-in needed" : working ? "Launching pipeline…" : "Grounded"}
+            </span>
             <span className="grade-overall">
               {summary ? `overall grade ${summary.grade} · ${summary.scoutCount} scouts` : ""}
             </span>
@@ -726,7 +801,47 @@ export function MapWorkspace({
         </div>
 
         <div className="lead-body">
-          {lead && lead.id !== "pending" ? (
+          {authNeeded ? (
+            <section
+              className="auth-gate"
+              role="region"
+              aria-labelledby="auth-gate-title"
+              data-testid="auth-gate"
+            >
+              <div className="ops-kicker">Sign in to continue</div>
+              <h2 className="auth-gate-title" id="auth-gate-title">
+                Research needs a Forleads workspace
+              </h2>
+              <p className="auth-gate-copy">
+                The scout pass saves this address, its evidence and your notes to your own
+                workspace, so it runs after you sign in with Google. Nothing is researched or
+                saved until then.
+              </p>
+              <p className="auth-gate-copy">
+                We&apos;ll keep <b>{authNeeded.address}</b> selected and pick it up when you come
+                back.
+              </p>
+              <div className="auth-gate-actions">
+                <a
+                  className="minibtn primary auth-gate-cta"
+                  href="/api/auth/google/login"
+                  onClick={() => savePendingAddress(authNeeded)}
+                >
+                  <span className="g" aria-hidden="true">G</span> Continue with Google
+                </a>
+                <button type="button" className="minibtn" onClick={dismissAuthPanel}>
+                  Not now
+                </button>
+              </div>
+              <p className="auth-gate-fine">
+                Google asks for Gmail draft and Calendar access so approved follow-ups land in
+                your own account. Forleads never sends without your approval.{" "}
+                <a href="/privacy">Privacy</a>
+              </p>
+            </section>
+          ) : null}
+
+          {!authNeeded && lead && lead.id !== "pending" ? (
             <ContactEditor
               lead={lead}
               onSaved={(updated) => {
@@ -737,6 +852,7 @@ export function MapWorkspace({
             />
           ) : null}
 
+          {!authNeeded && (
           <div className="ops-strip">
             <div className="ops-kicker">Next actions</div>
             <div className="ops-title">
@@ -790,6 +906,7 @@ export function MapWorkspace({
               ))}
             </div>
           </div>
+          )}
 
           {grouped.map((group) => (
             <div key={group.key}>
@@ -866,7 +983,7 @@ export function MapWorkspace({
           )}
         </div>
 
-        <div className="lead-foot">
+        <div className="lead-foot" hidden={Boolean(authNeeded)}>
           <div className="note-box">
             <textarea
               id="lead-note"
