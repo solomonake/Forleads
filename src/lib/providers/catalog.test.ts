@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { PropertyQuery } from "./types";
 import {
   addressesMatch,
+  addressMatchesExactly,
   catalogCovers,
   catalogHazardEndpoints,
   catalogSourcesAt,
@@ -69,6 +70,18 @@ describe("catalog coverage", () => {
       .map((source) => source.id);
     expect(outside).not.toContain("oklahoma-county-sales");
     expect(outside).not.toContain("oklahoma-county-assessments");
+  });
+});
+
+describe("addressMatchesExactly (G6 assessed-value grade)", () => {
+  it("accepts the same street with only locality words added", () => {
+    expect(addressMatchesExactly("2209 COLCHESTER TER EDMOND", "2209 Colchester Ter, Edmond, OK")).toBe(true);
+    expect(addressMatchesExactly("22125 CLARKSBURG RD", "22125 Clarksburg Road, Clarksburg, MD")).toBe(true);
+  });
+  it("rejects a unit, a directional twin, or a different number", () => {
+    expect(addressMatchesExactly("2209 COLCHESTER TER UNIT 4", "2209 Colchester Ter, Edmond, OK")).toBe(false);
+    expect(addressMatchesExactly("12 MAIN ST N", "12 Main St, Springfield")).toBe(false);
+    expect(addressMatchesExactly("2208 COLCHESTER TER", "2209 Colchester Ter")).toBe(false);
   });
 });
 
