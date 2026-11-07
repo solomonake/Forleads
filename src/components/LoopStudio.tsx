@@ -290,7 +290,7 @@ export function LoopStudio({
         })}
       </div>
 
-      <h1 style={{ marginTop: 30, fontSize: 18 }}>Recent runs</h1>
+      <h2 className="panel-subhead" style={{ marginTop: 30, fontSize: 18 }}>Recent runs</h2>
       <div className="sub">
         Every manual and scheduled run is inspectable, with its planner trace.
       </div>

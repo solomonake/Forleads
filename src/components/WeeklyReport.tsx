@@ -109,7 +109,7 @@ export function WeeklyReport({ onNavigate }: { onNavigate: (view: View) => void 
         </div>
       )}
 
-      <h1 style={{ fontSize: 18 }}>What changed</h1>
+      <h2 className="panel-subhead" style={{ fontSize: 18 }}>What changed</h2>
       <div className="panel-grid" style={{ marginBottom: 22 }}>
         {report.whatChanged.length === 0 && (
           <div className="row">
@@ -127,7 +127,7 @@ export function WeeklyReport({ onNavigate }: { onNavigate: (view: View) => void 
         ))}
       </div>
 
-      <h1 style={{ fontSize: 18 }}>Recommended next moves</h1>
+      <h2 className="panel-subhead" style={{ fontSize: 18 }}>Recommended next moves</h2>
       <div className="panel-grid">
         {report.recommendations.length === 0 && (
           <div className="row">
