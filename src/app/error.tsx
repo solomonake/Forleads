@@ -2,6 +2,7 @@
 
 // App-wide error boundary: reports render errors through the tracker seam and
 // gives the visitor a way forward instead of a blank screen.
+import Link from "next/link";
 import { useEffect } from "react";
 import { reportError } from "@/lib/observability/report";
 
@@ -22,7 +23,7 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
           <button type="button" className="minibtn primary" onClick={reset}>
             Try again
           </button>{" "}
-          <a href="/">Back to the map</a>
+          <Link href="/">Back to the map</Link>
         </p>
       </div>
     </main>
