@@ -40,9 +40,15 @@ function writeFlag(key: string, on: boolean) {
 export function GettingStarted({
   view,
   onNavigate,
+  forceCompact = false,
+  onCardVisibleChange,
 }: {
   view: View;
   onNavigate: (view: View) => void;
+  /** Show only the progress chip on the map (e.g. while the lead rail is open). */
+  forceCompact?: boolean;
+  /** Reports whether the full card is on the map, so the launchpad can step aside. */
+  onCardVisibleChange?: (visible: boolean) => void;
 }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [leads, setLeads] = useState<LeadSurface[]>([]);
@@ -53,10 +59,12 @@ export function GettingStarted({
   // On work surfaces (Pipeline, Inbox, …) the full card would cover real
   // content, so it renders as the chip there unless explicitly expanded.
   const [expandedHere, setExpandedHere] = useState(false);
+  const [flagsRead, setFlagsRead] = useState(false);
 
   useEffect(() => {
     setDismissed(readFlag(DISMISS_KEY));
     setCollapsed(readFlag(COLLAPSE_KEY));
+    setFlagsRead(true);
   }, []);
 
   useEffect(() => {
@@ -179,16 +187,22 @@ export function GettingStarted({
     }
   }, [allDone, dismissed, loaded]);
 
-  if (!loaded || dismissed) return null;
+  const showCard = view === "map" ? !collapsed && !forceCompact : expandedHere;
+  // One onboarding surface at a time: while this card is on the map the
+  // launchpad hides, and it comes back when the card is minimized or dismissed.
+  const cardOnMap = flagsRead && !dismissed && view === "map" && showCard;
+  useEffect(() => {
+    if (flagsRead) onCardVisibleChange?.(cardOnMap);
+  }, [cardOnMap, flagsRead, onCardVisibleChange]);
 
-  const showCard = view === "map" ? !collapsed : expandedHere;
+  if (!loaded || dismissed) return null;
 
   if (!showCard) {
     return (
       <button
-        className="getstart-chip"
+        className={`getstart-chip${forceCompact && view === "map" ? " behind-lead" : ""}`}
         onClick={() => {
-          if (view === "map") {
+          if (view === "map" && !forceCompact) {
             setCollapsed(false);
             writeFlag(COLLAPSE_KEY, false);
           } else {

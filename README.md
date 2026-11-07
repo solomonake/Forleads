@@ -80,7 +80,7 @@ npm run agent:scorecard
 | Capability | Mock (default, $0) | Live (add env) |
 |---|---|---|
 | Map + fly-to + beacons | ✅ OpenFreeMap dark vector style + Esri aerial (keyless) | same; provider is one constant in `src/lib/map/basemap.ts` |
-| Geocode autocomplete | ✅ global gazetteer | `FORLEADS_GEOCODER=photon-nominatim` |
+| Geocode autocomplete | ✅ global gazetteer | Production default `photon`: public Photon suggests as you type, public Nominatim only resolves an Enter with no suggestion (≤1 req/s), cached 24 h and rate limited. Self-host both with `FORLEADS_GEOCODER=photon-nominatim` |
 | Property facts | ✅ deterministic OSM-style | `FORLEADS_PROPERTY_PROVIDER=osm` (Overpass) |
 | Imagery | ✅ mock vision captions | `MAPILLARY_TOKEN` |
 | Scouts/Reducer/Composer/Compliance | ✅ deterministic | `FORLEADS_AGENT_MODE=live` + `ANTHROPIC_API_KEY` |

@@ -37,6 +37,10 @@ const NAV: { key: View; icon: React.ReactNode; label: string; title: string }[] 
 export default function Page() {
   const [view, setView] = useState<View>("map");
   const [traceRef, setTraceRef] = useState<string | null>(null);
+  const [leadOpen, setLeadOpen] = useState(false);
+  // Assume the setup checklist will show until it reports otherwise, so the
+  // launchpad never flashes in and straight back out on first paint.
+  const [checklistOnMap, setChecklistOnMap] = useState(true);
 
   return (
     <div id="app">
@@ -61,14 +65,24 @@ export default function Page() {
 
       <div id="stage">
         {/* The map mounts once and stays alive; panels overlay it. The map is the home screen. */}
-        <MapWorkspace onOpenTrace={setTraceRef} onNavigate={setView} />
+        <MapWorkspace
+          onOpenTrace={setTraceRef}
+          onNavigate={setView}
+          showLaunchpad={!checklistOnMap}
+          onLeadOpenChange={setLeadOpen}
+        />
         <AccountBar />
         {view === "inbox" && <ActionInbox onOpenTrace={setTraceRef} onNavigate={setView} />}
         {view === "loops" && <LoopStudio onNavigate={setView} />}
         {view === "pipeline" && <Pipeline onNavigate={setView} />}
         {view === "connectors" && <ConnectorHub />}
         {view === "report" && <WeeklyReport onNavigate={setView} />}
-        <GettingStarted view={view} onNavigate={setView} />
+        <GettingStarted
+          view={view}
+          onNavigate={setView}
+          forceCompact={view === "map" && leadOpen}
+          onCardVisibleChange={setChecklistOnMap}
+        />
       </div>
 
       <AgentTraceDrawer traceRef={traceRef} onClose={() => setTraceRef(null)} />

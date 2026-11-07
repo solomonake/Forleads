@@ -111,10 +111,43 @@ export default function PrivacyPage() {
 
         <h2>Third-party services</h2>
         <p>
-          Forleads uses mapping and public-data providers (OpenStreetMap, OpenFreeMap, Esri) to render
-          maps and gather publicly available property evidence. Address queries are sent to these
-          services to provide the product; no account data is shared with them.
+          Forleads sends only what each service needs to provide the product. No account data
+          (your name, email, or Google tokens) is shared with the mapping, search, or public-data
+          services below.
         </p>
+        <ul>
+          <li>
+            <b>Anthropic (Claude).</b> When AI drafting is on, a lead&apos;s address and graded
+            evidence, the field notes you write, your name, and the recipient&apos;s name or label
+            are sent to Anthropic&apos;s API to classify the situation and write the draft you
+            review. For seller updates, the showing-feedback themes and the prepared base draft,
+            which includes your email address and the seller&apos;s, are sent too.
+          </li>
+          <li>
+            <b>Address search: Photon (komoot) and Nominatim (OpenStreetMap Foundation).</b> What
+            you type in the search box is sent to Photon for suggestions. If you press Enter with
+            no suggestion, that one query is sent to Nominatim. Queries go from our servers, not
+            your browser, and are cached.
+          </li>
+          <li>
+            <b>Maps: OpenFreeMap and Esri.</b> Your browser loads map tiles from OpenFreeMap
+            (street map) and Esri (aerial imagery), which see the map area you view and your IP
+            address.
+          </li>
+          <li>
+            <b>Street imagery: Mapillary.</b> The coordinates of a lead you research are sent to
+            Mapillary to find nearby street-level photos, and your browser loads those photos
+            from Mapillary&apos;s image servers.
+          </li>
+          <li>
+            <b>Public property data.</b> A lead&apos;s address and coordinates are sent to
+            OpenStreetMap (Overpass) and to the government open-data portals that cover that
+            area to look up public property, sales, and hazard records.
+          </li>
+          <li>
+            <b>Hosting: Vercel and Supabase</b>, as described under Storage and security.
+          </li>
+        </ul>
 
         <h2>Changes</h2>
         <p>

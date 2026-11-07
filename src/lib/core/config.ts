@@ -60,7 +60,10 @@ export const config = {
       : production && env("GOOGLE_MAPS_API_KEY")
         ? "google-street-view"
         : "mock"),
-  geocoder: env("FORLEADS_GEOCODER") ?? (production ? "nominatim" : "mock"),
+  // "photon": public Photon suggestions + single Nominatim lookups (see
+  // providers/real.ts for the usage policies). "nominatim" is accepted as an
+  // alias; "photon-nominatim" is self-hosted.
+  geocoder: env("FORLEADS_GEOCODER") ?? (production ? "photon" : "mock"),
   googleMapsKey: env("GOOGLE_MAPS_API_KEY"),
 
   supabase: {
