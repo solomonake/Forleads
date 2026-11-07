@@ -10,9 +10,9 @@ type View = "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline";
 // "open:action_inbox?filter=blocked", "edit:loop-stale-revival"). Route each
 // to the surface where the operator can actually act on it.
 function recommendationCta(action: string): { label: string; view: View } {
-  if (action.startsWith("connect:")) return { label: "Open Connector Hub", view: "connectors" };
-  if (action.startsWith("open:action_inbox")) return { label: "Open Action Inbox", view: "inbox" };
-  if (action.startsWith("edit:loop")) return { label: "Open Loop Studio", view: "loops" };
+  if (action.startsWith("connect:")) return { label: "Open Connect", view: "connectors" };
+  if (action.startsWith("open:action_inbox")) return { label: "Open Approvals", view: "inbox" };
+  if (action.startsWith("edit:loop")) return { label: "Open Autopilot", view: "loops" };
   return { label: "Open the map", view: "map" };
 }
 
@@ -109,7 +109,7 @@ export function WeeklyReport({ onNavigate }: { onNavigate: (view: View) => void 
         </div>
       )}
 
-      <h1 style={{ fontSize: 18 }}>What changed</h1>
+      <h2 className="panel-subhead" style={{ fontSize: 18 }}>What changed</h2>
       <div className="panel-grid" style={{ marginBottom: 22 }}>
         {report.whatChanged.length === 0 && (
           <div className="row">
@@ -127,7 +127,7 @@ export function WeeklyReport({ onNavigate }: { onNavigate: (view: View) => void 
         ))}
       </div>
 
-      <h1 style={{ fontSize: 18 }}>Recommended next moves</h1>
+      <h2 className="panel-subhead" style={{ fontSize: 18 }}>Recommended next moves</h2>
       <div className="panel-grid">
         {report.recommendations.length === 0 && (
           <div className="row">

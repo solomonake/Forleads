@@ -13,8 +13,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // No maximumScale/userScalable: pinch zoom must stay available (WCAG 1.4.4).
   themeColor: "#0A0E14",
 };
 

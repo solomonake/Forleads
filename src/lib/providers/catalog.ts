@@ -533,6 +533,22 @@ export function addressesMatch(candidate: string, target: string): boolean {
   return targetStreet.slice(0, shared).join(" ") === candidateStreet.slice(0, shared).join(" ");
 }
 
+/**
+ * Stricter than addressesMatch: the register row is this address and nothing
+ * more specific. Every word of the requested street is there, in order, and
+ * any extra words on the register row (city, state, ZIP) already appear in the
+ * requested address. "2209 COLCHESTER TER EDMOND" is exact for
+ * "2209 Colchester Ter, Edmond, OK"; "2209 COLCHESTER TER UNIT 4" is not.
+ */
+export function addressMatchesExactly(candidate: string, requested: string): boolean {
+  const street = normalizeAddress(streetPart(requested)).split(" ").filter(Boolean);
+  const row = normalizeAddress(candidate).split(" ").filter(Boolean);
+  if (street.length < 2 || row.length < street.length) return false;
+  if (street.some((word, i) => row[i] !== word)) return false;
+  const known = new Set(normalizeAddress(requested).split(" "));
+  return row.slice(street.length).every((word) => known.has(word));
+}
+
 async function fetchJson(url: string): Promise<unknown> {
   const res = await fetch(url, {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),

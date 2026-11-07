@@ -116,13 +116,13 @@ export function LoopStudio({
     });
   }, [load]);
 
+  const runLead = leads.find((candidate) => candidate.id === selectedLeadId);
+
   const runNow = async (loopId: string) => {
-    const lead = leads.find((candidate) => candidate.id === selectedLeadId);
-    if (!lead) {
-      setMsg("Open the Map and ground a lead first, then loops have something to act on.");
-      setTimeout(() => setMsg(null), 3500);
-      return;
-    }
+    const lead = runLead;
+    // Run now is disabled without a lead; this guard is belt and braces.
+    if (!lead) return;
+    setMsg(null);
     try {
       const d = await apiPost<{ run: LoopRun }>("/api/loops", { loopId, leadId: lead.id });
       setLastRun({
@@ -134,8 +134,8 @@ export function LoopStudio({
       });
       await load();
     } catch (e) {
+      // Stays until the next action: a 4 s flash was easy to miss.
       setMsg(e instanceof Error ? e.message : String(e));
-      setTimeout(() => setMsg(null), 4000);
     }
   };
 
@@ -153,7 +153,7 @@ export function LoopStudio({
         <div><b>3</b><span>Prepare: the bump or response draft, task, or calendar hold</span></div>
         <div><b>4</b><span>Human gate: you approve in the Action Inbox, then hit send in Gmail</span></div>
       </div>
-      {msg && <div className="row" style={{ marginBottom: 14 }}>{msg}</div>}
+      {msg && <div className="row" role="alert" style={{ marginBottom: 14 }}>{msg}</div>}
       {awaySummary && (
         <div className="run-banner" role="status">
           <div>
@@ -218,6 +218,22 @@ export function LoopStudio({
           ))}
         </select>
       </label>
+      {!runLead && defs.length > 0 && (
+        <div className="row run-needs-lead" id="run-needs-lead" data-testid="run-needs-lead" style={{ marginBottom: 14 }}>
+          <div className="rmeta" style={{ marginTop: 0 }}>
+            {leads.length === 0
+              ? "Run now needs a grounded lead. Ground an address on the map first, then come back to run a loop on it."
+              : "Run now needs a lead. Pick one in the list above."}
+          </div>
+          {leads.length === 0 && (
+            <div className="ractions">
+              <button className="minibtn primary" onClick={() => onNavigate("map")}>
+                Ground an address
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="panel-grid">
         {defs.map((d) => {
@@ -281,7 +297,12 @@ export function LoopStudio({
                 <button className="minibtn" onClick={() => setSelected(open ? null : d.id)}>
                   {open ? "Hide builder" : "View builder"}
                 </button>
-                <button className="minibtn primary" onClick={() => runNow(d.id)}>
+                <button
+                  className="minibtn primary"
+                  onClick={() => runNow(d.id)}
+                  disabled={!runLead}
+                  aria-describedby={runLead ? undefined : "run-needs-lead"}
+                >
                   Run now
                 </button>
               </div>
@@ -290,7 +311,7 @@ export function LoopStudio({
         })}
       </div>
 
-      <h1 style={{ marginTop: 30, fontSize: 18 }}>Recent runs</h1>
+      <h2 className="panel-subhead" style={{ marginTop: 30, fontSize: 18 }}>Recent runs</h2>
       <div className="sub">
         Every manual and scheduled run is inspectable, with its planner trace.
       </div>
