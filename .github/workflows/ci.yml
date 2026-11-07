@@ -49,7 +49,7 @@ jobs:
       - name: Install browser
         run: npx playwright install --with-deps chromium
 
-      - name: Map smoke on the production build
+      - name: Production-build smokes (map, signed-out flow, axe)
         run: npm run smoke:map
 
       - name: Product flows and accessibility smoke

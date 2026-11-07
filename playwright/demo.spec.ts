@@ -113,7 +113,7 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
   await page.waitForTimeout(1200);
 
   // Pipeline: the card's address clicks through to the lead on the map.
-  await page.locator('nav button[title="Pipeline"]').click();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Deals", exact: true }).click();
   const cardLink = page.locator(".kcard .ka-link").first();
   await expect(cardLink).toBeVisible({ timeout: 30_000 });
   await cardLink.click();
