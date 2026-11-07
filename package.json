@@ -12,7 +12,7 @@
     "lint": "node scripts/lint.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage && node scripts/coverage-summary.mjs",
     "test:watch": "vitest",
     "os:scan": "node scripts/agent-doctor.mjs",
     "research:scan": "node scripts/os-scan.mjs",
