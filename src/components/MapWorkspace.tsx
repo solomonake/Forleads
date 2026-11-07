@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type maplibregl from "maplibre-gl";
+import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import type {
   Artifact,
   Confidence,
@@ -27,46 +27,30 @@ type ToastValue =
 import { ReviewTray } from "./ReviewTray";
 import { ContactEditor } from "./ContactEditor";
 
-type MapLibreModule = typeof maplibregl;
+type MapLibreModule = typeof import("maplibre-gl");
 
-declare global {
-  interface Window {
-    maplibregl?: MapLibreModule;
-  }
-}
-
-const MAPLIBRE_VERSION = "4.7.1";
-const MAPLIBRE_JS = `/vendor/maplibre/maplibre-gl.js?v=${MAPLIBRE_VERSION}`;
-const MAPLIBRE_CSS = `/vendor/maplibre/maplibre-gl.css?v=${MAPLIBRE_VERSION}`;
+// MapLibre v6 is ESM-only. The main module is bundled by Next through this
+// dynamic import (kept out of the initial chunk); its CSS is imported in
+// app/layout.tsx. The web worker is resolved at runtime from import.meta.url,
+// which a bundler cannot follow, so scripts/sync-maplibre-assets.mjs copies
+// the worker module to public/vendor/maplibre and we point MapLibre at it.
+const MAPLIBRE_WORKER_PATH = "/vendor/maplibre/maplibre-gl-worker.mjs";
 let maplibreLoad: Promise<MapLibreModule> | null = null;
 
 function loadMapLibre(): Promise<MapLibreModule> {
   if (typeof window === "undefined") return Promise.reject(new Error("MapLibre requires a browser"));
-  if (window.maplibregl) return Promise.resolve(window.maplibregl);
-
-  if (!document.querySelector('link[data-forleads-maplibre="css"]')) {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = MAPLIBRE_CSS;
-    link.dataset.forleadsMaplibre = "css";
-    document.head.appendChild(link);
-  }
-
   if (maplibreLoad) return maplibreLoad;
 
-  maplibreLoad = new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[data-forleads-maplibre="js"]');
-    const script = existing ?? document.createElement("script");
-    script.src = MAPLIBRE_JS;
-    script.async = true;
-    script.dataset.forleadsMaplibre = "js";
-    script.onload = () => {
-      if (window.maplibregl) resolve(window.maplibregl);
-      else reject(new Error("MapLibre loaded without exposing window.maplibregl"));
-    };
-    script.onerror = () => reject(new Error("MapLibre failed to load"));
-    if (!existing) document.head.appendChild(script);
-  });
+  maplibreLoad = import("maplibre-gl")
+    .then((ml) => {
+      // Version query busts caches whenever the installed MapLibre changes.
+      ml.setWorkerUrl(`${MAPLIBRE_WORKER_PATH}?v=${ml.getVersion()}`);
+      return ml;
+    })
+    .catch((error: unknown) => {
+      maplibreLoad = null;
+      throw error instanceof Error ? error : new Error("MapLibre failed to load");
+    });
 
   return maplibreLoad;
 }
@@ -99,9 +83,9 @@ export function MapWorkspace({
   onOpenTrace: (ref: string) => void;
   onNavigate: (view: "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline") => void;
 }) {
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const beaconRef = useRef<maplibregl.Marker | null>(null);
-  const mlRef = useRef<typeof maplibregl | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const beaconRef = useRef<MapLibreMarker | null>(null);
+  const mlRef = useRef<MapLibreModule | null>(null);
   const mapDiv = useRef<HTMLDivElement | null>(null);
 
   const [query, setQuery] = useState("");
