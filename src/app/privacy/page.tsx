@@ -111,7 +111,7 @@ export default function PrivacyPage() {
 
         <h2>Third-party services</h2>
         <p>
-          Forleads uses mapping and public-data providers (OpenStreetMap, CARTO, Esri) to render
+          Forleads uses mapping and public-data providers (OpenStreetMap, OpenFreeMap, Esri) to render
           maps and gather publicly available property evidence. Address queries are sent to these
           services to provide the product; no account data is shared with them.
         </p>

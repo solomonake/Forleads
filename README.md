@@ -79,7 +79,7 @@ npm run agent:scorecard
 
 | Capability | Mock (default, $0) | Live (add env) |
 |---|---|---|
-| Map + fly-to + beacons | ✅ CARTO dark raster + Esri aerial | same (Protomaps PMTiles in prod) |
+| Map + fly-to + beacons | ✅ OpenFreeMap dark vector style + Esri aerial (keyless) | same; provider is one constant in `src/lib/map/basemap.ts` |
 | Geocode autocomplete | ✅ global gazetteer | `FORLEADS_GEOCODER=photon-nominatim` |
 | Property facts | ✅ deterministic OSM-style | `FORLEADS_PROPERTY_PROVIDER=osm` (Overpass) |
 | Imagery | ✅ mock vision captions | `MAPILLARY_TOKEN` |
