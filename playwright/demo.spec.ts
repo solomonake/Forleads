@@ -21,7 +21,7 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
     (response) => response.url().includes("/api/geocode?q=12"),
     { timeout: COLD_API_TIMEOUT },
   );
-  await search.fill("12");
+  await search.fill("12 Oak Street");
   expect((await geocodeReady).ok()).toBe(true);
   const firstSuggestion = page.locator("#suggest .sug").first();
   await expect(firstSuggestion).toBeVisible();
@@ -105,7 +105,7 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
   await page.locator(".overlay").click({ position: { x: 8, y: 8 } });
 
   // Loop Studio: Run now produces a persistent, actionable result banner.
-  await page.locator('nav button[title="Loop Studio"]').click();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Automations", exact: true }).click();
   const runNowBtn = page.locator(".ractions .minibtn.primary", { hasText: "Run now" }).first();
   await expect(runNowBtn).toBeVisible({ timeout: 30_000 });
   await runNowBtn.click();
@@ -113,7 +113,7 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
   await page.waitForTimeout(1200);
 
   // Pipeline: the card's address clicks through to the lead on the map.
-  await page.locator('nav button[title="Pipeline"]').click();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Farm", exact: true }).click();
   await page.getByRole("tab", { name: "Board" }).click();
   const cardLink = page.locator(".kcard .ka-link").first();
   await expect(cardLink).toBeVisible({ timeout: 30_000 });
@@ -148,7 +148,7 @@ test("weekly report renders with actionable next moves", async ({ page }) => {
   );
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await sessionReady;
-  await page.locator('nav button[title="Weekly Report"]').click();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Reports", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Reports" })
   ).toBeVisible({ timeout: COLD_API_TIMEOUT });

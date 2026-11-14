@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LeadStatus, LeadSurface } from "@/lib/core/types";
 import { contactabilityPassport } from "@/lib/contacts/contactability";
 import { exportFarmCsv, filterFarmRows, parseFarmCsv, rowsFromLeads } from "@/lib/farm/csv";
 import type { GeoResult } from "@/lib/providers/types";
-import { apiGet, apiPost } from "./api";
+import { apiGet, apiPost, ApiError } from "./api";
 
 const STATUSES: Array<LeadStatus | "all"> = [
   "all",
@@ -18,7 +18,7 @@ const STATUSES: Array<LeadStatus | "all"> = [
   "dead",
 ];
 
-const IMPORT_CAP = 50;
+import { continueImport, importSummary, startImport, type ImportProgress } from "@/lib/farm/import";
 
 export function FarmTable({
   leads,
@@ -34,6 +34,51 @@ export function FarmTable({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const running = useRef(false);
+  const importUser = useRef<string | null | undefined>(undefined);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!progress || progress.retryAt <= Date.now()) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [progress]);
+  const waiting = progress ? Math.max(0, Math.ceil((progress.retryAt - now) / 1000)) : 0;
+
+  const verifyAccount = async () => {
+    const session = await apiGet<{ user: { sub: string } | null }>("/api/auth/session");
+    const user = session.user?.sub ?? null;
+    if (importUser.current === undefined) importUser.current = user;
+    if (importUser.current !== user) {
+      throw new ApiError("The signed-in account changed. Return to the original account or discard remaining rows.", 401, undefined, "import_account_changed");
+    }
+  };
+  const runImport = async (state: ImportProgress) => {
+    await verifyAccount();
+    const result = await continueImport(state, {
+      geocode: async (address) => (await apiGet<{ results: GeoResult[] }>(`/api/geocode?q=${encodeURIComponent(address)}`)).results,
+      create: async (row) => {
+        try { await verifyAccount(); }
+        catch (error) {
+          if (error instanceof ApiError && error.code === "import_account_changed") throw error;
+          throw new ApiError("Couldn't verify the current account. Resume to check again.", 401);
+        }
+        return apiPost("/api/lead", { ...row, expectedUserSub: importUser.current ?? undefined });
+      },
+      refresh: onImported,
+      now: Date.now,
+    });
+    setProgress(result);
+    setNotice(importSummary(result));
+    setNow(Date.now());
+  };
+  const resume = async () => {
+    if (!progress || running.current || Date.now() < progress.retryAt) return;
+    running.current = true; setBusy(true);
+    try { await runImport(progress); }
+    catch (error) { setNotice(`${importSummary(progress)} ${error instanceof Error ? error.message : "Couldn't verify the current account. Try Resume again."}`); }
+    finally { running.current = false; setBusy(false); }
+  };
 
   const rows = useMemo(
     () => filterFarmRows(rowsFromLeads(leads), { q, status }),
@@ -51,51 +96,17 @@ export function FarmTable({
   };
 
   const importFile = async (file: File) => {
-    setBusy(true);
-    setNotice(null);
+    if (running.current || (progress && progress.next < progress.rows.length)) return;
+    running.current = true; setBusy(true); setNotice(null);
     try {
-      const parsed = parseFarmCsv(await file.text());
-      const slice = parsed.rows.slice(0, IMPORT_CAP);
-      let created = 0;
-      let failed = 0;
-      let unresolved = 0;
-      for (const row of slice) {
-        let lng = row.lng;
-        let lat = row.lat;
-        let locality = row.locality;
-        let address = row.address;
-        if (lng === undefined || lat === undefined) {
-          const geo = await apiGet<{ results: GeoResult[] }>(
-            `/api/geocode?q=${encodeURIComponent(row.address)}`,
-          );
-          const hit = geo.results[0];
-          if (!hit) {
-            unresolved += 1;
-            continue;
-          }
-          lng = hit.lng;
-          lat = hit.lat;
-          locality = locality ?? hit.locality;
-          address = hit.address || address;
-        }
-        try {
-          await apiPost("/api/lead", { address, lng, lat, locality });
-          created += 1;
-        } catch {
-          failed += 1;
-        }
-      }
-      const extra = parsed.rows.length > IMPORT_CAP
-        ? ` Stopped at ${IMPORT_CAP} rows.`
-        : "";
-      setNotice(
-        `Imported ${created}. Unresolved ${unresolved}. Failed ${failed}. Skipped blanks ${parsed.skipped}.${extra}`,
-      );
-      await onImported();
+      importUser.current = undefined;
+      const state = startImport(parseFarmCsv(await file.text()));
+      setProgress(state);
+      await runImport(state);
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Couldn't read that CSV.");
     } finally {
-      setBusy(false);
+      running.current = false; setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
     }
   };
@@ -125,7 +136,7 @@ export function FarmTable({
         <button className="minibtn" type="button" onClick={download} disabled={rows.length === 0}>
           Export CSV
         </button>
-        <button className="minibtn" type="button" onClick={() => fileRef.current?.click()} disabled={busy}>
+        <button className="minibtn" type="button" onClick={() => fileRef.current?.click()} disabled={busy || Boolean(progress && progress.next < progress.rows.length)}>
           {busy ? "Importing…" : "Import CSV"}
         </button>
         <input
@@ -139,7 +150,18 @@ export function FarmTable({
           }}
         />
       </div>
-      {notice && <div className="row notice-row">{notice}</div>}
+      {notice && <div className="row notice-row" role="status">{notice}</div>}
+      {progress && progress.next < progress.rows.length && (
+        <div className="farm-toolbar">
+          <button className="minibtn" type="button" disabled={busy || waiting > 0} onClick={() => void resume()}>
+            {waiting > 0 ? `Resume in ${waiting}s` : "Resume remaining rows"}
+          </button>
+          <button className="minibtn" type="button" disabled={busy} onClick={() => {
+            importUser.current = undefined; setProgress(null); setNotice("Remaining rows discarded. Previously saved rows stay in the farm.");
+          }}>Discard remaining rows</button>
+          <span>Progress stays here until the page is reloaded. Resume never repeats confirmed or uncertain saves.</span>
+        </div>
+      )}
       {rows.length === 0 ? (
         <p className="farm-empty">No rows. Ground an address on the map or import a CSV with an address column.</p>
       ) : (

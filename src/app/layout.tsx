@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Analytics } from "@vercel/analytics/next";
+// MapLibre's stylesheet first so the .maplibregl-* overrides in globals.css win.
+import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,8 +13,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // No maximumScale/userScalable: pinch zoom must stay available (WCAG 1.4.4).
   themeColor: "#0A0E14",
 };
 

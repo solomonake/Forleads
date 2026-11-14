@@ -73,8 +73,12 @@ function plannedAdapter(input: Omit<DataSourceReadiness, "status" | "detail"> & 
 }
 
 export function dataSourceReadiness(): DataSourceReadiness[] {
-  const nominatimLive = config.geocoder === "nominatim" || config.geocoder === "photon-nominatim";
-  const photonLive = config.geocoder === "photon-nominatim";
+  // "photon" (default) and its alias "nominatim" use the public services;
+  // "photon-nominatim" points both at self-hosted instances.
+  const selfHostedGeocoder = config.geocoder === "photon-nominatim";
+  const publicGeocoder = config.geocoder === "photon" || config.geocoder === "nominatim";
+  const nominatimLive = publicGeocoder || selfHostedGeocoder;
+  const photonLive = publicGeocoder || selfHostedGeocoder;
   const mapillaryLive = config.imageryProvider === "mapillary" && configured("MAPILLARY_TOKEN");
   const googleStreetViewLive =
     config.imageryProvider === "google-street-view" && configured("GOOGLE_MAPS_API_KEY");
@@ -144,19 +148,27 @@ export function dataSourceReadiness(): DataSourceReadiness[] {
       id: "nominatim",
       label: "Nominatim geocoding",
       live: nominatimLive,
-      unlocks: "Address search and reverse geocoding with OSM attribution and strict fair-use limits.",
+      unlocks: "Exact-address lookup when you press Enter and nothing was suggested.",
       configuredBy: ["Public Nominatim", "self-hosted Nominatim"],
-      detail: nominatimLive ? `Live via ${config.geocoder}.` : "Configure Nominatim or a self-hosted endpoint before relying on address search.",
+      detail: selfHostedGeocoder
+        ? "Live via your self-hosted Nominatim for exact-address lookups."
+        : publicGeocoder
+          ? "Live for single exact-address lookups only: never as you type (the OSMF usage policy forbids that), at most 1 request per second, results cached for 24 hours."
+          : "Configure Nominatim or a self-hosted endpoint before relying on address search.",
       env: ["FORLEADS_GEOCODER", "NOMINATIM_URL"],
     }),
     source({
       id: "photon",
       label: "Photon autocomplete",
       live: photonLive,
-      unlocks: "Fast search-as-you-type when backed by a self-hosted Photon index.",
-      configuredBy: ["Photon", "self-hosted OSM extracts"],
-      detail: photonLive ? "Photon is configured for autocomplete." : "Planned for self-hosted autocomplete; public Nominatim must not be used as client autocomplete.",
-      env: ["FORLEADS_GEOCODER", "PHOTON_URL"],
+      unlocks: "Address suggestions as you type, from an OpenStreetMap index.",
+      configuredBy: ["Public Photon (komoot)", "self-hosted Photon"],
+      detail: selfHostedGeocoder
+        ? "Live via your self-hosted Photon index for suggestions as you type."
+        : publicGeocoder
+          ? "Live via the public Photon service (photon.komoot.io) under its fair-use terms: suggestions after a 350 ms pause from 3 characters, cached for 24 hours and capped per visitor. No uptime guarantee; self-host Photon for scale."
+          : "Configure Photon (public or self-hosted) for address suggestions as you type.",
+      env: ["FORLEADS_GEOCODER", "PUBLIC_PHOTON_URL", "PHOTON_URL"],
     }),
     source({
       id: "openaddresses",

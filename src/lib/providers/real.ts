@@ -8,6 +8,7 @@ import type { EvidenceCard } from "@/lib/core/types";
 import { log } from "@/lib/observability";
 import {
   addressesMatch,
+  addressMatchesExactly,
   catalogCovers,
   catalogHazardEndpoints,
   queryCatalogDistress,
@@ -441,71 +442,115 @@ function firstString(record: Record<string, unknown>, keys: string[]): string | 
   return undefined;
 }
 
-// ---- Public Nominatim (zero self-hosting; ~1 req/sec fair-use) --------------
-// For solo testing and small workloads. For scale, switch to PhotonNominatim
-// pointed at self-hosted endpoints (FORLEADS_GEOCODER=photon-nominatim).
+// ---- Geocoding ----------------------------------------------------------------
+// Usage policies, checked 2026-11-07:
+// - Public Nominatim (operations.osmfoundation.org/policies/nominatim): no
+//   search-as-you-type ("you must not implement such a service on the client
+//   side"), an absolute maximum of 1 request/second, results must be cached,
+//   and requests must carry a User-Agent or Referer identifying the app.
+// - Public Photon (photon.komoot.io): a search-as-you-type service; "You can
+//   use the API for your project, but please be fair - extensive usage will be
+//   throttled." No published rate limit or availability guarantee.
+// So as-you-type suggestions go to Photon, and Nominatim only ever sees a
+// single explicit lookup (Enter with no suggestion), serialized to ≤1 req/s.
+// /api/geocode adds the server cache and per-IP limits on top.
 
-export class PublicNominatimGeocodeProvider implements GeocodeProvider {
-  readonly name = "nominatim";
-  readonly mode = "live" as const;
-  // Default to the OSM-hosted Nominatim. Fair-use requires a real User-Agent +
-  // capping QPS — fine for one human typing in a search box.
-  constructor(private baseUrl = "https://nominatim.openstreetmap.org") {}
+/** Identifies the app to OSM services. App name and URL only, no personal contact. */
+export const GEOCODER_HEADERS = {
+  "User-Agent": "Forleads/1.0 (real-estate CRM; +https://forleads.vercel.app)",
+  Referer: "https://forleads.vercel.app/",
+  "Accept-Language": "en",
+} as const;
 
-  async autocomplete(query: string, limit = 6): Promise<GeoResult[]> {
-    const url = `${this.baseUrl}/search?q=${encodeURIComponent(query)}&format=jsonv2&addressdetails=1&limit=${limit}`;
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Forleads/1.0 (real-estate CRM; +https://forleads.vercel.app)",
-        "Accept-Language": "en",
-      },
+export class GeocoderUnavailableError extends Error {
+  constructor(provider: string, status: number) {
+    super(`${provider} returned HTTP ${status}`);
+    this.name = "GeocoderUnavailableError";
+  }
+}
+
+function dedupeGeoResults(results: GeoResult[]): GeoResult[] {
+  return Array.from(
+    new Map(
+      results.map((result) => [
+        [
+          result.address.toLowerCase(),
+          result.locality?.toLowerCase() ?? "",
+          result.lng.toFixed(6),
+          result.lat.toFixed(6),
+        ].join("|"),
+        result,
+      ]),
+    ).values(),
+  );
+}
+
+/** Serializes calls so they start at least `intervalMs` apart (per instance). */
+export class MinIntervalGate {
+  private last = 0;
+  private chain: Promise<unknown> = Promise.resolve();
+  constructor(
+    private intervalMs: number,
+    private now: () => number = Date.now,
+    private sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  ) {}
+
+  run<T>(task: () => Promise<T>): Promise<T> {
+    const next = this.chain.then(async () => {
+      const wait = this.last + this.intervalMs - this.now();
+      if (wait > 0) await this.sleep(wait);
+      this.last = this.now();
+      return task();
     });
-    if (!res.ok) return [];
+    this.chain = next.catch(() => undefined);
+    return next;
+  }
+}
+
+// One gate per server instance for every public-Nominatim call.
+const nominatimGate = new MinIntervalGate(1100);
+
+/** Public OSM Nominatim. Single lookups only; never wire it to keystrokes. */
+export class PublicNominatimGeocodeProvider {
+  readonly name = "nominatim";
+  constructor(
+    private baseUrl = "https://nominatim.openstreetmap.org",
+    private gate: MinIntervalGate = nominatimGate,
+  ) {}
+
+  async search(query: string, limit = 1): Promise<GeoResult[]> {
+    const url = `${this.baseUrl}/search?q=${encodeURIComponent(query)}&format=jsonv2&addressdetails=1&limit=${limit}`;
+    const res = await this.gate.run(() => fetch(url, { headers: GEOCODER_HEADERS }));
+    if (!res.ok) throw new GeocoderUnavailableError(this.name, res.status);
     const data = (await res.json()) as Array<{
       lon: string;
       lat: string;
       display_name: string;
       address?: Record<string, string>;
     }>;
-    const results = data.map((r) => {
-      const a = r.address ?? {};
-      const headline =
-        [a.house_number, a.road].filter(Boolean).join(" ") ||
-        r.display_name.split(",")[0] ||
-        r.display_name;
-      const locality = [a.city ?? a.town ?? a.village, a.state, a.country]
-        .filter(Boolean)
-        .join(", ");
-      return {
-        address: headline,
-        locality,
-        lng: parseFloat(r.lon),
-        lat: parseFloat(r.lat),
-      };
-    });
-    return Array.from(
-      new Map(
-        results.map((result) => [
-          [
-            result.address.toLowerCase(),
-            result.locality?.toLowerCase() ?? "",
-            result.lng.toFixed(6),
-            result.lat.toFixed(6),
-          ].join("|"),
-          result,
-        ]),
-      ).values(),
+    return dedupeGeoResults(
+      data.map((r) => {
+        const a = r.address ?? {};
+        const headline =
+          [a.house_number, a.road].filter(Boolean).join(" ") ||
+          r.display_name.split(",")[0] ||
+          r.display_name;
+        const locality = [a.city ?? a.town ?? a.village, a.state, a.country]
+          .filter(Boolean)
+          .join(", ");
+        return {
+          address: headline,
+          locality,
+          lng: parseFloat(r.lon),
+          lat: parseFloat(r.lat),
+        };
+      }),
     );
   }
 
   async reverse(lng: number, lat: number): Promise<GeoResult | null> {
     const url = `${this.baseUrl}/reverse?lon=${lng}&lat=${lat}&format=jsonv2`;
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Forleads/1.0 (real-estate CRM; +https://forleads.vercel.app)",
-        "Accept-Language": "en",
-      },
-    });
+    const res = await this.gate.run(() => fetch(url, { headers: GEOCODER_HEADERS }));
     if (!res.ok) return null;
     const data = (await res.json()) as { display_name?: string; address?: Record<string, string> };
     if (!data.display_name) return null;
@@ -515,54 +560,165 @@ export class PublicNominatimGeocodeProvider implements GeocodeProvider {
       lng,
       lat,
     };
+  }
+}
+
+interface PhotonFeature {
+  geometry: { coordinates: [number, number] };
+  properties: Record<string, string | undefined>;
+}
+
+/** Photon /api client: typeahead suggestions from an OSM-backed index. */
+export async function photonSuggest(baseUrl: string, query: string, limit: number): Promise<GeoResult[]> {
+  const url = `${baseUrl.replace(/\/$/, "")}/api?q=${encodeURIComponent(query)}&limit=${limit}&lang=en`;
+  const res = await fetch(url, { headers: GEOCODER_HEADERS });
+  if (!res.ok) throw new GeocoderUnavailableError("photon", res.status);
+  const data = (await res.json()) as { features?: PhotonFeature[] };
+  return dedupeGeoResults(
+    (data.features ?? [])
+      .filter((f) => Array.isArray(f.geometry?.coordinates))
+      .map((f) => {
+        const p = f.properties ?? {};
+        const street = [p.housenumber, p.street].filter(Boolean).join(" ");
+        const address = (p.housenumber && p.street ? street : p.name ?? street) || "Unnamed place";
+        const place = p.city ?? p.town ?? p.village ?? p.district ?? p.county;
+        return {
+          address,
+          locality: [place, p.state, p.country].filter((part) => part && part !== address).join(", "),
+          lng: f.geometry.coordinates[0],
+          lat: f.geometry.coordinates[1],
+        };
+      }),
+  );
+}
+
+/**
+ * Production default: public Photon for suggestions, public Nominatim for a
+ * single explicit resolve. Both are OSM data, credited on the map.
+ */
+export class PublicGeocodeProvider implements GeocodeProvider {
+  readonly name = "photon";
+  readonly mode = "live" as const;
+  private nominatim: PublicNominatimGeocodeProvider;
+  constructor(
+    private photonUrl = "https://photon.komoot.io",
+    nominatimUrl = "https://nominatim.openstreetmap.org",
+  ) {
+    this.nominatim = new PublicNominatimGeocodeProvider(nominatimUrl);
+  }
+
+  autocomplete(query: string, limit = 6): Promise<GeoResult[]> {
+    return photonSuggest(this.photonUrl, query, limit);
+  }
+
+  async resolve(query: string): Promise<GeoResult | null> {
+    return (await this.nominatim.search(query, 1))[0] ?? null;
+  }
+
+  reverse(lng: number, lat: number): Promise<GeoResult | null> {
+    return this.nominatim.reverse(lng, lat);
   }
 }
 
 // ---- Photon + Nominatim geocoding (self-hosted) -----------------------------
+// Operator-run instances: no public fair-use limits apply, but the same
+// identifying headers are sent.
 
 export class PhotonNominatimGeocodeProvider implements GeocodeProvider {
   readonly name = "photon-nominatim";
   readonly mode = "live" as const;
+  private nominatim: PublicNominatimGeocodeProvider;
   constructor(
     private photonUrl: string,
-    private nominatimUrl: string
-  ) {}
-
-  async autocomplete(query: string, limit = 6): Promise<GeoResult[]> {
-    const url = `${this.photonUrl}/api?q=${encodeURIComponent(query)}&limit=${limit}`;
-    const res = await fetch(url, { headers: { "User-Agent": "Forleads/1.0" } });
-    if (!res.ok) return [];
-    const data = (await res.json()) as {
-      features?: { geometry: { coordinates: [number, number] }; properties: Record<string, string> }[];
-    };
-    return (data.features ?? []).map((f) => {
-      const p = f.properties;
-      const parts = [p.name, p.street, p.city, p.country].filter(Boolean);
-      return {
-        address: p.name ?? parts[0] ?? "Unknown",
-        locality: [p.city, p.country].filter(Boolean).join(", "),
-        lng: f.geometry.coordinates[0],
-        lat: f.geometry.coordinates[1],
-      };
-    });
+    nominatimUrl: string
+  ) {
+    // Self-hosted: no shared 1 req/s gate.
+    this.nominatim = new PublicNominatimGeocodeProvider(nominatimUrl, new MinIntervalGate(0));
   }
 
-  async reverse(lng: number, lat: number): Promise<GeoResult | null> {
-    const url = `${this.nominatimUrl}/reverse?lon=${lng}&lat=${lat}&format=jsonv2`;
-    const res = await fetch(url, { headers: { "User-Agent": "Forleads/1.0" } });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { display_name?: string; address?: Record<string, string> };
-    if (!data.display_name) return null;
-    return {
-      address: data.display_name.split(",").slice(0, 2).join(",").trim(),
-      locality: data.address?.city ?? data.address?.town,
-      lng,
-      lat,
-    };
+  autocomplete(query: string, limit = 6): Promise<GeoResult[]> {
+    return photonSuggest(this.photonUrl, query, limit);
+  }
+
+  async resolve(query: string): Promise<GeoResult | null> {
+    return (await this.nominatim.search(query, 1))[0] ?? null;
+  }
+
+  reverse(lng: number, lat: number): Promise<GeoResult | null> {
+    return this.nominatim.reverse(lng, lat);
   }
 }
 
 // ---- OSM Overpass property facts --------------------------------------------
+
+export interface OverpassElement {
+  type?: string;
+  id?: number;
+  tags?: Record<string, string>;
+  geometry?: { lat: number; lon: number }[];
+}
+
+export interface OsmBuildingMatch {
+  element: OverpassElement;
+  /** The building outline contains the point. */
+  contains: boolean;
+  /** Metres from the point to the outline (0 when it contains the point). */
+  distanceM: number;
+}
+
+/** Link to the exact OSM object, falling back to the map at large. */
+export function osmElementUrl(element: OverpassElement): string {
+  const type = element.type === "node" || element.type === "relation" ? element.type : "way";
+  return typeof element.id === "number"
+    ? `https://www.openstreetmap.org/${type}/${element.id}`
+    : "https://www.openstreetmap.org";
+}
+
+function pointInRing(lng: number, lat: number, ring: { lat: number; lon: number }[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i]!;
+    const b = ring[j]!;
+    const crosses = a.lat > lat !== b.lat > lat;
+    if (crosses && lng < ((b.lon - a.lon) * (lat - a.lat)) / (b.lat - a.lat) + a.lon) inside = !inside;
+  }
+  return inside;
+}
+
+/** Metres from a point to a ring's edges (local equirectangular projection). */
+function distanceToRingM(lng: number, lat: number, ring: { lat: number; lon: number }[]): number {
+  const mPerDegLat = 111_320;
+  const mPerDegLng = 111_320 * Math.cos((lat * Math.PI) / 180);
+  const xy = (p: { lat: number; lon: number }) => [(p.lon - lng) * mPerDegLng, (p.lat - lat) * mPerDegLat] as const;
+  let best = Infinity;
+  for (let i = 0; i < ring.length; i++) {
+    const [ax, ay] = xy(ring[i]!);
+    const [bx, by] = xy(ring[(i + 1) % ring.length]!);
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2));
+    best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy));
+  }
+  return best;
+}
+
+/**
+ * The building way that contains the point, else the nearest one. Ways
+ * without geometry are skipped: without an outline there is no way to tell
+ * whose building it is.
+ */
+export function pickOsmBuilding(elements: OverpassElement[], lng: number, lat: number): OsmBuildingMatch | null {
+  let nearest: OsmBuildingMatch | null = null;
+  for (const element of elements) {
+    const ring = element.geometry;
+    if (!element.tags?.["building"] || !ring || ring.length < 3) continue;
+    if (pointInRing(lng, lat, ring)) return { element, contains: true, distanceM: 0 };
+    const distanceM = Math.round(distanceToRingM(lng, lat, ring));
+    if (!nearest || distanceM < nearest.distanceM) nearest = { element, contains: false, distanceM };
+  }
+  return nearest;
+}
 
 export class OSMPropertyProvider implements PropertyDataProvider {
   readonly name = "osm";
@@ -578,7 +734,9 @@ export class OSMPropertyProvider implements PropertyDataProvider {
     if (problem) return [gapCard("property", "Building facts", problem)];
 
     const radius = 40;
-    const query = `[out:json][timeout:8];(way(around:${radius},${q.lat},${q.lng})["building"];);out tags center 1;`;
+    // Every building way in the radius, with geometry, so the one that
+    // actually contains the point can be chosen (not just the first returned).
+    const query = `[out:json][timeout:8];way(around:${radius},${q.lat},${q.lng})["building"];out tags geom;`;
     try {
       const res = await fetch(this.overpassUrl, {
         method: "POST",
@@ -591,28 +749,45 @@ export class OSMPropertyProvider implements PropertyDataProvider {
         },
       });
       if (!res.ok) return this.gap("Overpass request failed");
-      const data = (await res.json()) as {
-        elements?: { tags?: Record<string, string> }[];
-      };
-      const el = data.elements?.[0];
-      const tags = el?.tags ?? {};
+      const data = (await res.json()) as { elements?: OverpassElement[] };
+      const match = pickOsmBuilding(data.elements ?? [], q.lng, q.lat);
+      if (!match) return this.gap("No building tags found at this point");
+      const { element, contains, distanceM } = match;
+      const tags = element.tags ?? {};
+      const source = { name: "OpenStreetMap", url: osmElementUrl(element) };
+      const where = contains
+        ? undefined
+        : `nearest mapped building, ${distanceM} m away`;
+      // Grading (G6): A only when the building polygon contains the geocoded
+      // point. A nearby building may be a neighbour's, so it is C and says how
+      // far away it is.
+      const reasoning = contains
+        ? "OpenStreetMap building whose outline contains this address point. Community-mapped tag."
+        : `No mapped building outline contains this address point. Taken from the nearest building, ${distanceM} m away, which may be a neighbour's. Community-mapped tag.`;
       const cards: EvidenceCard[] = [];
-      if (tags["start_date"] || tags["building:year"]) {
+      const year = tags["start_date"] ?? tags["building:year"];
+      if (year) {
         cards.push({
           scout: "property",
           claim: "Year built",
-          value: `~${tags["start_date"] ?? tags["building:year"]}`,
-          sources: [{ name: "OpenStreetMap", url: "https://openstreetmap.org" }],
-          confidence: "A",
+          value: `~${year}${where ? ` (${where})` : ""}`,
+          sources: [source],
+          confidence: contains ? "A" : "C",
+          reasoning,
         });
       }
       if (tags["building"]) {
+        const untyped = tags["building"] === "yes";
+        const use = untyped ? "Building (untyped)" : tags["building"];
         cards.push({
           scout: "property",
           claim: "Land use",
-          value: tags["building"] === "yes" ? "Building (untyped)" : tags["building"],
-          sources: [{ name: "OSM" }],
-          confidence: tags["building"] === "yes" ? "C" : "A",
+          value: `${use}${where ? ` (${where})` : ""}`,
+          sources: [source],
+          confidence: contains && !untyped ? "A" : "C",
+          reasoning: untyped
+            ? `${reasoning} The building is mapped without a type.`
+            : reasoning,
         });
       }
       if (cards.length === 0) return this.gap("No building tags found at this point");
@@ -785,6 +960,10 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
     const assessments = catalogMatches.filter((m) => m.source.kind === "assessment" && m.amount);
     if (assessments.length > 0) {
       const latest = assessments.slice().sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))[0]!;
+      // Grade per the rubric (A = official record): an official register row
+      // for exactly this address is A. A row matched only on house number and
+      // street name could be another unit or a directional twin, so it stays B.
+      const exact = addressMatchesExactly(latest.address, input.address);
       cards.push({
         scout: "market",
         claim: "Assessed value",
@@ -794,9 +973,10 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
           url: latest.source.homepage,
           as_of: latest.date ?? latest.source.verified,
         }],
-        confidence: "B",
-        reasoning:
-          "Official assessment register matched this address. Assessed value is a taxation figure, not a market price.",
+        confidence: exact ? "A" : "B",
+        reasoning: exact
+          ? "Official assessment register record for this exact address. Assessed value is a taxation figure, not a market price."
+          : `Official assessment register record "${latest.address}" matched on house number and street only, so it may be a different unit. Assessed value is a taxation figure, not a market price.`,
       });
     }
 

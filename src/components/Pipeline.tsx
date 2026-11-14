@@ -66,7 +66,9 @@ const NEXT_MOVE: Record<
 
 export function Pipeline({
   onNavigate,
+  active = true,
 }: {
+  active?: boolean;
   onNavigate: (view: "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline") => void;
 }) {
   const [leads, setLeads] = useState<LeadSurface[]>([]);
@@ -76,12 +78,12 @@ export function Pipeline({
 
   const loadLeads = () =>
     apiGet<{ leads: LeadSurface[] }>("/api/leads")
-      .then((d) => setLeads(d.leads))
-      .catch(() => setNotice("Couldn't load leads right now — reload to try again."));
+      .then((d) => { setLeads(d.leads); setNotice(null); });
 
   useEffect(() => {
-    void loadLeads();
-  }, []);
+    if (!active) return;
+    void loadLeads().catch(() => setNotice("Couldn't load leads right now. Reload to try again."));
+  }, [active]);
 
   const setStatus = async (lead: LeadSurface, status: LeadSurface["status"]) => {
     const prior = lead.status;
@@ -217,7 +219,7 @@ export function Pipeline({
         </div>
       </div>
 
-      {surface === "table" ? (
+      <div hidden={surface !== "table"}>
         <FarmTable
           leads={leads}
           onImported={loadLeads}
@@ -235,7 +237,8 @@ export function Pipeline({
             onNavigate("map");
           }}
         />
-      ) : leads.length === 0 ? (
+      </div>
+      {surface === "board" && (leads.length === 0 ? (
         <div className="empty-guide">
           <div className="empty-step">
             <div className="empty-step-num">1</div>
@@ -344,7 +347,7 @@ export function Pipeline({
             );
           })}
         </div>
-      )}
+      ))}
     </div>
   );
 }

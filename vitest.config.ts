@@ -1,7 +1,11 @@
 import { defineConfig } from "vitest/config";
 import path from "node:path";
+import { CORE_THRESHOLDS, SECURITY_CORE, WHOLE_APP_FLOOR } from "./coverage-scope.mjs";
 
 export default defineConfig({
+  // tsconfig keeps JSX for Next ("preserve"). Compile it here so coverage can
+  // parse untested .tsx files instead of dropping them from the report.
+  oxc: { jsx: { runtime: "automatic" } },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -19,25 +23,24 @@ export default defineConfig({
     maxWorkers: 1,
     coverage: {
       provider: "v8",
-      reporter: ["text", "json-summary"],
-      include: [
-        "src/lib/auth/agent.ts",
-        "src/lib/auth/session.ts",
-        "src/lib/auth/credentials.ts",
-        "src/lib/agents/compliance.ts",
-        "src/lib/evidence/**/*.ts",
-        "src/lib/connectors/idempotency.ts",
-        "src/lib/connectors/mime.ts",
-        "src/lib/validation/**/*.ts",
-        "src/lib/loops/analytics.ts",
-        "src/lib/artifacts/**/*.ts",
-      ],
-      exclude: ["src/**/*.test.ts"],
+      // scripts/coverage-summary.mjs prints whole-app and security-core lines
+      // from json-summary after the run.
+      reporter: ["text-summary", "json-summary"],
+      // Whole app (G16): every source file counts, tested or not, so the
+      // headline number is the real one. (Vitest 4 dropped `all: true`; an
+      // `include` glob is how untested files get reported now.)
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/**/*.test.ts", "src/**/*.d.ts"],
       thresholds: {
-        lines: 85,
-        functions: 85,
-        branches: 75,
-        statements: 85,
+        // Whole-app floor, set just under the level measured on 2026-11-07
+        // so CI passes today and catches a slide. Raise it as coverage grows.
+        lines: WHOLE_APP_FLOOR.lines,
+        functions: WHOLE_APP_FLOOR.functions,
+        branches: WHOLE_APP_FLOOR.branches,
+        statements: WHOLE_APP_FLOOR.statements,
+        // Security/evidence core: the original gated set, unchanged at 85/75.
+        // One glob so the core is judged in aggregate, as it was before.
+        [`{${SECURITY_CORE.join(",")}}`]: CORE_THRESHOLDS,
       },
     },
   },

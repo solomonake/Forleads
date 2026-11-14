@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type maplibregl from "maplibre-gl";
+import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import type {
   Artifact,
   Confidence,
@@ -17,6 +17,20 @@ import type { GeoResult } from "@/lib/providers/types";
 import { cardFreshness } from "@/lib/evidence/freshness";
 import { apiGet, apiPost, ApiError, ConfidenceLegend, GradeChip } from "./ui";
 import { CrosshairIcon, SatelliteIcon, SendIcon } from "./icons";
+import {
+  BASEMAP_STYLE_URL,
+  MAP_CUSTOM_ATTRIBUTION,
+  SATELLITE_LAYER_ID,
+  withSatelliteLayer,
+} from "@/lib/map/basemap";
+import { attachBasemapErrorHandling } from "@/lib/map/basemapErrors";
+import {
+  clearPendingAddress,
+  readPendingAddress,
+  savePendingAddress,
+} from "@/lib/map/pendingAddress";
+import { Typeahead } from "@/lib/geocode/typeahead";
+import { normalizeGeocodeQuery, MIN_GEOCODE_QUERY } from "@/lib/geocode/query";
 
 // Toast model: success path is a green pill; failure path is a red, actionable
 // pill that exposes the server's request id (so the user can paste it in a
@@ -27,46 +41,30 @@ type ToastValue =
 import { ReviewTray } from "./ReviewTray";
 import { ContactEditor } from "./ContactEditor";
 
-type MapLibreModule = typeof maplibregl;
+type MapLibreModule = typeof import("maplibre-gl");
 
-declare global {
-  interface Window {
-    maplibregl?: MapLibreModule;
-  }
-}
-
-const MAPLIBRE_VERSION = "4.7.1";
-const MAPLIBRE_JS = `/vendor/maplibre/maplibre-gl.js?v=${MAPLIBRE_VERSION}`;
-const MAPLIBRE_CSS = `/vendor/maplibre/maplibre-gl.css?v=${MAPLIBRE_VERSION}`;
+// MapLibre v6 is ESM-only. The main module is bundled by Next through this
+// dynamic import (kept out of the initial chunk); its CSS is imported in
+// app/layout.tsx. The web worker is resolved at runtime from import.meta.url,
+// which a bundler cannot follow, so scripts/sync-maplibre-assets.mjs copies
+// the worker module to public/vendor/maplibre and we point MapLibre at it.
+const MAPLIBRE_WORKER_PATH = "/vendor/maplibre/maplibre-gl-worker.mjs";
 let maplibreLoad: Promise<MapLibreModule> | null = null;
 
 function loadMapLibre(): Promise<MapLibreModule> {
   if (typeof window === "undefined") return Promise.reject(new Error("MapLibre requires a browser"));
-  if (window.maplibregl) return Promise.resolve(window.maplibregl);
-
-  if (!document.querySelector('link[data-forleads-maplibre="css"]')) {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = MAPLIBRE_CSS;
-    link.dataset.forleadsMaplibre = "css";
-    document.head.appendChild(link);
-  }
-
   if (maplibreLoad) return maplibreLoad;
 
-  maplibreLoad = new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[data-forleads-maplibre="js"]');
-    const script = existing ?? document.createElement("script");
-    script.src = MAPLIBRE_JS;
-    script.async = true;
-    script.dataset.forleadsMaplibre = "js";
-    script.onload = () => {
-      if (window.maplibregl) resolve(window.maplibregl);
-      else reject(new Error("MapLibre loaded without exposing window.maplibregl"));
-    };
-    script.onerror = () => reject(new Error("MapLibre failed to load"));
-    if (!existing) document.head.appendChild(script);
-  });
+  maplibreLoad = import("maplibre-gl")
+    .then((ml) => {
+      // Version query busts caches whenever the installed MapLibre changes.
+      ml.setWorkerUrl(`${MAPLIBRE_WORKER_PATH}?v=${ml.getVersion()}`);
+      return ml;
+    })
+    .catch((error: unknown) => {
+      maplibreLoad = null;
+      throw error instanceof Error ? error : new Error("MapLibre failed to load");
+    });
 
   return maplibreLoad;
 }
@@ -95,13 +93,18 @@ const SAMPLE_SEARCHES = [
 export function MapWorkspace({
   onOpenTrace,
   onNavigate,
+  showLaunchpad = true,
+  onLeadOpenChange,
 }: {
   onOpenTrace: (ref: string) => void;
   onNavigate: (view: "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline") => void;
+  /** False while another onboarding surface (the setup checklist) is open. */
+  showLaunchpad?: boolean;
+  onLeadOpenChange?: (open: boolean) => void;
 }) {
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const beaconRef = useRef<maplibregl.Marker | null>(null);
-  const mlRef = useRef<typeof maplibregl | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const beaconRef = useRef<MapLibreMarker | null>(null);
+  const mlRef = useRef<MapLibreModule | null>(null);
   const mapDiv = useRef<HTMLDivElement | null>(null);
 
   const [query, setQuery] = useState("");
@@ -109,7 +112,7 @@ export function MapWorkspace({
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [activeSuggest, setActiveSuggest] = useState(0);
   const [searchState, setSearchState] = useState<
-    "idle" | "loading" | "empty" | "error"
+    "idle" | "loading" | "empty" | "error" | "limited" | "resolving"
   >("idle");
   const [lead, setLead] = useState<LeadSurface | null>(null);
   const [summary, setSummary] = useState<ReduceSummary | null>(null);
@@ -126,6 +129,14 @@ export function MapWorkspace({
   const [draft, setDraft] = useState<Artifact | null>(null);
   const [sat, setSat] = useState(false);
   const [toast, setToast] = useState<ToastValue | null>(null);
+  // Set when the scout pass needs a session (POST /api/lead → 401). The rail
+  // stays open on the chosen address and explains how to continue.
+  const [authNeeded, setAuthNeeded] = useState<GeoResult | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  useEffect(() => {
+    onLeadOpenChange?.(leadOpen);
+  }, [leadOpen, onLeadOpenChange]);
 
   // ---- Map init -----------------------------------------------------------
   useEffect(() => {
@@ -138,43 +149,36 @@ export function MapWorkspace({
         container: mapDiv.current,
         center: [10, 30],
         zoom: 2.2,
-        // Tiles top out at z19; without a cap the map renders blank "data not
-        // yet available" squares when the operator zooms past the imagery.
+        // Esri imagery tops out at z19; without a cap the aerial layer renders
+        // blank "data not yet available" squares past it.
         maxZoom: 19.4,
         pitch: 0,
-        attributionControl: { compact: true },
-        style: {
-          version: 8,
-          sources: {
-            carto: {
-              type: "raster",
-              tileSize: 256,
-              maxzoom: 19,
-              tiles: [
-                "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-                "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-                "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-              ],
-              attribution:
-                "© OpenStreetMap · © CARTO · Imagery © Esri · Street © Mapillary (CC-BY-SA)",
-            },
-            sat: {
-              type: "raster",
-              tileSize: 256,
-              maxzoom: 19,
-              tiles: [
-                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-              ],
-              attribution: "Imagery © Esri",
-            },
-          },
-          layers: [
-            { id: "carto", type: "raster", source: "carto" },
-            { id: "sat", type: "raster", source: "sat", layout: { visibility: "none" } },
-          ],
-        },
+        attributionControl: { compact: true, customAttribution: MAP_CUSTOM_ATTRIBUTION },
+        style: BASEMAP_STYLE_URL,
+        transformStyle: withSatelliteLayer,
       });
       mapRef.current = map;
+      setMapReady(true);
+      const container = mapDiv.current;
+      container.dataset.basemap = "loading";
+      attachBasemapErrorHandling(map, {
+        onStatus: (status) => {
+          container.dataset.basemap = status;
+        },
+        onAerialForced: () => setSat(true),
+        onNotice: (notice) => {
+          if (cancelled) return;
+          if (notice.sticky) {
+            setToast({ kind: "err", text: notice.text, retry: notice.retry });
+            return;
+          }
+          // Brief tile notices never displace a toast already on screen.
+          setToast((current) => current ?? { kind: "err", text: notice.text });
+          setTimeout(() => {
+            setToast((current) => (current?.text === notice.text ? null : current));
+          }, 5000);
+        },
+      });
     })().catch((error) => {
       if (!cancelled) {
         setToast({
@@ -191,38 +195,26 @@ export function MapWorkspace({
   }, []);
 
   // ---- Geocode autocomplete ----------------------------------------------
+  // Typeahead decides when /api/geocode is called: after a 350 ms pause, from
+  // 3 characters, capped per minute, never again for a picked suggestion.
+  const typeaheadRef = useRef<Typeahead | null>(null);
+  if (typeaheadRef.current === null && typeof window !== "undefined") {
+    typeaheadRef.current = new Typeahead({
+      fetchSuggestions: async (q, signal) => {
+        const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`, { signal });
+        if (!res.ok) throw new Error(`geocode ${res.status}`);
+        return ((await res.json()) as { results: GeoResult[] }).results;
+      },
+      onState: (state) => {
+        setSuggest(state.results);
+        setActiveSuggest(0);
+        setSearchState(state.status === "ready" ? "idle" : state.status);
+      },
+    });
+  }
+  useEffect(() => () => typeaheadRef.current?.dispose(), []);
   useEffect(() => {
-    let active = true;
-    const normalized = query.trim();
-    if (normalized.length < 2) {
-      setSuggest([]);
-      setSearchState("idle");
-      return () => {
-        active = false;
-      };
-    }
-    setSearchState("loading");
-    const t = setTimeout(async () => {
-      try {
-        const d = await apiGet<{ results: GeoResult[] }>(
-          `/api/geocode?q=${encodeURIComponent(query)}`
-        );
-        if (active) {
-          setSuggest(d.results);
-          setActiveSuggest(0);
-          setSearchState(d.results.length > 0 ? "idle" : "empty");
-        }
-      } catch {
-        if (active) {
-          setSuggest([]);
-          setSearchState("error");
-        }
-      }
-    }, 120);
-    return () => {
-      active = false;
-      clearTimeout(t);
-    };
+    typeaheadRef.current?.input(query);
   }, [query]);
 
   // ⌘K focus
@@ -267,8 +259,10 @@ export function MapWorkspace({
   // ---- The magic loop -----------------------------------------------------
   const goTo = useCallback(
     async (target: GeoResult) => {
+      typeaheadRef.current?.select(target.address);
       setQuery(target.address);
       setSuggestOpen(false);
+      setAuthNeeded(null);
       setLeadOpen(true);
       setWorking(true);
       setCards([]);
@@ -340,28 +334,98 @@ export function MapWorkspace({
         const message = error instanceof Error ? error.message : "The scout pass paused.";
         setWorking(false);
         makeBeacon(target.lng, target.lat, false);
-        setLead(null); // clear the optimistic placeholder so the UI isn't stuck
-        setLeadOpen(false);
         const requestId = error instanceof ApiError ? error.requestId : undefined;
         const status = error instanceof ApiError ? error.status : 0;
         const auth = status === 401 || /authentication required|unauthor/i.test(message);
         if (auth) {
-          setToast({ kind: "err", text: "Sign in to research this address" });
-          setTimeout(() => setToast(null), 3500);
-        } else {
-          setToast({
-            kind: "err",
-            text: `Couldn't load this address — ${message}`,
-            requestId,
-            retry: () => goTo(target),
-          });
-          // Failure toast sticks until the user clicks Retry or dismisses
-          // (auto-hide hides the retry CTA before they can use it).
+          // Keep the rail open on this address and say what to do next. The
+          // choice is remembered for this tab so it resumes after sign-in.
+          savePendingAddress(target);
+          setAuthNeeded(target);
+          return;
         }
+        setLead(null); // clear the optimistic placeholder so the UI isn't stuck
+        setLeadOpen(false);
+        // Failure toast sticks until the user clicks Retry or dismisses
+        // (auto-hide hides the retry CTA before they can use it).
+        setToast({
+          kind: "err",
+          text: `Couldn't load this address — ${message}`,
+          requestId,
+          retry: () => goTo(target),
+        });
       }
     },
     [makeBeacon, pulseToast, reduceMotion]
   );
+
+  // Enter with nothing suggested: one explicit lookup (Nominatim in production).
+  const resolveTyped = useCallback(async () => {
+    const q = normalizeGeocodeQuery(query);
+    if (q.length < MIN_GEOCODE_QUERY) return;
+    setSearchState("resolving");
+    try {
+      const d = await apiGet<{ result: GeoResult | null }>(
+        `/api/geocode?q=${encodeURIComponent(q)}&resolve=1`
+      );
+      if (d.result) void goTo(d.result);
+      else setSearchState("empty");
+    } catch (error) {
+      setSearchState(error instanceof ApiError && error.status === 429 ? "limited" : "error");
+    }
+  }, [goTo, query]);
+
+  // Resume an address picked before the Google sign-in round trip. Signed in:
+  // run the scout pass. Still signed out (cancelled or failed sign-in): show
+  // the same sign-in panel on that address instead of dropping it.
+  const resumeChecked = useRef(false);
+  useEffect(() => {
+    if (!mapReady || resumeChecked.current) return;
+    resumeChecked.current = true;
+    const pending = readPendingAddress();
+    if (!pending) return;
+    let cancelled = false;
+    apiGet<{ user: unknown | null }>("/api/auth/session")
+      .catch(() => ({ user: null }))
+      .then((session) => {
+        if (cancelled) return;
+        if (session.user) {
+          clearPendingAddress();
+          void goTo(pending);
+          return;
+        }
+        typeaheadRef.current?.select(pending.address);
+        setQuery(pending.address);
+        setLead({
+          id: "pending",
+          agent_id: "",
+          address: pending.address,
+          locality: pending.locality,
+          lng: pending.lng,
+          lat: pending.lat,
+          h3_index: "",
+          status: "researching",
+          first_seen_at: "",
+          last_worked_at: "",
+        });
+        setLeadOpen(true);
+        setAuthNeeded(pending);
+        makeBeacon(pending.lng, pending.lat, false);
+        mapRef.current?.jumpTo({ center: [pending.lng, pending.lat], zoom: 16.4 });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [goTo, makeBeacon, mapReady]);
+
+  const dismissAuthPanel = useCallback(() => {
+    clearPendingAddress();
+    setAuthNeeded(null);
+    setLead(null);
+    setLeadOpen(false);
+    beaconRef.current?.remove();
+    beaconRef.current = null;
+  }, []);
 
   // Other surfaces (Pipeline cards, the getting-started checklist) can ask
   // the always-mounted map to open a lead via a window event.
@@ -517,13 +581,13 @@ export function MapWorkspace({
     <>
       <div id="map" ref={mapDiv} />
 
-      {!leadOpen && (
+      {!leadOpen && showLaunchpad && (
         <div className="launchpad">
           <div className="launch-kicker">Operator launchpad</div>
-          <div className="launch-title">Type any address and Forleads should open the pipeline immediately.</div>
+          <div className="launch-title">Type an address to open its lead brief.</div>
           <div className="launch-copy">
-            This isn&apos;t a passive map. It should ground the lead, show the scout pass, ask for
-            the field signal, and tee up the next outreach without losing operator control.
+            After you sign in with Google, Forleads grounds the lead, runs the scout pass, asks
+            for the field signal, and drafts the next outreach for your approval.
           </div>
           <div className="launch-actions">
             {SAMPLE_SEARCHES.map((sample) => (
@@ -619,6 +683,7 @@ export function MapWorkspace({
                 setActiveSuggest((i) => (i - 1 + suggest.length) % suggest.length);
               }
               if (e.key === "Enter" && suggest[activeSuggest]) void goTo(suggest[activeSuggest]);
+              else if (e.key === "Enter" && searchState === "empty") void resolveTyped();
               if (e.key === "Escape") setSuggestOpen(false);
             }}
           />
@@ -637,13 +702,22 @@ export function MapWorkspace({
           )}
           {searchState === "empty" && (
             <div className="suggest-state">
-              No address matches. Try a street, city, and country.
+              No suggestions. Add the city and country, or press Enter to look up this exact
+              address.
             </div>
           )}
           {searchState === "error" && (
             <div className="suggest-state error">
               Address search is unavailable. Check your connection and retry.
             </div>
+          )}
+          {searchState === "limited" && (
+            <div className="suggest-state">
+              That&apos;s a lot of searches in a minute. Pause a moment, then keep typing.
+            </div>
+          )}
+          {searchState === "resolving" && (
+            <div className="suggest-state">Looking up that exact address…</div>
           )}
           {suggest.map((p, i) => (
             <div
@@ -677,9 +751,12 @@ export function MapWorkspace({
           onClick={() => {
             const map = mapRef.current;
             if (!map) return;
+            // The basemap style loads over the network; until it has, there is
+            // no aerial layer to flip, so leave the toggle state unchanged.
+            if (!map.getLayer(SATELLITE_LAYER_ID)) return;
             const next = !sat;
             setSat(next);
-            map.setLayoutProperty("sat", "visibility", next ? "visible" : "none");
+            map.setLayoutProperty(SATELLITE_LAYER_ID, "visibility", next ? "visible" : "none");
           }}
         >
           <SatelliteIcon />
@@ -704,7 +781,9 @@ export function MapWorkspace({
           <div className="lead-addr">{lead?.address ?? "—"}</div>
           <div className="lead-sub">
             <span className="status-dot" />
-            <span>{working ? "Launching pipeline…" : "Grounded"}</span>
+            <span>
+              {authNeeded ? "Sign-in needed" : working ? "Launching pipeline…" : "Grounded"}
+            </span>
             <span className="grade-overall">
               {summary ? `overall grade ${summary.grade} · ${summary.scoutCount} scouts` : ""}
             </span>
@@ -739,8 +818,54 @@ export function MapWorkspace({
           <ConfidenceLegend />
         </div>
 
-        <div className="lead-body">
-          {lead && lead.id !== "pending" ? (
+        {/* Scrollable region: focusable so keyboard users can scroll it (WCAG 2.1.1). */}
+        <div
+          className="lead-body"
+          role="region"
+          aria-label={`Lead details for ${lead?.address ?? "the selected address"}`}
+          tabIndex={0}
+        >
+          {authNeeded ? (
+            <section
+              className="auth-gate"
+              role="region"
+              aria-labelledby="auth-gate-title"
+              data-testid="auth-gate"
+            >
+              <div className="ops-kicker">Sign in to continue</div>
+              <h2 className="auth-gate-title" id="auth-gate-title">
+                Research needs a Forleads workspace
+              </h2>
+              <p className="auth-gate-copy">
+                The scout pass saves this address, its evidence and your notes to your own
+                workspace, so it runs after you sign in with Google. Nothing is researched or
+                saved until then.
+              </p>
+              <p className="auth-gate-copy">
+                We&apos;ll keep <b>{authNeeded.address}</b> selected and pick it up when you come
+                back.
+              </p>
+              <div className="auth-gate-actions">
+                <a
+                  className="minibtn primary auth-gate-cta"
+                  href="/api/auth/google/login"
+                  onClick={() => savePendingAddress(authNeeded)}
+                >
+                  <span className="g" aria-hidden="true">G</span> Continue with Google
+                </a>
+                <button type="button" className="minibtn" onClick={dismissAuthPanel}>
+                  Not now
+                </button>
+              </div>
+              <p className="auth-gate-fine">
+                Google asks for Gmail draft and Calendar access so approved follow-ups land in
+                your own account. Forleads never sends without your approval.{" "}
+                <a href="/privacy">Privacy</a>
+              </p>
+            </section>
+          ) : null}
+
+          {!authNeeded && lead && lead.id !== "pending" ? (
             <ContactEditor
               lead={lead}
               onSaved={(updated) => {
@@ -751,6 +876,7 @@ export function MapWorkspace({
             />
           ) : null}
 
+          {!authNeeded && (
           <div className="ops-strip">
             <div className="ops-kicker">Next actions</div>
             <div className="ops-title">
@@ -804,6 +930,7 @@ export function MapWorkspace({
               ))}
             </div>
           </div>
+          )}
 
           {grouped.map((group) => (
             <div key={group.key}>
@@ -880,7 +1007,7 @@ export function MapWorkspace({
           )}
         </div>
 
-        <div className="lead-foot">
+        <div className="lead-foot" hidden={Boolean(authNeeded)}>
           <div className="note-box">
             <textarea
               id="lead-note"

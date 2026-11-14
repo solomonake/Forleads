@@ -34,6 +34,19 @@ function getClient(): Anthropic {
   return client;
 }
 
+/**
+ * Health probe: true when the key is present and the SDK client constructs.
+ * Constructing the client makes no network call, so this costs nothing.
+ */
+export function claudeClientReady(): boolean {
+  try {
+    getClient();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export interface ClaudeJSONInput {
   /** Static, cacheable instruction block (brand voice, rules). */
   system: string;

@@ -57,7 +57,7 @@ describe.runIf(live)("catalog live verification", () => {
       sources: [{ as_of: "2026-07-08" }],
     });
     expect(cards.find((card) => card.claim === "Assessed value")).toMatchObject({
-      confidence: "B",
+      confidence: "A",
       sources: [{ as_of: "2026-07-08" }],
     });
   }, 30000);
