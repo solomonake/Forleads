@@ -1,7 +1,7 @@
 // POST /api/lead — ensure a lead surface, run the scout swarm, return graded,
 // cited evidence cards + the reduce summary (the "fly-to" loading window).
 import { NextRequest, NextResponse } from "next/server";
-import { ensureCurrentAgent } from "@/lib/auth/agent";
+import { agentIdForSub, ensureCurrentAgent } from "@/lib/auth/agent";
 import { log, withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { num, optStr, str, validateBody } from "@/lib/validation";
@@ -13,9 +13,15 @@ export const POST = withRoute("lead", async (req: NextRequest) => {
     lng: num(b, "lng"),
     lat: num(b, "lat"),
     locality: optStr(b, "locality", { max: 200 }),
+    expectedUserSub: optStr(b, "expectedUserSub", { max: 300 }),
   }));
   const agentId = await ensureCurrentAgent();
   if (!agentId) return NextResponse.json({ error: "authentication required" }, { status: 401 });
+  // Import recovery may span an account change in another tab. This is only
+  // a precondition; the server-derived agent remains the write authority.
+  if (body.expectedUserSub && agentIdForSub(body.expectedUserSub) !== agentId) {
+    return NextResponse.json({ error: "The signed-in account changed. Return to the original account before resuming.", code: "import_account_changed" }, { status: 409 });
+  }
   // Discovery fans out to the external (Overpass) budget — the binding
   // constraint. Tightest limit of any route. (.agent/audits/…capacity-envelope.md)
   const limited = enforceRateLimit(req, { name: "lead", agentId, perAgent: 20, perIp: 30 });

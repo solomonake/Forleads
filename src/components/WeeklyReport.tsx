@@ -10,9 +10,9 @@ type View = "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline";
 // "open:action_inbox?filter=blocked", "edit:loop-stale-revival"). Route each
 // to the surface where the operator can actually act on it.
 function recommendationCta(action: string): { label: string; view: View } {
-  if (action.startsWith("connect:")) return { label: "Open Connect", view: "connectors" };
+  if (action.startsWith("connect:")) return { label: "Open Settings", view: "connectors" };
   if (action.startsWith("open:action_inbox")) return { label: "Open Approvals", view: "inbox" };
-  if (action.startsWith("edit:loop")) return { label: "Open Autopilot", view: "loops" };
+  if (action.startsWith("edit:loop")) return { label: "Open Automations", view: "loops" };
   return { label: "Open the map", view: "map" };
 }
 
@@ -35,7 +35,7 @@ export function WeeklyReport({ onNavigate }: { onNavigate: (view: View) => void 
   if (error) {
     return (
       <div className="panel">
-        <h1>Weekly Recap</h1>
+        <h1>Reports</h1>
         <div className="sub">{error}</div>
       </div>
     );
@@ -44,7 +44,7 @@ export function WeeklyReport({ onNavigate }: { onNavigate: (view: View) => void 
   if (!report) {
     return (
       <div className="panel">
-        <h1>Weekly Recap</h1>
+        <h1>Reports</h1>
         <div className="sub">Assembling this week&apos;s numbers…</div>
       </div>
     );
@@ -57,11 +57,10 @@ export function WeeklyReport({ onNavigate }: { onNavigate: (view: View) => void 
 
   return (
     <div className="panel">
-      <h1>Weekly Recap</h1>
+      <h1>Reports</h1>
       <div className="sub">
-        {fmt(report.periodStart)} – {fmt(report.periodEnd)} · what the system found, prepared, and
-        sent for you this week — including where it failed or stayed blocked. Every number is from
-        work you approved, never a projection.
+        {fmt(report.periodStart)} – {fmt(report.periodEnd)} · what was found, prepared, approved,
+        and what failed. Every number is from work you approved, never a projection.
       </div>
 
       <div className="metrics">

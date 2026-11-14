@@ -9,7 +9,7 @@ import { test, expect, type Page } from "@playwright/test";
 // Resolved from node_modules at run time; nothing is fetched from a CDN.
 const AXE_PATH = require.resolve("axe-core/axe.min.js");
 
-const NAV_TABS = ["Prospect", "Approvals", "Autopilot", "Deals", "Connect", "Recap"] as const;
+const NAV_TABS = ["Map", "Approvals", "Automations", "Farm", "Settings", "Reports"] as const;
 const BLOCKING = new Set(["serious", "critical"]);
 
 type AxeResult = {

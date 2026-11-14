@@ -26,12 +26,12 @@ type View = "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline";
 // Labels walk the agent's day in order: scout a property, approve the
 // prepared work, let follow-up run, track deals, wire tools, see the recap.
 const NAV: { key: View; icon: React.ReactNode; label: string }[] = [
-  { key: "map", icon: <MapIcon />, label: "Prospect" },
+  { key: "map", icon: <MapIcon />, label: "Map" },
   { key: "inbox", icon: <InboxIcon />, label: "Approvals" },
-  { key: "loops", icon: <LoopIcon />, label: "Autopilot" },
-  { key: "pipeline", icon: <ColumnsIcon />, label: "Deals" },
-  { key: "connectors", icon: <PlugIcon />, label: "Connect" },
-  { key: "report", icon: <ChartIcon />, label: "Recap" },
+  { key: "loops", icon: <LoopIcon />, label: "Automations" },
+  { key: "pipeline", icon: <ColumnsIcon />, label: "Farm" },
+  { key: "connectors", icon: <PlugIcon />, label: "Settings" },
+  { key: "report", icon: <ChartIcon />, label: "Reports" },
 ];
 
 export default function Page() {
@@ -78,7 +78,9 @@ export default function Page() {
         <AccountBar />
         {view === "inbox" && <ActionInbox onOpenTrace={setTraceRef} onNavigate={setView} />}
         {view === "loops" && <LoopStudio onNavigate={setView} />}
-        {view === "pipeline" && <Pipeline onNavigate={setView} />}
+        <div hidden={view !== "pipeline"}>
+          <Pipeline onNavigate={setView} active={view === "pipeline"} />
+        </div>
         {view === "connectors" && <ConnectorHub />}
         {view === "report" && <WeeklyReport onNavigate={setView} />}
         <GettingStarted

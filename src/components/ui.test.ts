@@ -19,6 +19,10 @@ afterEach(() => {
 });
 
 describe("apiPost", () => {
+  it("retains Retry-After for an explicit throttling response", async () => {
+    mockFetch(async () => new Response(JSON.stringify({error: "rate limit exceeded"}), {status: 429, headers: {"retry-after": "27"}}));
+    await expect(apiPost("/api/lead", {})).rejects.toMatchObject({status: 429, retryAfterSeconds: 27});
+  });
   it("returns parsed JSON on 2xx", async () => {
     mockFetch(async () =>
       new Response(JSON.stringify({ ok: true }), {

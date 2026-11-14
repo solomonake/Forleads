@@ -98,7 +98,7 @@ local mock mode (`npm run dev`) and is **not** what a production user gets.
 | Follow Up Boss | **Blocked** until Forleads is registered with FUB | labeled mock |
 | Microsoft 365, GoHighLevel, Twilio | **Blocked** (safety gates not shipped) | labeled mock |
 | Zapier | Not connected | labeled mock |
-| Autopilot loops, Recap | **Live** for signed-in data; nightly cron needs `CRON_SECRET` | works on demo data |
+| Automations, Reports | **Live** for signed-in data; nightly cron needs `CRON_SECRET` | works on demo data |
 | Mock connector writes | **Refused** in production (`productionPolicy.mockConnectorWritesAllowed: false`) | allowed |
 
 "Live" means production runs the real provider code path. The audit verified
@@ -129,7 +129,7 @@ for but can't run). A post-deploy smoke checks it after every production deploy
 | Zapier outbound | ✅ labeled mock | single-environment `ZAPIER_WEBHOOK_URL`; tenant routing still required for multi-tenant use |
 | Persistence | ✅ in-memory | `FORLEADS_PERSIST=supabase` + `SUPABASE_*` |
 
-See `.env.example` and `docs/operator-setup-guide.md`. The **Connect** screen
+See `.env.example` and `docs/operator-setup-guide.md`. The **Settings** screen
 separates blocked, configured, identity-verified, and capability-ready states;
 key presence alone never proves a working integration.
 
@@ -163,7 +163,7 @@ ground the cards. Signed out, you get the sign-in panel instead of a scout pass.
 2. **Grounding honesty.** Note the **Market → grade D** card ("no comps in free tier", mock mode). That's the point — it never fakes a number.
 3. **Compliance fail-closed.** The quick-note "Knocked, no answer" includes "kids' bikes" — the composer strips it (see the Trace's *Excluded*). Try drafting copy with "great for families" and watch it get **blocked**.
 4. **Idempotency.** Approve the same draft from the Review Tray and again from Approvals — second write is `deduped`.
-5. **Loops + report.** Autopilot → pick the lead → "Run now" on No-contact → check Approvals → Recap metrics update.
+5. **Loops + report.** Automations → pick the lead → "Run now" on No-contact → check Approvals → Reports metrics update.
 
 **Feedback that helps most:** (a) does the fly-to → cards moment *feel* magical or slow? (b) are the evidence grades believable/legible? (c) is the Review Tray copy good enough to send? (d) any place a number appears without a grade (that's a bug)? (e) which connector you'd want live first.
 

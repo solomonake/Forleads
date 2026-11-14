@@ -201,11 +201,11 @@ export function ConnectorHub() {
 
   return (
     <div className="panel">
-      <h1>Connect</h1>
+      <h1>Settings</h1>
       <div className="sub">
-        Forleads doesn&apos;t replace your Gmail, Follow Up Boss, or calendar — it writes into
-        them. Connect a tool once and every approval lands there. Credentials stay encrypted,
-        used only when you approve, never shared.
+        Which tools and data sources are actually usable. Forleads writes into Gmail, Follow Up
+        Boss, and calendar after you approve. Credentials stay encrypted. A missing key is
+        setup required — never a fake live badge.
       </div>
 
       <h2 className="panel-section-title">Action connectors</h2>

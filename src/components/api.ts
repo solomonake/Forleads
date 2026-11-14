@@ -4,6 +4,7 @@ export class ApiError extends Error {
   status: number;
   requestId?: string;
   code?: string;
+  retryAfterSeconds?: number;
 
   constructor(message: string, status: number, requestId?: string, code?: string) {
     super(message);
@@ -24,7 +25,11 @@ async function parseApiResponse<T>(res: Response, label: string): Promise<T> {
   }
   if (!res.ok) {
     const message = data?.error ?? `${label} → ${res.status}`;
-    throw new ApiError(message, res.status, data?.requestId ?? headerReqId, data?.code);
+    const error = new ApiError(message, res.status, data?.requestId ?? headerReqId, data?.code);
+    const rawRetry = res.headers.get("retry-after");
+    const seconds = rawRetry === null ? NaN : Number(rawRetry);
+    if (Number.isFinite(seconds) && seconds >= 0) error.retryAfterSeconds = seconds;
+    throw error;
   }
   return data as T;
 }
