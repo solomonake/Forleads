@@ -60,7 +60,11 @@ for (const file of apiFiles) {
   if (mutates && !relative.includes("/auth/google/") ||
       relative.includes("/auth/microsoft/")) {
     checks.push({
-      ok: /ensureCurrentAgent|requireAgentId|getSession|zapierSecret|webhookSecret/.test(source),
+      // A route that is anonymous by design (e.g. browser CSP reports) must say
+      // so with an "agent-doctor: public-endpoint" comment giving the reason.
+      ok:
+        /ensureCurrentAgent|requireAgentId|getSession|zapierSecret|webhookSecret/.test(source) ||
+        /agent-doctor: public-endpoint \S/.test(source),
       label: `auth-boundary:${relative}`,
     });
   }

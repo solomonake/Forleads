@@ -21,10 +21,15 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 60_000,
     // Keep the server off Supabase and Nominatim even if a .env file is present.
+    // Demo writes stay off (production default) so signed-out research gets the
+    // real 401, and Google OAuth is blanked so sign-in links bounce back locally.
     env: {
       FORLEADS_PERSIST: "memory",
       FORLEADS_GEOCODER: "mock",
       FORLEADS_AGENT_MODE: "mock",
+      FORLEADS_ALLOW_DEMO_MUTATIONS: "0",
+      GOOGLE_CLIENT_ID: "",
+      GOOGLE_CLIENT_SECRET: "",
     },
   },
   use: {

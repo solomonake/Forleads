@@ -11,6 +11,27 @@ const FORBIDDEN_HOSTS = /supabase\.(co|in)|nominatim/i;
 // exists on Vercel. Locally that is a 404, and the only console error allowed.
 const EXPECTED_LOCAL_404 = /\/_vercel\/insights\//;
 
+// Collects CSP violations the browser raises, report-only ones included, as
+// they happen (the Reporting API batches its POSTs, so don't wait on those).
+async function watchCsp(page: Page) {
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    (window as unknown as { __cspViolations: string[] }).__cspViolations = seen;
+    document.addEventListener("securitypolicyviolation", (event) => {
+      seen.push(`${event.effectiveDirective} ${event.blockedURI} (${event.disposition})`);
+    });
+  });
+  const reports: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/csp-report") reports.push(request.postData() ?? "");
+  });
+  return {
+    reports,
+    violations: () =>
+      page.evaluate(() => (window as unknown as { __cspViolations: string[] }).__cspViolations),
+  };
+}
+
 function watchPage(page: Page) {
   const consoleErrors: string[] = [];
   const forbiddenRequests: string[] = [];
@@ -33,7 +54,24 @@ test("map worker is served as JavaScript", async ({ request }) => {
   expect(response.headers()["content-type"]).toMatch(/javascript/);
 });
 
+test("security headers are set on the page and the worker", async ({ request }) => {
+  for (const path of ["/", WORKER_PATH]) {
+    const headers = (await request.get(path)).headers();
+    expect(headers["x-content-type-options"], path).toBe("nosniff");
+    expect(headers["x-frame-options"], path).toBe("DENY");
+    expect(headers["referrer-policy"], path).toBe("strict-origin-when-cross-origin");
+    expect(headers["permissions-policy"], path).toContain("camera=()");
+    expect(headers["content-security-policy"], path).toBe("frame-ancestors 'none'");
+    const csp = headers["content-security-policy-report-only"] ?? "";
+    expect(csp, path).toContain("default-src 'self'");
+    expect(csp, path).toContain("worker-src 'self' blob:");
+    expect(csp, path).toContain("https://tiles.openfreemap.org");
+    expect(csp, path).toContain("report-uri /api/csp-report");
+  }
+});
+
 test("basemap renders with its style and attribution, and no console errors", async ({ page }) => {
+  const csp = await watchCsp(page);
   const watched = watchPage(page);
   const styleResponse = page.waitForResponse((response) => response.url() === BASEMAP_STYLE_URL, {
     timeout: 30_000,
@@ -65,6 +103,23 @@ test("basemap renders with its style and attribution, and no console errors", as
 
   expect(watched.forbiddenRequests).toEqual([]);
   expect(watched.consoleErrors).toEqual([]);
+  // The report-only CSP would not block anything the map needs.
+  expect(await csp.violations()).toEqual([]);
+  expect(csp.reports).toEqual([]);
+});
+
+test("aerial imagery loads without a CSP violation", async ({ page }) => {
+  const csp = await watchCsp(page);
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  const map = page.locator("#map");
+  await expect(map).toHaveAttribute("data-basemap", "ready");
+  // The setup checklist is open on first load; the toggle must stay clickable.
+  await expect(page.getByRole("region", { name: "Getting started checklist" })).toBeVisible();
+  const aerialTile = page.waitForResponse((r) => r.url().startsWith("https://server.arcgisonline.com/"));
+  await page.getByRole("button", { name: "Toggle aerial imagery" }).click();
+  expect((await aerialTile).ok()).toBe(true);
+  await page.waitForLoadState("networkidle").catch(() => undefined);
+  expect(await csp.violations()).toEqual([]);
 });
 
 test("a failed basemap style falls back to aerial imagery and says so", async ({ page }) => {

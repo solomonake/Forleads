@@ -2563,3 +2563,123 @@ button {
 .kcard .ka-link {
   padding-right: 22px;
 }
+
+/* ---- Sign-in gate in the lead rail (signed-out research) ---------------- */
+.auth-gate {
+  margin: 4px 0 8px;
+  padding: 16px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-2);
+}
+.auth-gate-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin: 0;
+}
+.auth-gate-copy {
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.auth-gate-copy b {
+  color: var(--text);
+  font-weight: 600;
+}
+.auth-gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.auth-gate-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+.auth-gate-cta .g {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  color: #4285f4;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+.auth-gate-fine {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.auth-gate-fine a {
+  color: var(--text-2);
+}
+
+/* ---- Search bar vs account button --------------------------------------- */
+/* Centered, the 560px search pill runs under the account button whenever the
+   stage is narrower than ~1000px. Below that, left-align the pill and leave
+   the account button its own lane. */
+@media (max-width: 1100px) {
+  #cmd {
+    left: 16px;
+    transform: none;
+    width: min(560px, calc(100% - 32px - 220px));
+  }
+}
+@media (max-width: 720px) {
+  #cmd {
+    width: calc(100% - 32px - 52px);
+  }
+  #cmd .kbd {
+    display: none;
+  }
+  /* Sign-in collapses to the G mark; the label stays for screen readers. */
+  .account-signin {
+    width: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+  .account-signin-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .account-chip {
+    padding: 0 6px;
+  }
+  .account-chip .account-name {
+    display: none;
+  }
+  .getstart-chip.behind-lead {
+    display: none;
+  }
+}
+
+/* The checklist and its chip sit right of the map tools column (aerial,
+   recenter) so they never cover it; on phones the tools are hidden. */
+.getstart,
+.getstart-chip {
+  left: 76px;
+}
+.getstart {
+  width: min(360px, calc(100% - 94px));
+}
+@media (max-width: 720px) {
+  .getstart,
+  .getstart-chip {
+    left: 18px;
+  }
+  .getstart {
+    width: min(360px, calc(100% - 36px));
+  }
+}

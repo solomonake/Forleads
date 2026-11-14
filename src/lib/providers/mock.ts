@@ -110,6 +110,10 @@ export class MockGeocodeProvider implements GeocodeProvider {
     return (duplicate ? matches : [synthetic, ...matches]).slice(0, limit);
   }
 
+  async resolve(query: string): Promise<GeoResult | null> {
+    return (await this.autocomplete(query, 1))[0] ?? null;
+  }
+
   async reverse(lng: number, lat: number): Promise<GeoResult | null> {
     // Nearest known place; otherwise synthesize an honest "dropped pin".
     let best: GeoResult | null = null;

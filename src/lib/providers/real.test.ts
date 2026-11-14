@@ -108,7 +108,7 @@ describe("PublicNominatimGeocodeProvider", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
 
-    const results = await new PublicNominatimGeocodeProvider().autocomplete("kampala");
+    const results = await new PublicNominatimGeocodeProvider().search("kampala", 6);
 
     expect(results).toEqual([
       {
@@ -755,5 +755,25 @@ describe("OpenRiskDataProvider", () => {
       confidence: "C",
       sources: [{ name: "Open county data", url: "https://county.example/code/1" }],
     });
+  });
+});
+
+describe("MinIntervalGate (Nominatim ≤1 req/s)", () => {
+  it("spaces calls at least the interval apart, in order", async () => {
+    const { MinIntervalGate } = await import("./real");
+    let clock = 10_000;
+    const sleeps: number[] = [];
+    const gate = new MinIntervalGate(
+      1100,
+      () => clock,
+      async (ms) => {
+        sleeps.push(ms);
+        clock += ms;
+      },
+    );
+    const starts: number[] = [];
+    await Promise.all([1, 2, 3].map(() => gate.run(async () => void starts.push(clock))));
+    expect(starts).toEqual([10_000, 11_100, 12_200]);
+    expect(sleeps).toEqual([1100, 1100]);
   });
 });

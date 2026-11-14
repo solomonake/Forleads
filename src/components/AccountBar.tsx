@@ -76,7 +76,8 @@ export function AccountBar() {
           </button>
         ) : (
           <a className="account-signin" href="/api/auth/google/login">
-            <span className="g">G</span> Continue with Google
+            <span className="g" aria-hidden="true">G</span>
+            <span className="account-signin-label">Continue with Google</span>
           </a>
         )}
       </div>

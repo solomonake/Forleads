@@ -20,7 +20,7 @@ import {
   OperatorPropertyMediaProvider,
   OSMPropertyProvider,
   PhotonNominatimGeocodeProvider,
-  PublicNominatimGeocodeProvider,
+  PublicGeocodeProvider,
 } from "./real";
 import type {
   GeocodeProvider,
@@ -36,9 +36,12 @@ export function getGeocodeProvider(): GeocodeProvider {
       process.env.NOMINATIM_URL ?? "http://localhost:8080"
     );
   }
-  if (config.geocoder === "nominatim") {
-    // Public OSM Nominatim — no self-hosting required. Fair-use: low QPS.
-    return new PublicNominatimGeocodeProvider(
+  if (config.geocoder === "photon" || config.geocoder === "nominatim") {
+    // Public services. "nominatim" is the pre-2026-11 value and maps here too:
+    // public Nominatim's policy forbids typeahead, so suggestions always come
+    // from Photon and Nominatim only sees single explicit lookups.
+    return new PublicGeocodeProvider(
+      process.env.PUBLIC_PHOTON_URL ?? "https://photon.komoot.io",
       process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org"
     );
   }
