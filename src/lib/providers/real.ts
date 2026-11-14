@@ -8,6 +8,7 @@ import type { EvidenceCard } from "@/lib/core/types";
 import { log } from "@/lib/observability";
 import {
   addressesMatch,
+  addressMatchesExactly,
   catalogCovers,
   catalogHazardEndpoints,
   queryCatalogDistress,
@@ -650,6 +651,75 @@ export class PhotonNominatimGeocodeProvider implements GeocodeProvider {
 
 // ---- OSM Overpass property facts --------------------------------------------
 
+export interface OverpassElement {
+  type?: string;
+  id?: number;
+  tags?: Record<string, string>;
+  geometry?: { lat: number; lon: number }[];
+}
+
+export interface OsmBuildingMatch {
+  element: OverpassElement;
+  /** The building outline contains the point. */
+  contains: boolean;
+  /** Metres from the point to the outline (0 when it contains the point). */
+  distanceM: number;
+}
+
+/** Link to the exact OSM object, falling back to the map at large. */
+export function osmElementUrl(element: OverpassElement): string {
+  const type = element.type === "node" || element.type === "relation" ? element.type : "way";
+  return typeof element.id === "number"
+    ? `https://www.openstreetmap.org/${type}/${element.id}`
+    : "https://www.openstreetmap.org";
+}
+
+function pointInRing(lng: number, lat: number, ring: { lat: number; lon: number }[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i]!;
+    const b = ring[j]!;
+    const crosses = a.lat > lat !== b.lat > lat;
+    if (crosses && lng < ((b.lon - a.lon) * (lat - a.lat)) / (b.lat - a.lat) + a.lon) inside = !inside;
+  }
+  return inside;
+}
+
+/** Metres from a point to a ring's edges (local equirectangular projection). */
+function distanceToRingM(lng: number, lat: number, ring: { lat: number; lon: number }[]): number {
+  const mPerDegLat = 111_320;
+  const mPerDegLng = 111_320 * Math.cos((lat * Math.PI) / 180);
+  const xy = (p: { lat: number; lon: number }) => [(p.lon - lng) * mPerDegLng, (p.lat - lat) * mPerDegLat] as const;
+  let best = Infinity;
+  for (let i = 0; i < ring.length; i++) {
+    const [ax, ay] = xy(ring[i]!);
+    const [bx, by] = xy(ring[(i + 1) % ring.length]!);
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2));
+    best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy));
+  }
+  return best;
+}
+
+/**
+ * The building way that contains the point, else the nearest one. Ways
+ * without geometry are skipped: without an outline there is no way to tell
+ * whose building it is.
+ */
+export function pickOsmBuilding(elements: OverpassElement[], lng: number, lat: number): OsmBuildingMatch | null {
+  let nearest: OsmBuildingMatch | null = null;
+  for (const element of elements) {
+    const ring = element.geometry;
+    if (!element.tags?.["building"] || !ring || ring.length < 3) continue;
+    if (pointInRing(lng, lat, ring)) return { element, contains: true, distanceM: 0 };
+    const distanceM = Math.round(distanceToRingM(lng, lat, ring));
+    if (!nearest || distanceM < nearest.distanceM) nearest = { element, contains: false, distanceM };
+  }
+  return nearest;
+}
+
 export class OSMPropertyProvider implements PropertyDataProvider {
   readonly name = "osm";
   readonly mode = "live" as const;
@@ -664,7 +734,9 @@ export class OSMPropertyProvider implements PropertyDataProvider {
     if (problem) return [gapCard("property", "Building facts", problem)];
 
     const radius = 40;
-    const query = `[out:json][timeout:8];(way(around:${radius},${q.lat},${q.lng})["building"];);out tags center 1;`;
+    // Every building way in the radius, with geometry, so the one that
+    // actually contains the point can be chosen (not just the first returned).
+    const query = `[out:json][timeout:8];way(around:${radius},${q.lat},${q.lng})["building"];out tags geom;`;
     try {
       const res = await fetch(this.overpassUrl, {
         method: "POST",
@@ -677,28 +749,45 @@ export class OSMPropertyProvider implements PropertyDataProvider {
         },
       });
       if (!res.ok) return this.gap("Overpass request failed");
-      const data = (await res.json()) as {
-        elements?: { tags?: Record<string, string> }[];
-      };
-      const el = data.elements?.[0];
-      const tags = el?.tags ?? {};
+      const data = (await res.json()) as { elements?: OverpassElement[] };
+      const match = pickOsmBuilding(data.elements ?? [], q.lng, q.lat);
+      if (!match) return this.gap("No building tags found at this point");
+      const { element, contains, distanceM } = match;
+      const tags = element.tags ?? {};
+      const source = { name: "OpenStreetMap", url: osmElementUrl(element) };
+      const where = contains
+        ? undefined
+        : `nearest mapped building, ${distanceM} m away`;
+      // Grading (G6): A only when the building polygon contains the geocoded
+      // point. A nearby building may be a neighbour's, so it is C and says how
+      // far away it is.
+      const reasoning = contains
+        ? "OpenStreetMap building whose outline contains this address point. Community-mapped tag."
+        : `No mapped building outline contains this address point. Taken from the nearest building, ${distanceM} m away, which may be a neighbour's. Community-mapped tag.`;
       const cards: EvidenceCard[] = [];
-      if (tags["start_date"] || tags["building:year"]) {
+      const year = tags["start_date"] ?? tags["building:year"];
+      if (year) {
         cards.push({
           scout: "property",
           claim: "Year built",
-          value: `~${tags["start_date"] ?? tags["building:year"]}`,
-          sources: [{ name: "OpenStreetMap", url: "https://openstreetmap.org" }],
-          confidence: "A",
+          value: `~${year}${where ? ` (${where})` : ""}`,
+          sources: [source],
+          confidence: contains ? "A" : "C",
+          reasoning,
         });
       }
       if (tags["building"]) {
+        const untyped = tags["building"] === "yes";
+        const use = untyped ? "Building (untyped)" : tags["building"];
         cards.push({
           scout: "property",
           claim: "Land use",
-          value: tags["building"] === "yes" ? "Building (untyped)" : tags["building"],
-          sources: [{ name: "OSM" }],
-          confidence: tags["building"] === "yes" ? "C" : "A",
+          value: `${use}${where ? ` (${where})` : ""}`,
+          sources: [source],
+          confidence: contains && !untyped ? "A" : "C",
+          reasoning: untyped
+            ? `${reasoning} The building is mapped without a type.`
+            : reasoning,
         });
       }
       if (cards.length === 0) return this.gap("No building tags found at this point");
@@ -871,6 +960,10 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
     const assessments = catalogMatches.filter((m) => m.source.kind === "assessment" && m.amount);
     if (assessments.length > 0) {
       const latest = assessments.slice().sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))[0]!;
+      // Grade per the rubric (A = official record): an official register row
+      // for exactly this address is A. A row matched only on house number and
+      // street name could be another unit or a directional twin, so it stays B.
+      const exact = addressMatchesExactly(latest.address, input.address);
       cards.push({
         scout: "market",
         claim: "Assessed value",
@@ -880,9 +973,10 @@ export class OpenDataPropertyProvider implements PropertyDataProvider {
           url: latest.source.homepage,
           as_of: latest.date ?? latest.source.verified,
         }],
-        confidence: "B",
-        reasoning:
-          "Official assessment register matched this address. Assessed value is a taxation figure, not a market price.",
+        confidence: exact ? "A" : "B",
+        reasoning: exact
+          ? "Official assessment register record for this exact address. Assessed value is a taxation figure, not a market price."
+          : `Official assessment register record "${latest.address}" matched on house number and street only, so it may be a different unit. Assessed value is a taxation figure, not a market price.`,
       });
     }
 

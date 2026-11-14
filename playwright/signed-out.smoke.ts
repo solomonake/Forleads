@@ -109,3 +109,31 @@ test("only one onboarding surface shows over the map at a time", async ({ page }
   await expect(page.locator(".launchpad")).toBeVisible();
   await expect(checklist).toHaveCount(0);
 });
+
+test("Autopilot: Run now with no lead is disabled and says what to do (G14)", async ({ page }) => {
+  await hydrated(page);
+  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Autopilot", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Autopilot" })).toBeVisible();
+  const runNow = page.getByRole("button", { name: "Run now" }).first();
+  await expect(runNow).toBeDisabled();
+  await expect(runNow).toHaveAccessibleDescription(/Run now needs a grounded lead/);
+  const why = page.getByTestId("run-needs-lead");
+  await expect(why).toBeVisible();
+  // The call to action goes back to the map, where the address search is.
+  await why.getByRole("button", { name: "Ground an address" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: /prospect any address/ })).toBeAttached();
+  await expect(page.locator("#search-input")).toBeVisible();
+});
+
+test("Recap never recommends a blocked connector (G14)", async ({ page }) => {
+  await hydrated(page);
+  const report = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/report");
+  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Recap", exact: true }).click();
+  expect((await report).status()).toBe(200);
+  await expect(page.getByRole("heading", { name: "Recommended next moves" })).toBeVisible();
+  // Follow Up Boss is Blocked on this server (no X-System credentials), and
+  // Google sign-in is not configured, so neither may be suggested.
+  const panel = page.locator(".panel");
+  await expect(panel).not.toContainText("Follow Up Boss");
+  await expect(panel).not.toContainText("Connect Google");
+});

@@ -623,6 +623,22 @@ button {
   overflow-y: auto;
   padding: 8px 14px 14px;
 }
+.lead-body:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: -2px;
+}
+/* Visually hidden but read by screen readers (headings the design omits). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .ops-strip {
   margin: 10px 0 16px;
   padding: 14px;
@@ -1547,6 +1563,12 @@ button {
 }
 .panel h1 {
   font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 4px;
+}
+/* Section headings inside a panel: h2 for the outline, sized inline as before. */
+.panel h2.panel-subhead {
   font-weight: 600;
   letter-spacing: -0.01em;
   margin-bottom: 4px;
@@ -2616,10 +2638,11 @@ button {
   margin: 12px 0 0;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--text-muted);
+  /* --text-muted is 3.3:1 here; small text needs 4.5:1 (WCAG 1.4.3). */
+  color: var(--text-2);
 }
 .auth-gate-fine a {
-  color: var(--text-2);
+  color: var(--text);
 }
 
 /* ---- Search bar vs account button --------------------------------------- */

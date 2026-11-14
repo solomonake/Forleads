@@ -105,7 +105,7 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
   await page.locator(".overlay").click({ position: { x: 8, y: 8 } });
 
   // Loop Studio: Run now produces a persistent, actionable result banner.
-  await page.locator('nav button[title="Loop Studio"]').click();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Autopilot", exact: true }).click();
   const runNowBtn = page.locator(".ractions .minibtn.primary", { hasText: "Run now" }).first();
   await expect(runNowBtn).toBeVisible({ timeout: 30_000 });
   await runNowBtn.click();
@@ -113,7 +113,7 @@ test("Forleads first flow: address → fly-to → grade chips → knocked → dr
   await page.waitForTimeout(1200);
 
   // Pipeline: the card's address clicks through to the lead on the map.
-  await page.locator('nav button[title="Pipeline"]').click();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Deals", exact: true }).click();
   const cardLink = page.locator(".kcard .ka-link").first();
   await expect(cardLink).toBeVisible({ timeout: 30_000 });
   await cardLink.click();
@@ -147,7 +147,7 @@ test("weekly report renders with actionable next moves", async ({ page }) => {
   );
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await sessionReady;
-  await page.locator('nav button[title="Weekly Report"]').click();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Recap", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Weekly Recap" })
   ).toBeVisible({ timeout: COLD_API_TIMEOUT });

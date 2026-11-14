@@ -1,0 +1,51 @@
+# Post-deploy smoke (audit G11): after Vercel reports a successful Production
+# deployment, run a tiny read-only check against the live site. GET requests
+# only; no secrets, no sign-in, nothing written. See scripts/post-deploy-smoke.mjs.
+#
+# GitHub runs deployment_status workflows from the default branch, so this
+# starts firing once it is on main.
+name: Post-deploy smoke
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Base URL to check
+        required: false
+        default: https://forleads.vercel.app
+
+permissions:
+  contents: read
+
+concurrency:
+  group: post-deploy-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: production smoke
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       github.event.deployment.environment == 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      # The production domain, not the per-deployment URL: Vercel deployment
+      # protection can put the unique *.vercel.app URL behind a login.
+      SMOKE_URL: ${{ inputs.url || vars.PRODUCTION_URL || 'https://forleads.vercel.app' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/post-deploy-smoke.mjs
+            src/lib/map/basemap.ts
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Smoke the deployed site
+        run: node scripts/post-deploy-smoke.mjs "$SMOKE_URL"

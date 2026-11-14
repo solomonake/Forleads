@@ -430,14 +430,133 @@ describe("OpenDataPropertyProvider", () => {
         as_of: "2026-07-08",
       }],
     });
+    // Official register row for exactly this address (city included): A (G6).
     expect(cards.find((card) => card.claim === "Assessed value")).toMatchObject({
       value: "364500 (2026-07-08)",
-      confidence: "B",
+      confidence: "A",
       sources: [{
         name: "Oklahoma County Assessor Tax Parcels (market assessment)",
         as_of: "2026-07-08",
       }],
     });
+  });
+});
+
+describe("Assessed value grading (G6)", () => {
+  it("keeps a register row matched only on number and street at B, and says why", async () => {
+    globalThis.fetch = async () => new Response(
+      JSON.stringify({
+        features: [{
+          attributes: { location: "2209 COLCHESTER TER UNIT 4 EDMOND", currentmarket: 120000, RecordedDate: "2026-07-08" },
+        }],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+    const cards = await new OpenDataPropertyProvider(basePropertyProvider, []).comps({
+      address: "2209 Colchester Ter, Edmond, OK",
+      lng: -97.4503494061,
+      lat: 35.6421376231,
+      scout: "market",
+    });
+    const assessed = cards.find((card) => card.claim === "Assessed value");
+    expect(assessed?.confidence).toBe("B");
+    expect(assessed?.reasoning).toContain("may be a different unit");
+  });
+});
+
+// A ~20 m square building around (lng, lat) offset by (dx, dy) metres.
+function square(id: number, lng: number, lat: number, dx: number, dy: number, tags: Record<string, string>) {
+  const mLat = 1 / 111_320;
+  const mLng = 1 / (111_320 * Math.cos((lat * Math.PI) / 180));
+  const cx = lng + dx * mLng;
+  const cy = lat + dy * mLat;
+  const h = 10;
+  return {
+    type: "way",
+    id,
+    tags,
+    geometry: [
+      { lat: cy - h * mLat, lon: cx - h * mLng },
+      { lat: cy - h * mLat, lon: cx + h * mLng },
+      { lat: cy + h * mLat, lon: cx + h * mLng },
+      { lat: cy + h * mLat, lon: cx - h * mLng },
+      { lat: cy - h * mLat, lon: cx - h * mLng },
+    ],
+  };
+}
+
+describe("OSMPropertyProvider building choice and grading (G6)", () => {
+  const point = { address: "10 Test St, Testville", lng: -77.0, lat: 39.0, scout: "property" as const };
+
+  function overpass(elements: unknown[]) {
+    const bodies: string[] = [];
+    globalThis.fetch = async (_url: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(String(init?.body ?? ""));
+      return new Response(JSON.stringify({ elements }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+    return bodies;
+  }
+
+  it("asks Overpass for every building with geometry, not just the first", async () => {
+    const bodies = overpass([]);
+    await new OSMPropertyProvider().facts(point);
+    expect(bodies[0]).toContain("out tags geom;");
+    expect(bodies[0]).not.toContain("center 1");
+  });
+
+  it("uses the building that contains the point even when a neighbour is listed first: A, cited by way URL", async () => {
+    overpass([
+      square(111, point.lng, point.lat, 30, 0, { building: "commercial", start_date: "1890" }),
+      square(222, point.lng, point.lat, 0, 0, { building: "house", start_date: "1925" }),
+    ]);
+    const cards = await new OSMPropertyProvider().facts(point);
+    const year = cards.find((c) => c.claim === "Year built");
+    const use = cards.find((c) => c.claim === "Land use");
+    expect(year).toMatchObject({
+      value: "~1925",
+      confidence: "A",
+      sources: [{ name: "OpenStreetMap", url: "https://www.openstreetmap.org/way/222" }],
+    });
+    expect(use).toMatchObject({
+      value: "house",
+      confidence: "A",
+      sources: [{ url: "https://www.openstreetmap.org/way/222" }],
+    });
+  });
+
+  it("grades the nearest building C when none contains the point, and shows the distance", async () => {
+    overpass([
+      square(333, point.lng, point.lat, 35, 0, { building: "house", start_date: "1950" }),
+      square(444, point.lng, point.lat, 0, 25, { building: "apartments", start_date: "1972" }),
+    ]);
+    const cards = await new OSMPropertyProvider().facts(point);
+    const year = cards.find((c) => c.claim === "Year built");
+    const use = cards.find((c) => c.claim === "Land use");
+    // Way 444's near edge is 15 m away; way 333's is 25 m.
+    expect(year).toMatchObject({
+      value: "~1972 (nearest mapped building, 15 m away)",
+      confidence: "C",
+      sources: [{ url: "https://www.openstreetmap.org/way/444" }],
+    });
+    expect(year?.reasoning).toContain("15 m away");
+    expect(use).toMatchObject({ value: "apartments (nearest mapped building, 15 m away)", confidence: "C" });
+    expect(cards.every((c) => c.confidence !== "A")).toBe(true);
+  });
+
+  it("keeps an untyped containing building at C", async () => {
+    overpass([square(555, point.lng, point.lat, 0, 0, { building: "yes" })]);
+    const cards = await new OSMPropertyProvider().facts(point);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ claim: "Land use", value: "Building (untyped)", confidence: "C" });
+  });
+
+  it("returns an honest gap when no building in range has an outline", async () => {
+    overpass([{ type: "way", id: 666, tags: { building: "house", start_date: "1900" } }]);
+    const cards = await new OSMPropertyProvider().facts(point);
+    expect(cards[0]).toMatchObject({ claim: "Building facts", value: null, confidence: "D" });
   });
 });
 

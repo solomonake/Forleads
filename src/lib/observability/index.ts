@@ -4,12 +4,16 @@
 // stdout (Vercel captures it; queryable in the dashboard / drains). Every
 // response carries an `x-request-id` so a user-reported failure maps to a log.
 //
-// SEAM: `withRoute` is the one place errors surface, so wiring an external
-// tracker (Sentry/Axiom/Logflare) later = add one call here, not touch 12 routes.
+// SEAM: `withRoute` is the one place API errors surface; it hands every 5xx
+// to `reportError` (./report.ts), where an external tracker registers later.
 // ============================================================================
 
 import { NextResponse, type NextRequest } from "next/server";
 import { uuid } from "@/lib/core/ids";
+import { reportError } from "./report";
+
+export { reportError, registerErrorReporter } from "./report";
+export type { ErrorContext, ErrorReporter } from "./report";
 
 type Level = "info" | "warn" | "error";
 
@@ -64,8 +68,9 @@ export function withRoute<C = unknown>(
         ms: Date.now() - started,
         requestId,
         error: err.message,
-        ...(client ? {} : { stack: err.stack }),
       });
+      // Server faults go to the tracker seam (which also logs the stack).
+      if (!client) reportError(err, { where: `api.${name}`, requestId, method: req.method, status });
       return NextResponse.json(
         { error: client ? err.message : "internal error", requestId },
         { status },

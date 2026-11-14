@@ -818,7 +818,13 @@ export function MapWorkspace({
           <ConfidenceLegend />
         </div>
 
-        <div className="lead-body">
+        {/* Scrollable region: focusable so keyboard users can scroll it (WCAG 2.1.1). */}
+        <div
+          className="lead-body"
+          role="region"
+          aria-label={`Lead details for ${lead?.address ?? "the selected address"}`}
+          tabIndex={0}
+        >
           {authNeeded ? (
             <section
               className="auth-gate"

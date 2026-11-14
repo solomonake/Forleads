@@ -21,17 +21,17 @@ import {
 
 type View = "map" | "inbox" | "loops" | "connectors" | "report" | "pipeline";
 
-// `label` renders under the icon; `title` keeps the full name for tooltips
-// and for stable test selectors.
+// `label` renders under the icon and is the button's accessible name; the
+// tooltip repeats it so sighted and screen-reader users hear the same name.
 // Labels walk the agent's day in order: scout a property, approve the
 // prepared work, let follow-up run, track deals, wire tools, see the recap.
-const NAV: { key: View; icon: React.ReactNode; label: string; title: string }[] = [
-  { key: "map", icon: <MapIcon />, label: "Prospect", title: "Map (home)" },
-  { key: "inbox", icon: <InboxIcon />, label: "Approvals", title: "Action Inbox" },
-  { key: "loops", icon: <LoopIcon />, label: "Autopilot", title: "Loop Studio" },
-  { key: "pipeline", icon: <ColumnsIcon />, label: "Deals", title: "Pipeline" },
-  { key: "connectors", icon: <PlugIcon />, label: "Connect", title: "Connector Hub" },
-  { key: "report", icon: <ChartIcon />, label: "Recap", title: "Weekly Report" },
+const NAV: { key: View; icon: React.ReactNode; label: string }[] = [
+  { key: "map", icon: <MapIcon />, label: "Prospect" },
+  { key: "inbox", icon: <InboxIcon />, label: "Approvals" },
+  { key: "loops", icon: <LoopIcon />, label: "Autopilot" },
+  { key: "pipeline", icon: <ColumnsIcon />, label: "Deals" },
+  { key: "connectors", icon: <PlugIcon />, label: "Connect" },
+  { key: "report", icon: <ChartIcon />, label: "Recap" },
 ];
 
 export default function Page() {
@@ -44,7 +44,7 @@ export default function Page() {
 
   return (
     <div id="app">
-      <nav id="navrail">
+      <nav id="navrail" aria-label="Main">
         <div className="brand">
           For
           <br />
@@ -55,7 +55,8 @@ export default function Page() {
             key={n.key}
             className={`navbtn ${view === n.key ? "on" : ""}`}
             onClick={() => setView(n.key)}
-            title={n.title}
+            title={n.label}
+            aria-current={view === n.key ? "page" : undefined}
           >
             {n.icon}
             <span className="nlabel">{n.label}</span>
@@ -63,7 +64,10 @@ export default function Page() {
         ))}
       </nav>
 
-      <div id="stage">
+      <main id="stage">
+        {/* The map has no visible title, so the home view gets a visually hidden h1.
+            Every other view renders its own h1 in its panel. */}
+        {view === "map" && <h1 className="sr-only">Forleads: prospect any address on the map</h1>}
         {/* The map mounts once and stays alive; panels overlay it. The map is the home screen. */}
         <MapWorkspace
           onOpenTrace={setTraceRef}
@@ -83,7 +87,7 @@ export default function Page() {
           forceCompact={view === "map" && leadOpen}
           onCardVisibleChange={setChecklistOnMap}
         />
-      </div>
+      </main>
 
       <AgentTraceDrawer traceRef={traceRef} onClose={() => setTraceRef(null)} />
     </div>

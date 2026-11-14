@@ -8,8 +8,15 @@
 import { nowISO, uuid } from "@/lib/core/ids";
 import type { Artifact, DomainEvent, LoopRun, WeeklyReport } from "@/lib/core/types";
 import { getRepo } from "@/lib/db";
+import type { TenantConnectorStatus } from "@/lib/connectors/tenant-status";
 
-export async function generateWeeklyReport(agentId: string): Promise<WeeklyReport> {
+/** Just what recommendations need to know about each connector. */
+export type ConnectorAvailability = Pick<TenantConnectorStatus, "provider" | "availability" | "connected">;
+
+export async function generateWeeklyReport(
+  agentId: string,
+  connectors: ConnectorAvailability[] = [],
+): Promise<WeeklyReport> {
   const repo = await getRepo();
   const [artifacts, events, runs] = await Promise.all([
     repo.listArtifacts(agentId),
@@ -22,7 +29,7 @@ export async function generateWeeklyReport(agentId: string): Promise<WeeklyRepor
 
   const metrics = computeMetrics(artifacts, events);
   const whatChanged = deriveInsights(artifacts, runs, events);
-  const recommendations = deriveRecommendations(artifacts, runs);
+  const recommendations = deriveRecommendations(artifacts, runs, connectors);
 
   const report: WeeklyReport = {
     id: uuid(),
@@ -62,7 +69,16 @@ function deriveInsights(artifacts: Artifact[], runs: LoopRun[], events: DomainEv
   return out;
 }
 
-function deriveRecommendations(artifacts: Artifact[], runs: LoopRun[]): { label: string; action: string }[] {
+/**
+ * Only recommend what the operator can act on now (G14). A connector is
+ * suggested only when it's ready and not yet connected; a blocked or unknown
+ * one is never suggested, so a recommendation can't lead to a dead end.
+ */
+export function deriveRecommendations(
+  artifacts: Artifact[],
+  runs: LoopRun[],
+  connectors: ConnectorAvailability[] = [],
+): { label: string; action: string }[] {
   const recs: { label: string; action: string }[] = [];
   const dGap = artifacts.some((a) => a.evidence_used.length === 0 || a.evidence_used.every((e) => e.confidence !== "A"));
   if (dGap) recs.push({ label: "Connect a market data source", action: "connect:market_provider" });
@@ -70,6 +86,16 @@ function deriveRecommendations(artifacts: Artifact[], runs: LoopRun[]): { label:
     recs.push({ label: "Review blocked drafts in the Action Inbox", action: "open:action_inbox?filter=blocked" });
   }
   recs.push({ label: "Tighten stale-lead loop to 30 days", action: "edit:loop-stale-revival" });
-  recs.push({ label: "Connect Follow Up Boss tasks", action: "connect:followupboss" });
+  const connectable = (provider: string) =>
+    connectors.some((c) => c.provider === provider && c.availability === "ready" && !c.connected);
+  if (connectable("followupboss")) {
+    recs.push({ label: "Connect Follow Up Boss tasks", action: "connect:followupboss" });
+  } else if (connectable("google")) {
+    // Follow Up Boss is blocked or unconfigured: point at the path that works.
+    recs.push({
+      label: "Connect Google so approved follow-ups land as Gmail drafts and Calendar holds",
+      action: "connect:google",
+    });
+  }
   return recs;
 }
