@@ -1,112 +1,53 @@
 # Current agent checkpoint
 
-Generated: 2026-11-14T20:49:00.441Z
+Generated: 2026-11-15T02:07:47.346Z
 
 ## State
-- Branch: `codex/sol20-integration`
-- Commit: `5c1fefc0e994`
+- Branch: `codex/google-consent-separation`
+- Commit: `053c89c7ba85`
 - Worktree: dirty
 - Changed files:
-  - M .agent/handoffs/current.md
-  - M  .eslintrc.json
-  - M  .github/workflows/ci.yml
-  - A  .github/workflows/post-deploy-smoke.yml
-  - MM README.md
-  - A  coverage-scope.d.mts
-  - A  coverage-scope.mjs
-  - M  docs/SETUP.md
-  - M  next.config.mjs
-  - M  package-lock.json
-  - M  package.json
-  - A  playwright.smoke.config.ts
-  - AM playwright/a11y.smoke.ts
-  - UU playwright/demo.spec.ts
-  - A  playwright/map.smoke.ts
-  - AM playwright/signed-out.smoke.ts
-  - M  scripts/agent-doctor.mjs
-  - A  scripts/coverage-summary.mjs
-  - A  scripts/post-deploy-smoke.mjs
-  - M  scripts/sync-maplibre-assets.mjs
-  - A  security-headers.d.mts
-  - A  security-headers.mjs
-  - A  src/app/api/csp-report/route.test.ts
-  - A  src/app/api/csp-report/route.ts
-  - A  src/app/api/geocode/route.test.ts
-  - M  src/app/api/geocode/route.ts
-  - M  src/app/api/health/route.test.ts
-  - M  src/app/api/health/route.ts
-  -  M src/app/api/lead/route.ts
-  - M  src/app/api/report/route.ts
-  - A  src/app/api/trace/[id]/route.test.ts
-  - M  src/app/api/trace/[id]/route.ts
-  - A  src/app/error.tsx
-  - MM src/app/globals.css
-  - M  src/app/layout.tsx
-  - UU src/app/page.tsx
-  - M  src/app/privacy/page.tsx
-  - M  src/components/AccountBar.tsx
-  -  M src/components/FarmTable.tsx
-  - M  src/components/GettingStarted.tsx
-  - M  src/components/LoopStudio.tsx
-  - M  src/components/MapWorkspace.tsx
-  -  M src/components/Pipeline.tsx
-  - MM src/components/WeeklyReport.tsx
-  -  M src/components/api.ts
-  -  M src/components/ui.test.ts
-  - M  src/lib/agents/claude.ts
-  - A  src/lib/core/capabilities.test.ts
-  - A  src/lib/core/capabilities.ts
-  - M  src/lib/core/config.ts
-  - A  src/lib/coverage-scope.test.ts
-  - A  src/lib/geocode/query.ts
-  - A  src/lib/geocode/typeahead.test.ts
-  - A  src/lib/geocode/typeahead.ts
-  - A  src/lib/map/basemap.test.ts
-  - A  src/lib/map/basemap.ts
-  - A  src/lib/map/basemapErrors.test.ts
-  - A  src/lib/map/basemapErrors.ts
-  - A  src/lib/map/pendingAddress.test.ts
-  - A  src/lib/map/pendingAddress.ts
-  - M  src/lib/observability/index.ts
-  - A  src/lib/observability/post-deploy-smoke.test.ts
-  - A  src/lib/observability/report.test.ts
-  - A  src/lib/observability/report.ts
-  - M  src/lib/providers/catalog.live.test.ts
-  - M  src/lib/providers/catalog.test.ts
-  - M  src/lib/providers/catalog.ts
-  - M  src/lib/providers/index.ts
-  - M  src/lib/providers/mock.ts
-  - M  src/lib/providers/readiness.ts
-  - M  src/lib/providers/real.test.ts
-  - M  src/lib/providers/real.ts
-  - M  src/lib/providers/types.ts
-  - A  src/lib/reports.test.ts
-  - M  src/lib/reports.ts
-  - A  src/lib/security-headers.test.ts
-  - M  vitest.config.ts
-  - ?? .agent/plans/sol20-integration.md
-  - ?? playwright/farm.smoke.ts
-  - ?? src/app/api/lead/import-account.test.ts
-  - ?? src/lib/farm/import.test.ts
-  - ?? src/lib/farm/import.ts
+  - M playwright/demo.spec.ts
+  -  M src/app/api/approve/route.test.ts
+  -  M src/app/api/approve/route.ts
+  -  M src/app/api/auth/google/callback/route.ts
+  -  M src/app/api/auth/google/login/route.ts
+  -  M src/app/api/auth/session/route.ts
+  -  M src/app/api/connectors/route.ts
+  -  M src/app/api/report/route.ts
+  -  M src/app/layout.tsx
+  -  M src/app/privacy/page.tsx
+  -  M src/components/AccountBar.tsx
+  -  M src/components/GettingStarted.tsx
+  -  M src/lib/auth/google.ts
+  -  M src/lib/connectors/tenant-status.ts
+  -  M src/lib/pipeline.ts
+  - ?? .agent/plans/google-consent-separation.md
+  - ?? docs/google-oauth-verification.md
+  - ?? src/app/api/auth/google/callback/route.test.ts
+  - ?? src/app/api/auth/google/login/route.test.ts
+  - ?? src/lib/auth/google-grant.test.ts
+  - ?? src/lib/auth/google-grant.ts
+  - ?? src/lib/auth/google.test.ts
+  - ?? src/lib/pipeline.google-scope.test.ts
 
 ## Goal
-SOL-20 integration merge and deploy
+Google verification readiness and consent separation
 
 ## Completed
-CSV recovery and accessible navigation integrated; high-risk gates, audit, independent review, 19 production-build browser smokes and 5 demo flows passed
+470 tests passed, high-risk gates, independent security review 19 focused tests, local Settings link and staged meta tag verified; brand check identified missing homepage ownership
 
 ## Next exact action
-Publish existing PR57, wait for exact-head CI, merge dependency stack in order, deploy and verify production
+Publish draft PR; await explicit Cloud declarations and ownership verification approval; then deploy and verify owner site before retrying branding after 24h
 
 ## Blockers
 none
 
 ## Authority
-Solo explicitly authorized integration ownership, merge and deploy in this chat
+Solo requested needed updates; scope save was rejected pending specific confirmation; no production ownership verification authorized yet
 
 ## Verification proof
-450 passed, 17 skipped; doctor 83/83; eval 16/16; high-risk gates 7/7; audit 0 high/critical, 7 moderate; browser 19/19 and demo 5/5; independent review no blockers
+high-risk gates 7/7; independent review no blockers; identity URL/callback/grants/action gate regressions; local UI and metadata observed
 
 ## Cold-start sequence
 1. Read `AGENTS.md`, `.agent/AGENT_OS.md`, this checkpoint, and the linked plan.

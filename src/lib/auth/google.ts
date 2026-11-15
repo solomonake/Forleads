@@ -1,10 +1,4 @@
-// ============================================================================
-// Google OAuth 2.0 — login + Gmail/Calendar authorization in one consent.
-// Scopes are minimal: identity (openid/email/profile) + gmail.compose (drafts
-// only, never full mailbox) + calendar.events. access_type=offline yields a
-// refresh_token so drafts keep working without re-login.
-// ============================================================================
-
+// Google identity sign-in and explicit optional connector authorization.
 import { config } from "@/lib/core/config";
 import type { GoogleTokens } from "./session";
 
@@ -12,27 +6,36 @@ const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo";
 
-const SCOPES = [
+export const IDENTITY_SCOPES = [
   "openid",
   "email",
   "profile",
+];
+
+export const CONNECTOR_SCOPES = [
   "https://www.googleapis.com/auth/gmail.compose",
   "https://www.googleapis.com/auth/calendar.events",
 ];
+export function hasGoogleScope(scope: string | undefined, required: string): boolean {
+  return (scope ?? "").split(/\s+/).includes(required);
+}
+export function hasGoogleConnectorScopes(scope: string | undefined): boolean {
+  return CONNECTOR_SCOPES.every(s => hasGoogleScope(scope, s));
+}
 
 export function googleConfigured(): boolean {
   return Boolean(config.google.clientId && config.google.clientSecret);
 }
 
-export function buildAuthUrl(state: string): string {
+export function buildAuthUrl(state: string, intent: "signin" | "connect" = "signin"): string {
   const params = new URLSearchParams({
     client_id: config.google.clientId ?? "",
     redirect_uri: config.google.redirectUri,
     response_type: "code",
-    scope: SCOPES.join(" "),
-    access_type: "offline",
-    include_granted_scopes: "true",
-    prompt: "consent", // force a refresh_token every time
+    scope: (intent === "connect" ? [...IDENTITY_SCOPES, ...CONNECTOR_SCOPES] : IDENTITY_SCOPES).join(" "),
+    access_type: intent === "connect" ? "offline" : "online",
+    include_granted_scopes: intent === "connect" ? "true" : "false",
+    ...(intent === "connect" ? { prompt: "consent" } : {}),
     state,
   });
   return `${AUTH_URL}?${params.toString()}`;
@@ -57,7 +60,7 @@ export async function exchangeCode(code: string): Promise<GoogleTokens> {
       grant_type: "authorization_code",
     }),
   });
-  if (!res.ok) throw new Error(`token exchange failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`token exchange failed: ${res.status}`);
   const d = (await res.json()) as {
     access_token: string;
     refresh_token?: string;
@@ -106,5 +109,6 @@ export async function fetchProfile(accessToken: string): Promise<GoogleProfile> 
 export async function freshAccessToken(tokens: GoogleTokens): Promise<GoogleTokens> {
   if (tokens.expiry - Date.now() > 60_000) return tokens;
   if (!tokens.refresh_token) return tokens; // can't refresh; caller handles failure
-  return refreshAccessToken(tokens.refresh_token);
+  const fresh = await refreshAccessToken(tokens.refresh_token);
+  return { ...fresh, scope: fresh.scope ?? tokens.scope };
 }

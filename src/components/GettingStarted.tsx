@@ -102,12 +102,10 @@ export function GettingStarted({
     return [
       {
         key: "google",
-        title: "Connect Google",
+        title: "Sign in with Google",
         done: signedIn,
         hint: signedIn
-          ? user?.gmailConnected
-            ? "Signed in — Gmail drafts are ready."
-            : "Signed in. Gmail draft permission is granted on sign-in."
+          ? "Your workspace is signed in. Connect Gmail and Calendar separately in Settings."
           : "Sign in so drafts, approvals, and leads belong to your workspace.",
         cta: signedIn ? null : { label: "Continue with Google", href: "/api/auth/google/login" },
       },

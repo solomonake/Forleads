@@ -5,6 +5,9 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  // Public Search Console challenge for the owner account. Publishing and
+  // completing ownership verification require Solo's explicit approval.
+  verification: { google: "s9YzhHy4rDYXgOLWHV7ITDVMVcRsMmWIIAlg9FaBF7I" },
   title: "Forleads — The map that does the homework",
   description:
     "The living-map agentic CRM for real-estate agents. Every address is a lead; grounded AI scouts do the homework, the outreach, and the follow-up — never guessed.",

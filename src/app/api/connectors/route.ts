@@ -4,6 +4,7 @@
 // for backwards compatibility with older Hub renderers.
 import { NextResponse } from "next/server";
 import { readAgentIdEnsured } from "@/lib/auth/agent";
+import { googleGrant } from "@/lib/auth/google-grant";
 import { getSession } from "@/lib/auth/session";
 import { withRoute } from "@/lib/observability";
 import { allHealth } from "@/lib/connectors";
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
 export const GET = withRoute("connectors", async () => {
   const agentId = await readAgentIdEnsured();
   const session = await getSession();
-  const googleConnected = Boolean(session?.googleCredentialRef);
+  const googleConnected = (await googleGrant(session)).connected;
   const repo = await getRepo();
   const [health, accounts, providers] = await Promise.all([
     allHealth(),

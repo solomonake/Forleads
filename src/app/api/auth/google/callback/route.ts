@@ -3,35 +3,43 @@
 // cookie, and bind the agent identity so drafts come from the real user.
 import { NextRequest, NextResponse } from "next/server";
 import { agentIdForSub } from "@/lib/auth/agent";
-import { exchangeCode, fetchProfile } from "@/lib/auth/google";
-import { SESSION_COOKIE, seal, sessionCookieOptions, type Session } from "@/lib/auth/session";
+import { exchangeCode, fetchProfile, hasGoogleConnectorScopes } from "@/lib/auth/google";
+import { SESSION_COOKIE, seal, sessionCookieOptions, getSession, unsealValue, type Session } from "@/lib/auth/session";
 import { getRepo } from "@/lib/db";
 import { provisionWorkspace } from "@/lib/db/seed";
-import { saveGoogleCredential } from "@/lib/auth/credentials";
+import { saveGoogleCredential, loadGoogleCredential } from "@/lib/auth/credentials";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const cookieState = req.cookies.get("fl_oauth_state")?.value;
+  const context = unsealValue<{ state: string; intent: "signin" | "connect"; sub?: string; expiresAt: number }>(req.cookies.get("fl_oauth_state")?.value ?? "");
+  const finish = (reason: string) => {
+    const res = NextResponse.redirect(new URL(`/?auth=error&reason=${encodeURIComponent(reason)}`, req.url));
+    res.cookies.delete("fl_oauth_state");
+    return res;
+  };
+  if (!context || !state || state !== context.state || !["signin", "connect"].includes(context.intent) || !Number.isFinite(context.expiresAt) || context.expiresAt < Date.now()) return finish("bad_state");
   const error = url.searchParams.get("error");
-
-  if (error) return NextResponse.redirect(new URL(`/?auth=error&reason=${error}`, req.url));
-  if (!code) return NextResponse.redirect(new URL("/?auth=error&reason=no_code", req.url));
-  if (!state || state !== cookieState) {
-    return NextResponse.redirect(new URL("/?auth=error&reason=bad_state", req.url));
-  }
+  if (error) return finish(error);
+  if (!code) return finish("no_code");
+  const previous = await getSession();
+  if (context.intent === "connect" && (!previous || previous.sub !== context.sub)) return finish("account_changed");
 
   try {
     const tokens = await exchangeCode(code);
     const profile = await fetchProfile(tokens.access_token);
 
+    if (context.intent === "connect" && profile.sub !== context.sub) return finish("account_changed");
+    if (context.intent === "connect" && !hasGoogleConnectorScopes(tokens.scope)) return finish("missing_connector_permissions");
+    const sameUser = previous?.sub === profile.sub ? previous : undefined;
     const session: Session = {
+      ...sameUser,
       sub: profile.sub,
       name: profile.name,
       email: profile.email,
       picture: profile.picture,
-      brandVoice: "warm_local",
+      brandVoice: sameUser?.brandVoice ?? "warm_local",
       createdAt: Date.now(),
     };
 
@@ -50,7 +58,19 @@ export async function GET(req: NextRequest) {
       locale: existing?.locale ?? "en-US",
       mode: existing?.mode ?? "crm",
     });
-    session.googleCredentialRef = await saveGoogleCredential(agentId, tokens);
+    // Identity-only login never stores its token over an existing connector grant.
+    // An existing grant can be reattached only after proving the same Google sub.
+    if (context.intent === "connect") {
+      const oldTokens = sameUser?.googleCredentialRef
+        ? await loadGoogleCredential(agentId, sameUser.googleCredentialRef) : sameUser?.google;
+      session.googleCredentialRef = await saveGoogleCredential(agentId,
+        { ...tokens, refresh_token: tokens.refresh_token ?? oldTokens?.refresh_token },
+        sameUser?.googleCredentialRef);
+      session.google = undefined;
+    } else if (!session.googleCredentialRef && !session.google) {
+      const existingGrant = await repo.findConnectorCredential(agentId, "google");
+      if (existingGrant) session.googleCredentialRef = existingGrant.id;
+    }
 
     // New user with no phone yet → send them through a one-field onboarding.
     const dest = session.phone ? "/?auth=ok" : "/?auth=ok&onboard=phone";
@@ -58,8 +78,7 @@ export async function GET(req: NextRequest) {
     res.cookies.set(SESSION_COOKIE, seal(session), sessionCookieOptions());
     res.cookies.delete("fl_oauth_state");
     return res;
-  } catch (e) {
-    const reason = encodeURIComponent(e instanceof Error ? e.message : "exchange_failed");
-    return NextResponse.redirect(new URL(`/?auth=error&reason=${reason}`, req.url));
+  } catch {
+    return finish("exchange_failed");
   }
 }

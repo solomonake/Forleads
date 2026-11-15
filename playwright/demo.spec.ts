@@ -128,7 +128,7 @@ test("first-run activation checklist walks a new agent to the first approved dra
   await page.goto("/", { waitUntil: "domcontentloaded" });
   const checklist = page.getByRole("region", { name: "Getting started checklist" });
   await expect(checklist).toBeVisible({ timeout: COLD_API_TIMEOUT });
-  await expect(checklist.getByText("Connect Google")).toBeVisible();
+  await expect(checklist.getByText("Sign in with Google")).toBeVisible();
   await expect(checklist.getByText("Ground your first address")).toBeVisible();
   await expect(checklist.getByText("Add a contact")).toBeVisible();
   await expect(checklist.getByText("Approve your first draft")).toBeVisible();
