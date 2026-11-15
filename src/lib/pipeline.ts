@@ -1,3 +1,4 @@
+import { hasGoogleScope, CONNECTOR_SCOPES } from "@/lib/auth/google";
 // ============================================================================
 // Pipeline — the orchestration that runs the magic loop end to end:
 //   swarm: dispatch → scouts (parallel, bounded) → reduce → persist evidence
@@ -760,7 +761,7 @@ async function finalizeApprovedArtifact(args: {
 export async function approveArtifact(
   artifactId: string,
   expectedRevision: number,
-  opts: { agentId: string; googleAccessToken?: string; googleCredentialError?: string },
+  opts: { agentId: string; googleAccessToken?: string; googleCredentialError?: string; googleGrantedScope?: string },
 ): Promise<ApproveResult | null> {
   const repo = await getRepo();
   const artifact = await repo.getArtifact(artifactId);
@@ -786,6 +787,11 @@ export async function approveArtifact(
     throw new Error(`Connector write failed: ${opts.googleCredentialError}`);
   }
 
+  if (opts.googleAccessToken && opts.googleGrantedScope !== undefined &&
+      (artifact.type === "email" || artifact.type === "calendar") &&
+      !hasGoogleScope(opts.googleGrantedScope, CONNECTOR_SCOPES[artifact.type === "email" ? 0 : 1]!)) {
+    throw new Error("Connector write failed: Grant the required Google permission in Settings before approving this action.");
+  }
   const connector = await connectorForAction(artifact.type, {
     ...opts,
     agentId: artifact.agent_id,

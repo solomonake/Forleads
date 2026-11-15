@@ -19,6 +19,7 @@ vi.mock("@/lib/auth/session", () => ({
 
 vi.mock("@/lib/auth/google", () => ({
   freshAccessToken: mocks.freshAccessToken,
+  hasGoogleConnectorScopes: (scope: string) => Boolean(scope?.includes("gmail.compose") && scope?.includes("calendar.events")),
 }));
 
 vi.mock("@/lib/auth/credentials", () => ({
@@ -48,6 +49,19 @@ describe("POST /api/approve", () => {
     mocks.freshAccessToken.mockImplementation(async (tokens: unknown) => tokens);
   });
 
+  it("passes actual granted scopes for action-specific enforcement", async () => {
+    mocks.session = { google: { access_token: "identity", scope: "openid email profile", expiry: Date.now()+60000 } };
+    mocks.approveArtifact.mockResolvedValue({ ok: true });
+    await POST(post({ artifactId: "fixture", expectedRevision: 1 }));
+    expect(mocks.approveArtifact).toHaveBeenCalledWith("fixture",1,expect.objectContaining({googleGrantedScope:"openid email profile"}));
+  });
+  it("uses the refreshed scope instead of the old grant scope", async () => {
+    mocks.session = { google: { access_token: "old", scope: "https://www.googleapis.com/auth/gmail.compose", expiry: 0 } };
+    mocks.freshAccessToken.mockResolvedValue({access_token:"fresh",scope:"openid email profile",expiry:9999999999999});
+    mocks.approveArtifact.mockResolvedValue({ok:true});
+    await POST(post({artifactId:"fixture",expectedRevision:1}));
+    expect(mocks.approveArtifact).toHaveBeenCalledWith("fixture",1,expect.objectContaining({googleAccessToken:"fresh",googleGrantedScope:"openid email profile"}));
+  });
   it("surfaces connector setup failures instead of internal error", async () => {
     mocks.approveArtifact.mockRejectedValue(
       new Error("Connector write failed: Follow Up Boss is not configured. Add a tenant API key after system registration."),
@@ -69,6 +83,7 @@ describe("POST /api/approve", () => {
         access_token: "old-token",
         refresh_token: "refresh-token",
         expiry: 0,
+        scope: "https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/calendar.events",
       },
     };
     mocks.freshAccessToken.mockRejectedValue(new Error("invalid_grant"));

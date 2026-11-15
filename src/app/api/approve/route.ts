@@ -31,10 +31,13 @@ export const POST = withRoute("approve", async (req: NextRequest) => {
   const storedGoogle = session?.googleCredentialRef
     ? await loadGoogleCredential(agentId, session.googleCredentialRef)
     : session?.google;
+  let googleGrantedScope = storedGoogle?.scope ?? "";
+  if (session && !storedGoogle) googleCredentialError = "Connect Google Workspace in Settings before approving Google actions.";
   if (storedGoogle) {
     try {
       const fresh = await freshAccessToken(storedGoogle);
       googleAccessToken = fresh.access_token;
+      googleGrantedScope = fresh.scope ?? "";
       if (fresh.access_token !== storedGoogle.access_token && session) {
         session.googleCredentialRef = await saveGoogleCredential(
           agentId,
@@ -57,6 +60,7 @@ export const POST = withRoute("approve", async (req: NextRequest) => {
       agentId,
       googleAccessToken,
       googleCredentialError,
+      googleGrantedScope,
     });
   } catch (e) {
     // Fail-closed compliance is a client-correctable 422, not a server error;

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: "How Forleads collects, uses, and protects your data.",
 };
 
-const EFFECTIVE_DATE = "July 4, 2026";
+const EFFECTIVE_DATE = "November 14, 2026";
 const CONTACT_EMAIL = "solomonriting@gmail.com";
 
 export default function PrivacyPage() {
@@ -51,8 +51,11 @@ export default function PrivacyPage() {
 
         <h2>How we use Google user data</h2>
         <p>
-          Forleads requests the minimum Google scopes needed for its features: your basic profile
-          (sign-in), <code>gmail.compose</code>, and <code>calendar.events</code>.
+          Basic sign-in requests your Google identity (name, email address and profile picture).
+          Connecting Gmail drafts and Calendar is an optional, separate action in Settings.
+          The Gmail permission (gmail.compose) permits draft management and sending under
+          Google&apos;s scope definition; Forleads uses it to create or update drafts after your
+          approval. Calendar access (calendar.events) supports approved event creation.
         </p>
         <ul>
           <li>

@@ -94,6 +94,7 @@ export function AccountBar() {
               {user.gmailConnected ? "connected" : "not connected"}
             </span>
           </div>
+          {!user.gmailConnected && <a className="minibtn" href="/api/auth/google/login?connect=1">Connect Gmail and Calendar</a>}
           <div className="ap-row">
             <span>Phone</span>
             <span>{user.phone ?? "—"}</span>

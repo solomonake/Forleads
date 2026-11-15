@@ -1,6 +1,7 @@
 // GET /api/report — generate (and return) the Weekly Intelligence Report.
 import { NextResponse } from "next/server";
 import { readAgentIdEnsured } from "@/lib/auth/agent";
+import { googleGrant } from "@/lib/auth/google-grant";
 import { getSession } from "@/lib/auth/session";
 import { config } from "@/lib/core/config";
 import { tenantConnectorStatuses } from "@/lib/connectors/tenant-status";
@@ -16,7 +17,7 @@ export const GET = withRoute("report", async () => {
   // connector that page would label Blocked.
   // Google sign-in that isn't configured on this deployment can't be acted on either.
   const googleReady = Boolean(config.google.clientId && config.google.clientSecret);
-  const connectors = (await tenantConnectorStatuses(agentId, Boolean(session?.googleCredentialRef))).map((c) =>
+  const connectors = (await tenantConnectorStatuses(agentId, (await googleGrant(session)).connected)).map((c) =>
     c.provider === "google" && !googleReady ? { ...c, availability: "blocked" as const } : c,
   );
   const report = await generateWeeklyReport(agentId, connectors);

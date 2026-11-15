@@ -9,11 +9,14 @@ import {
 import { getRepo } from "@/lib/db";
 import { withRoute } from "@/lib/observability";
 
+import { googleGrant } from "@/lib/auth/google-grant";
+
 export const dynamic = "force-dynamic";
 
 export const GET = withRoute("auth.session.get", async () => {
   const session = await getSession();
   if (!session) return NextResponse.json({ user: null });
+  const grant = await googleGrant(session);
   return NextResponse.json({
     user: {
       sub: session.sub,
@@ -22,12 +25,9 @@ export const GET = withRoute("auth.session.get", async () => {
       picture: session.picture,
       phone: session.phone ?? null,
       brandVoice: session.brandVoice ?? "warm_local",
-      gmailConnected: Boolean(
-        session.googleCredentialRef ||
-        session.google?.refresh_token ||
-        session.google?.access_token,
-      ),
-      scopes: session.google?.scope ?? "",
+      gmailConnected: grant.gmail,
+      calendarConnected: grant.calendar,
+      scopes: grant.tokens?.scope ?? "",
     },
   });
 });

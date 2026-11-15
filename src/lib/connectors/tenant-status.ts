@@ -100,7 +100,7 @@ async function statusFor(
       connected: googleConnected,
       capabilities: meta.capabilities,
       scopes: meta.scopes,
-      connectUrl: "/api/auth/google/login",
+      connectUrl: "/api/auth/google/login?connect=1",
     };
   }
   if (provider === "microsoft") {
