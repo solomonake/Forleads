@@ -38,7 +38,7 @@ describe("Gmail MIME / base64url", () => {
       subject: "Hello\r\nBcc: attacker@evil.test",
       body: "Body",
     });
-    const headerBlock = msg.split("\r\n\r\n")[0];
+    const headerBlock = msg.split("\r\n\r\n")[0] ?? "";
     expect(headerBlock).not.toMatch(/^Bcc:/m);
     expect(headerBlock.split("\r\n")).toHaveLength(6);
   });
