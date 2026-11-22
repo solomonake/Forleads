@@ -36,7 +36,11 @@ const reviseRoute = withRoute<{ params: { id: string } }>(
       return NextResponse.json({ artifact });
     } catch (error) {
       const message = error instanceof Error ? error.message : "revision failed";
-      if (message.includes("changed")) {
+      if (
+        message.includes("changed") ||
+        message.includes("already sent") ||
+        message.includes("approval is in progress")
+      ) {
         return NextResponse.json({ error: message }, { status: 409 });
       }
       throw error;

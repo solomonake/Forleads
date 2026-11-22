@@ -27,11 +27,13 @@
 
 **Acceptance scenarios:** OAuth state cookie copied into fl_session is rejected; 31-day-old session rejected; production tenant SMS/email/CRM with operator env set and no tenant creds makes no network call and fails closed; CRLF subject yields 6 header lines; sent artifact revise throws and status stays sent.
 
-**Break plan:** tests in session.test.ts, production-policy.test.ts, mime.test.ts, revise.test.ts, safe-equal.test.ts.
+**Second-agent findings fixed in v03:** sent and in-progress revise errors return 409 not 500; Review Tray disables Edit on sent messages; connector health no longer reports operator GHL/Twilio as connected in production; broken evidence images hide themselves; `getSession` itself is tested.
+
+**Break plan:** tests in session.get.test.ts, session.test.ts, production-policy.test.ts, mime.test.ts, revise.test.ts, safe-equal.test.ts.
 
 **Verification evidence:** CI on the draft PR (typecheck, lint, vitest, coverage, audit, build, smokes). The authoring container could not reach the npm registry, so local runs were not possible.
 
-**Risks / gotchas:** Users signed in more than 30 days ago are signed out once (cookie maxAge was already 30 days, so this only affects resent cookies). Any operator relying on env GHL/Twilio in production for their own tenant must paste those credentials into Settings instead.
+**Risks / gotchas:** Sessions now have a server-side 30-day window from sign-in or from the last server re-seal (profile edit or token refresh sets `refreshedAt`), matching the cookie's own 30-day maxAge, so active users keep the rolling behavior they had. Any operator relying on env GHL/Twilio in production for their own tenant must paste those credentials into Settings instead.
 
 **Human-in-the-loop:** Merge and deploy are Solo's call.
 

@@ -60,7 +60,7 @@ export const PATCH = withRoute("auth.session.patch", async (req: NextRequest) =>
     ok: true,
     user: { phone: session.phone, brandVoice: session.brandVoice },
   });
-  response.cookies.set(SESSION_COOKIE, seal(session), sessionCookieOptions());
+  response.cookies.set(SESSION_COOKIE, seal({ ...session, refreshedAt: Date.now() }), sessionCookieOptions());
   return response;
 });
 

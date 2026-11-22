@@ -34,6 +34,9 @@ export interface Session {
   /** Legacy sessions only; new OAuth callbacks store tokens server-side. */
   google?: GoogleTokens;
   createdAt: number;
+  /** Set whenever the server re-seals an existing session (profile edit,
+   *  token refresh), so active users keep a rolling 30-day lifetime. */
+  refreshedAt?: number;
 }
 
 function key(): Buffer {
@@ -103,8 +106,10 @@ export function isValidSession(value: unknown, now = Date.now()): value is Sessi
   const s = value as Partial<Session>;
   if (typeof s.sub !== "string" || s.sub.length === 0) return false;
   if (typeof s.createdAt !== "number" || !Number.isFinite(s.createdAt)) return false;
-  if (s.createdAt > now + 60_000) return false;
-  return now - s.createdAt < SESSION_MAX_AGE_MS;
+  const issued =
+    typeof s.refreshedAt === "number" && Number.isFinite(s.refreshedAt) ? s.refreshedAt : s.createdAt;
+  if (issued > now + 60_000) return false;
+  return now - issued < SESSION_MAX_AGE_MS;
 }
 
 export async function getSession(): Promise<Session | null> {

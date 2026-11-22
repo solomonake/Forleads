@@ -73,16 +73,16 @@ export function getConnector(provider: ConnectorProvider): Connector {
       );
     case "gohighlevel":
       return new GoHighLevelConnector(
-        config.gohighlevel.apiKey,
-        config.gohighlevel.locationId,
+        operatorEnv(config.gohighlevel.apiKey),
+        operatorEnv(config.gohighlevel.locationId),
         config.gohighlevel.baseUrl,
         config.allowMockConnectorWrites,
       );
     case "twilio":
       return new TwilioConnector(
-        config.twilio.accountSid,
-        config.twilio.authToken,
-        config.twilio.fromNumber,
+        operatorEnv(config.twilio.accountSid),
+        operatorEnv(config.twilio.authToken),
+        operatorEnv(config.twilio.fromNumber),
         config.allowMockConnectorWrites,
       );
     case "zapier":

@@ -982,7 +982,14 @@ export function MapWorkspace({
                       <div className="evidence-media">
                         {card.media.map((media, mediaIndex) => (
                           <figure key={`${media.url}-${mediaIndex}`}>
-                            <img src={media.url} alt={media.alt} loading="lazy" />
+                            <img
+                              src={media.url}
+                              alt={media.alt}
+                              loading="lazy"
+                              onError={(event) => {
+                                event.currentTarget.closest("figure")?.setAttribute("hidden", "");
+                              }}
+                            />
                             <figcaption>
                               {media.captured_at ? `${media.captured_at} · ` : ""}
                               {media.attribution ?? media.source}
