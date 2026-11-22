@@ -6,6 +6,7 @@ import { withRoute } from "@/lib/observability";
 import { config, DEMO_AGENT_ID } from "@/lib/core/config";
 import type { DomainEventType } from "@/lib/core/types";
 import { emit } from "@/lib/pipeline";
+import { safeEqual } from "@/lib/security/safe-equal";
 
 export const POST = withRoute("zapier.inbound", async (req: NextRequest) => {
   // Fail closed: an unconfigured secret means the webhook is NOT ready to accept
@@ -14,7 +15,7 @@ export const POST = withRoute("zapier.inbound", async (req: NextRequest) => {
     return NextResponse.json({ error: "webhook not configured" }, { status: 503 });
   }
   const secret = req.headers.get("x-zapier-secret");
-  if (secret !== config.zapier.webhookSecret) {
+  if (!safeEqual(secret, config.zapier.webhookSecret)) {
     return NextResponse.json({ error: "invalid secret" }, { status: 401 });
   }
   const idempotencyKey = req.headers.get("x-idempotency-key");

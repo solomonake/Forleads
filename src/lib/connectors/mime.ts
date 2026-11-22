@@ -24,11 +24,17 @@ function encodeHeader(value: string): string {
   return `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
 }
 
+/** Header values must be a single line: a CR or LF in a composed subject or
+ *  address would let text smuggle extra headers (for example a Bcc). */
+function oneLine(value: string): string {
+  return String(value ?? "").replace(/[\r\n]+/g, " ");
+}
+
 export function buildMimeMessage(input: MimeInput): string {
   const headers = [
-    `From: ${input.from}`,
-    `To: ${input.to}`,
-    `Subject: ${encodeHeader(input.subject)}`,
+    `From: ${oneLine(input.from)}`,
+    `To: ${oneLine(input.to)}`,
+    `Subject: ${encodeHeader(oneLine(input.subject))}`,
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: 7bit",

@@ -7,6 +7,10 @@ on:
   push:
     branches-ignore: [main] # PRs cover main; this checks feature branches early
 
+# Read-only token: CI only checks out and tests code.
+permissions:
+  contents: read
+
 jobs:
   gates:
     name: agent proof

@@ -31,4 +31,15 @@ describe("Gmail MIME / base64url", () => {
     const msg = buildMimeMessage({ from: "a@x.com", to: "b@y.com", subject: "Café ☕", body: "x" });
     expect(msg).toMatch(/Subject: =\?UTF-8\?B\?/);
   });
+  it("keeps CR/LF in header values from adding extra headers", () => {
+    const msg = buildMimeMessage({
+      from: "a@x.com",
+      to: "b@y.com\r\nBcc: attacker@evil.test",
+      subject: "Hello\r\nBcc: attacker@evil.test",
+      body: "Body",
+    });
+    const headerBlock = msg.split("\r\n\r\n")[0];
+    expect(headerBlock).not.toMatch(/^Bcc:/m);
+    expect(headerBlock.split("\r\n")).toHaveLength(6);
+  });
 });

@@ -89,9 +89,29 @@ export function unseal(token: string): Session | null {
 
 // ---- Next.js cookie helpers (server components / route handlers) ------------
 
+/** Server-side session lifetime. Matches the cookie maxAge so a copied
+ *  cookie stops working after 30 days even if a client keeps resending it. */
+export const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30;
+
+/**
+ * A sealed value is only a session if it has the session's shape. Other
+ * sealed values (for example the OAuth state cookie, sealed with the same
+ * key) must never be accepted as a login, and old sessions must expire.
+ */
+export function isValidSession(value: unknown, now = Date.now()): value is Session {
+  if (!value || typeof value !== "object") return false;
+  const s = value as Partial<Session>;
+  if (typeof s.sub !== "string" || s.sub.length === 0) return false;
+  if (typeof s.createdAt !== "number" || !Number.isFinite(s.createdAt)) return false;
+  if (s.createdAt > now + 60_000) return false;
+  return now - s.createdAt < SESSION_MAX_AGE_MS;
+}
+
 export async function getSession(): Promise<Session | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  return token ? unseal(token) : null;
+  if (!token) return null;
+  const session = unseal(token);
+  return isValidSession(session) ? session : null;
 }
 
 export function sessionCookieOptions() {

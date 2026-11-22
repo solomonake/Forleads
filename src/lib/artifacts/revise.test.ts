@@ -64,4 +64,35 @@ describe("artifact revision safety", () => {
     expect(first?.artifact.approved_revision).toBe(artifact.revision);
     expect(first?.artifact.external_draft_ref?.idempotencyKey).toBeTruthy();
   });
+
+  it("refuses to reopen an artifact that was already sent", async () => {
+    const repo = await getRepo();
+    const bare = await ensureLead(DEMO_AGENT_ID, {
+      address: "11 Revision Lane",
+      lng: -73.92,
+      lat: 40.72,
+    });
+    await repo.upsertLead({ ...bare, contact: { email: "owner@example.test" } });
+    const lead = (await repo.getLead(bare.id))!;
+    const artifact = await draftArtifact({
+      agent: DEMO_AGENT,
+      lead,
+      situation: "no_contact",
+      situationConfidence: 0.9,
+      actionType: "email",
+      evidence: [],
+      trigger: "test",
+    });
+    await repo.updateArtifact(artifact.id, { status: "sent", sent_at: new Date().toISOString() });
+    const payload = artifact.payload as EmailPayload;
+    await expect(
+      reviseArtifact({
+        artifactId: artifact.id,
+        agentId: DEMO_AGENT_ID,
+        expectedRevision: artifact.revision,
+        payload: { ...payload, body: `${payload.body}\nEdited after send.` },
+      }),
+    ).rejects.toThrow(/already sent/);
+    expect((await repo.getArtifact(artifact.id))?.status).toBe("sent");
+  });
 });
