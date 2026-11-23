@@ -266,7 +266,8 @@ export function ReviewTray({
           {isEmail && (
             <button
               className="btn"
-              disabled={busy}
+              disabled={busy || current.status === "sent"}
+              title={current.status === "sent" ? "Already sent. Draft a new message instead." : undefined}
               onClick={editing ? saveEdit : () => setEditing(true)}
             >
               {editing ? "Save & recheck" : "Edit"}

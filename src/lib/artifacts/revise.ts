@@ -46,6 +46,12 @@ export async function reviseArtifact(input: {
   if (artifact.status === "approving") {
     throw new Error("Artifact approval is in progress; wait for reconciliation before editing.");
   }
+  if (artifact.status === "sent") {
+    // A sent artifact already reached a provider. Reopening it would clear
+    // sent_at and the external draft reference, erasing the audit trail and
+    // letting the same message be approved and sent again.
+    throw new Error("Artifact was already sent; create a new draft instead of editing it.");
+  }
 
   const compliance = lintArtifactText(textParts(input.payload));
   const updatedAt = nowISO();

@@ -26,7 +26,17 @@ import type { Connector } from "./types";
 // or an env token for server-to-server testing, or absent (→ mock).
 // Never client-side.
 function googleToken(override?: string): string | undefined {
-  return override ?? process.env.GOOGLE_ACCESS_TOKEN;
+  return override ?? operatorEnv(process.env.GOOGLE_ACCESS_TOKEN);
+}
+
+/**
+ * Operator-level env credentials (GOOGLE_ACCESS_TOKEN, GHL_*, TWILIO_*) are for
+ * local and single-operator testing only. In production every tenant action
+ * must use that tenant's own credential, so a stranger who signs in can never
+ * send through the operator's Twilio number, GHL location or Gmail.
+ */
+function operatorEnv<T>(value: T | undefined): T | undefined {
+  return config.production ? undefined : value;
 }
 
 export interface ConnectorRouteOpts {
@@ -63,16 +73,16 @@ export function getConnector(provider: ConnectorProvider): Connector {
       );
     case "gohighlevel":
       return new GoHighLevelConnector(
-        config.gohighlevel.apiKey,
-        config.gohighlevel.locationId,
+        operatorEnv(config.gohighlevel.apiKey),
+        operatorEnv(config.gohighlevel.locationId),
         config.gohighlevel.baseUrl,
         config.allowMockConnectorWrites,
       );
     case "twilio":
       return new TwilioConnector(
-        config.twilio.accountSid,
-        config.twilio.authToken,
-        config.twilio.fromNumber,
+        operatorEnv(config.twilio.accountSid),
+        operatorEnv(config.twilio.authToken),
+        operatorEnv(config.twilio.fromNumber),
         config.allowMockConnectorWrites,
       );
     case "zapier":
@@ -137,8 +147,8 @@ export async function getConnectorForTenant(
     case "gohighlevel": {
       const creds = await tenantApiCreds("gohighlevel", agentId);
       return new GoHighLevelConnector(
-        creds?.apiKey ?? config.gohighlevel.apiKey,
-        creds?.locationId ?? config.gohighlevel.locationId,
+        creds?.apiKey ?? operatorEnv(config.gohighlevel.apiKey),
+        creds?.locationId ?? operatorEnv(config.gohighlevel.locationId),
         config.gohighlevel.baseUrl,
         config.allowMockConnectorWrites,
       );
@@ -146,9 +156,9 @@ export async function getConnectorForTenant(
     case "twilio": {
       const creds = await tenantApiCreds("twilio", agentId);
       return new TwilioConnector(
-        creds?.accountSid ?? config.twilio.accountSid,
-        creds?.authToken ?? config.twilio.authToken,
-        creds?.fromNumber ?? config.twilio.fromNumber,
+        creds?.accountSid ?? operatorEnv(config.twilio.accountSid),
+        creds?.authToken ?? operatorEnv(config.twilio.authToken),
+        creds?.fromNumber ?? operatorEnv(config.twilio.fromNumber),
         config.allowMockConnectorWrites,
       );
     }
@@ -170,7 +180,7 @@ export async function connectorForAction(
       // Prefer whichever mail identity the tenant is signed in with. Google
       // (via signed-in session) wins when present; else Microsoft; else the
       // Gmail mock so the flow still completes.
-      if (opts?.googleAccessToken || process.env.GOOGLE_ACCESS_TOKEN) {
+      if (opts?.googleAccessToken || operatorEnv(process.env.GOOGLE_ACCESS_TOKEN)) {
         return new GmailDraftConnector(
           googleToken(opts?.googleAccessToken),
           config.allowMockConnectorWrites,
@@ -185,7 +195,7 @@ export async function connectorForAction(
       return new GmailDraftConnector(undefined, config.allowMockConnectorWrites);
     }
     case "calendar": {
-      if (opts?.googleAccessToken || process.env.GOOGLE_ACCESS_TOKEN) {
+      if (opts?.googleAccessToken || operatorEnv(process.env.GOOGLE_ACCESS_TOKEN)) {
         return new GoogleCalendarConnector(
           googleToken(opts?.googleAccessToken),
           config.allowMockConnectorWrites,
@@ -210,7 +220,7 @@ export async function connectorForAction(
         return getConnectorForTenant("followupboss", opts?.agentId);
       }
       const ghl = await tenantApiCreds("gohighlevel", opts?.agentId);
-      if (ghl?.apiKey || config.gohighlevel.apiKey) {
+      if (ghl?.apiKey || operatorEnv(config.gohighlevel.apiKey)) {
         return getConnectorForTenant("gohighlevel", opts?.agentId);
       }
       return new MockConnector("followupboss", config.allowMockConnectorWrites);

@@ -87,7 +87,7 @@ export const POST = withRoute("approve", async (req: NextRequest) => {
   const res = NextResponse.json(result);
   // Persist a refreshed access token back into the session cookie.
   if (refreshedSession && session) {
-    res.cookies.set(SESSION_COOKIE, seal(session), sessionCookieOptions());
+    res.cookies.set(SESSION_COOKIE, seal({ ...session, refreshedAt: Date.now() }), sessionCookieOptions());
   }
   return res;
 });

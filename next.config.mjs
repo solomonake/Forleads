@@ -5,6 +5,8 @@ import { securityHeaders } from "./security-headers.mjs";
 /** @type {(phase: string) => import('next').NextConfig} */
 const nextConfig = (phase) => ({
   reactStrictMode: true,
+  // Do not advertise the framework in an X-Powered-By header.
+  poweredByHeader: false,
   // Git worktrees put a second lockfile above this directory; without an
   // explicit root Next picks the PARENT repo and watches every worktree,
   // which starves dev/build on low-memory machines.

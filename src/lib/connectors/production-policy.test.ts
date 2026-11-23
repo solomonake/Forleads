@@ -113,4 +113,40 @@ describe("production connector factory policy", () => {
     expect(crmResult.error).toMatch(/not configured|credentials/i);
     expect(taskResult.error).toMatch(/not configured|credentials/i);
   });
+
+  it("never routes a tenant action through the operator's env credentials", async () => {
+    vi.resetModules();
+    unsetConnectorEnv();
+    env.GOOGLE_ACCESS_TOKEN = "operator-google-token";
+    env.GHL_API_KEY = "operator-ghl-key";
+    env.GHL_LOCATION_ID = "operator-location";
+    env.TWILIO_ACCOUNT_SID = "ACoperator";
+    env.TWILIO_AUTH_TOKEN = "operator-token";
+    env.TWILIO_FROM_NUMBER = "+15555550199";
+    const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      const connectors = await import("./index");
+      connectors.resetIdempotencyLedger();
+      const sms = await connectors.connectorForAction("sms");
+      const smsResult = await sms.sendSms!(
+        { to: "+15555550100", body: "hello" },
+        meta("prod-sms-operator-env"),
+      );
+      const email = await connectors.connectorForAction("email");
+      const emailResult = await email.createDraft(
+        { from: "agent@example.com", to: "lead@example.com", subject: "Hello", body: "Hi" },
+        meta("prod-email-operator-env"),
+      );
+      const crm = await connectors.connectorForAction("crm_note");
+      const crmResult = await crm.writeCrmNote({ body: "note", tags: [] }, meta("prod-crm-operator-env"));
+
+      expect(smsResult.ok).toBe(false);
+      expect(emailResult.ok).toBe(false);
+      expect(crmResult.ok).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

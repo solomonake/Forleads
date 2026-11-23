@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readAgentId } from "@/lib/auth/agent";
+import { currentAgentId, readAgentId } from "@/lib/auth/agent";
 import { config } from "@/lib/core/config";
 import { withRoute } from "@/lib/observability";
 import { enforceRateLimit } from "@/lib/ratelimit";
@@ -19,6 +19,11 @@ function coordinate(req: NextRequest, key: "lat" | "lng"): number | null {
 }
 
 export const GET = withRoute("google-street-view-image", async (req: NextRequest) => {
+  // Static Street View is billed per image. In production only signed-in
+  // agents may spend it; signed-out visitors get aerial and Mapillary instead.
+  if (config.production && !(await currentAgentId())) {
+    return NextResponse.json({ error: "sign in required" }, { status: 401 });
+  }
   const agentId = await readAgentId();
   const limited = enforceRateLimit(req, {
     name: "google-street-view-image",
